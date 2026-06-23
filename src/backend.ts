@@ -279,8 +279,15 @@ const validateSignUpInput = (input: SignUpInput) => {
   return { email, displayName }
 }
 
-const createId = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const createId = (prefix: string) => {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return `${prefix}-${cryptoApi.randomUUID()}`
+  }
+
+  // Fallback for non-secure contexts that do not expose crypto.randomUUID.
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
 
 const toPublicUser = (user: LocalUser): UserProfile => {
   return {
