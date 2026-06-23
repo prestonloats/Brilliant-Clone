@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsc -p tsconfig.test.json && node tests/prepare-test-output.cjs && node --test dist-tests/tests/engine.test.js dist-tests/tests/backend.test.js",
+    "test": "tsc -p tsconfig.test.json && node tests/prepare-test-output.cjs && node --test dist-tests/tests/*.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
