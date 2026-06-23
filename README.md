@@ -67,7 +67,7 @@ Safe setup steps:
 
 Current Firebase files:
 
-- `firebase.json` configures Vite `dist` hosting and Firestore rules/indexes.
+- `firebase.json` configures Vite `dist` hosting, Firestore rules/indexes, and hardened HTTP security response headers (Content-Security-Policy, HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`). The CSP `connect-src` already allows Firebase Auth/Firestore endpoints; extend it if you add other external services.
 - `firestore.rules` restricts user-owned data to `request.auth.uid` and keeps future content read-only.
 - `src/firebaseConfig.ts` and `src/firebaseServices.ts` initialize Firebase only when all required env values are present.
 
