@@ -7,6 +7,7 @@
 .topbar nav,
 .auth-tabs,
 .continue-panel,
+.path-overview,
 .progress-meta,
 .equation-row,
 .bank-item {
@@ -205,12 +206,49 @@ input {
   padding: 8px 14px;
 }
 
+.path-overview {
+  gap: 12px;
+  margin: 22px 0 0;
+}
+
+.overview-stat {
+  background: var(--surface-strong);
+  border-radius: 22px;
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  text-align: left;
+}
+
+.overview-stat span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.overview-stat strong {
+  color: var(--text-h);
+  font-size: clamp(18px, 3vw, 24px);
+  line-height: 1.15;
+}
+
+.overview-stat small {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .continue-panel {
   background: var(--surface-strong);
   border-radius: 22px;
   gap: 14px;
   justify-content: space-between;
-  margin: 22px 0;
+  margin: 12px 0 22px;
   padding: 16px;
 }
 
@@ -220,9 +258,20 @@ input {
   text-align: left;
 }
 
+.continue-actions {
+  justify-items: end;
+}
+
 .continue-panel span {
   color: var(--muted);
   font-size: 14px;
+}
+
+.continue-panel small,
+.score-line {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .continue-panel strong {
@@ -239,6 +288,13 @@ input {
 
 .continue-panel .primary-action {
   max-width: 190px;
+}
+
+.secondary-inline {
+  background: white;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .progress-block {
@@ -309,6 +365,10 @@ input {
 .mastery-card p {
   color: var(--text);
   margin: 0;
+}
+
+.path-node .score-line {
+  margin-top: 8px;
 }
 
 .path-actions {
@@ -807,10 +867,10 @@ input {
 }
 
 .physical-fulcrum {
-  bottom: 24px;
-  height: 270px;
   left: 50%;
+  bottom: 24px;
   position: absolute;
+  top: clamp(88px, calc(9vw + 32px), 108px);
   transform: translateX(-50%);
   width: 150px;
 }
@@ -819,11 +879,11 @@ input {
   background: linear-gradient(180deg, #334155, #1f2937);
   border-radius: 999px;
   content: '';
-  height: 210px;
+  bottom: 74px;
   left: 50%;
   opacity: 0.78;
   position: absolute;
-  top: 28px;
+  top: -6px;
   transform: translateX(-50%);
   width: 14px;
 }
@@ -1233,11 +1293,40 @@ button.tile {
   text-align: left;
 }
 
+.score-card {
+  background: #eff6ff;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 22px;
+  display: grid;
+  gap: 6px;
+  margin: 22px 0;
+  padding: 18px;
+  text-align: left;
+}
+
+.score-card span,
 .next-card span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.score-card strong {
+  color: var(--accent-strong);
+  font-size: clamp(34px, 8vw, 52px);
+  line-height: 1;
+}
+
+.score-card p,
+.score-card small {
+  color: var(--text);
+  margin: 0;
+}
+
+.complete-actions {
+  display: grid;
+  gap: 10px;
 }
 
 .mastery-grid {
@@ -1276,6 +1365,7 @@ button.tile {
   }
 
   .continue-panel,
+  .path-overview,
   .path-node {
     align-items: stretch;
     grid-template-columns: 1fr;
@@ -1290,8 +1380,16 @@ button.tile {
     flex-direction: column;
   }
 
+  .path-overview {
+    flex-direction: column;
+  }
+
   .continue-panel .primary-action {
     max-width: none;
+  }
+
+  .continue-actions {
+    justify-items: stretch;
   }
 
   .retry-prompt {

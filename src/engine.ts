@@ -6,6 +6,7 @@ import type {
   Lesson,
   LessonId,
   LessonProgress,
+  LessonScore,
   LessonStep,
   SkillMastery,
   StepResult,
@@ -25,6 +26,19 @@ export type BalanceCheckMeta = {
 export type ProgressByLesson = Partial<Record<LessonId, LessonProgress>>
 
 export const MASTERY_READY_THRESHOLD = 0.65
+
+export type CourseProgressSummary = {
+  totalLessons: number
+  completedLessons: number
+  percentComplete: number
+  lastCompletedLessonId?: LessonId
+  recommendedLessonId: LessonId
+  recommendedAction: 'start' | 'continue' | 'view-summary'
+  lastCompletedLatestScore?: LessonScore
+  lastCompletedBestScore?: LessonScore
+  recommendedLatestScore?: LessonScore
+  recommendedBestScore?: LessonScore
+}
 
 export const normalizeExpression = (value: string) =>
   value.toLowerCase().replace(/\s+/g, '').replace(/^x=/, '')
@@ -283,14 +297,105 @@ export const createInitialProgress = (userId: string, lessonId: LessonId): Lesso
   }
 }
 
+export const isAssessedLessonStep = (step: LessonStep) => step.type !== 'concept'
+
+export const calculateLessonScore = (
+  lesson: Lesson,
+  progress: LessonProgress,
+  completedAt = new Date().toISOString(),
+): LessonScore => {
+  const assessedSteps = lesson.steps.filter(isAssessedLessonStep)
+  const correctFirstTryCount = assessedSteps.filter((step) => {
+    const result = progress.stepResults[step.id]
+    return result?.correct === true && result.attempts <= 1
+  }).length
+
+  return {
+    scorePercent:
+      assessedSteps.length === 0 ? 100 : Math.round((correctFirstTryCount / assessedSteps.length) * 100),
+    correctFirstTryCount,
+    assessedStepCount: assessedSteps.length,
+    completedAt,
+  }
+}
+
+export const getLessonCompletionHistory = (progress?: LessonProgress): LessonScore[] => {
+  if (!progress) return []
+  if (progress.completionHistory?.length) return progress.completionHistory
+  return progress.latestScore ? [progress.latestScore] : []
+}
+
+const selectBestScore = (scores: LessonScore[]) =>
+  scores.reduce<LessonScore | undefined>((best, score) => {
+    if (!best) return score
+    return score.scorePercent >= best.scorePercent ? score : best
+  }, undefined)
+
+export const getLatestLessonScore = (lesson: Lesson, progress?: LessonProgress) => {
+  if (!progress) return undefined
+
+  return (
+    progress.latestScore ??
+    getLessonCompletionHistory(progress).at(-1) ??
+    (progress.status === 'completed' && progress.completedAt
+      ? calculateLessonScore(lesson, progress, progress.completedAt)
+      : undefined)
+  )
+}
+
+export const getBestLessonScore = (lesson: Lesson, progress?: LessonProgress) => {
+  if (!progress) return undefined
+
+  const scores = [
+    ...getLessonCompletionHistory(progress),
+    ...(progress.latestScore ? [progress.latestScore] : []),
+    ...(progress.bestScore ? [progress.bestScore] : []),
+  ]
+  const legacyScore =
+    progress.status === 'completed' && progress.completedAt
+      ? calculateLessonScore(lesson, progress, progress.completedAt)
+      : undefined
+
+  return selectBestScore(legacyScore ? [...scores, legacyScore] : scores)
+}
+
+export const hasCompletedLesson = (progress?: LessonProgress) =>
+  progress?.status === 'completed' || getLessonCompletionHistory(progress).length > 0
+
+export const restartLessonProgress = (progress: LessonProgress, lesson?: Lesson): LessonProgress => {
+  const now = new Date().toISOString()
+  const legacyScore =
+    progress.status === 'completed' && lesson && progress.completedAt
+      ? calculateLessonScore(lesson, progress, progress.completedAt)
+      : undefined
+  const completionHistory = getLessonCompletionHistory(progress)
+  const preservedHistory = completionHistory.length > 0 ? completionHistory : legacyScore ? [legacyScore] : []
+  const latestScore = progress.latestScore ?? preservedHistory.at(-1)
+  const bestScore = progress.bestScore ?? selectBestScore(preservedHistory)
+
+  return {
+    userId: progress.userId,
+    lessonId: progress.lessonId,
+    status: 'inProgress',
+    currentStepIndex: 0,
+    stepResults: {},
+    ...(latestScore ? { latestScore } : {}),
+    ...(bestScore ? { bestScore } : {}),
+    ...(preservedHistory.length > 0 ? { completionHistory: preservedHistory } : {}),
+    startedAt: now,
+    updatedAt: now,
+  }
+}
+
 export const applyStepResult = (
   progress: LessonProgress,
   step: LessonStep,
   result: CheckResult,
   nextStepIndex: number,
-  lessonStepCount: number,
+  lesson: Lesson,
   countAttempt = true,
 ): LessonProgress => {
+  const lessonStepCount = lesson.steps.length
   const previous = progress.stepResults[step.id]
   const stepResult: StepResult = {
     correct: result.correct,
@@ -298,14 +403,34 @@ export const applyStepResult = (
     feedback: result.feedback,
   }
   const completed = result.correct && nextStepIndex >= lessonStepCount
+  const now = new Date().toISOString()
+  const completedAt = completed ? now : progress.completedAt
 
-  return {
+  const nextProgress: LessonProgress = {
     ...progress,
     status: completed ? 'completed' : 'inProgress',
     currentStepIndex: result.correct ? Math.min(nextStepIndex, lessonStepCount - 1) : progress.currentStepIndex,
     stepResults: { ...progress.stepResults, [step.id]: stepResult },
-    completedAt: completed ? new Date().toISOString() : progress.completedAt,
-    updatedAt: new Date().toISOString(),
+    completedAt,
+    updatedAt: now,
+  }
+
+  if (!completed || !completedAt) {
+    return nextProgress
+  }
+
+  const completionScore = calculateLessonScore(lesson, nextProgress, completedAt)
+  const completionHistory = [...getLessonCompletionHistory(progress), completionScore]
+  const bestScore = selectBestScore([
+    ...completionHistory,
+    ...(progress.bestScore ? [progress.bestScore] : []),
+  ])
+
+  return {
+    ...nextProgress,
+    latestScore: completionScore,
+    ...(bestScore ? { bestScore } : {}),
+    completionHistory,
   }
 }
 
@@ -315,8 +440,9 @@ export const getRecommendedNextLesson = (lesson: Lesson, mastery: SkillMastery[]
     lessonMastery.length === 0
       ? 0
       : lessonMastery.reduce((total, score) => total + score, 0) / lessonMastery.length
+  const hasAssessedSteps = lesson.steps.some(isAssessedLessonStep)
 
-  if (averageMastery < MASTERY_READY_THRESHOLD) {
+  if (hasAssessedSteps && averageMastery < MASTERY_READY_THRESHOLD) {
     return {
       title: `Review ${lesson.title}`,
       body: 'Practice this lesson once more before moving on. The scale should feel automatic.',
@@ -330,22 +456,45 @@ export const getRecommendedNextLesson = (lesson: Lesson, mastery: SkillMastery[]
     }
   }
 
-  if (lesson.nextLessonId === 'two-step-equations') {
-    return {
-      title: 'Two-Step Equations',
-      body: 'Next, decide which operation to undo first when x has two changes.',
-    }
-  }
+  return nextLessonRecommendations[lesson.nextLessonId]
+}
 
-  return {
+const nextLessonRecommendations: Record<LessonId, { title: string; body: string }> = {
+  'balancing-equations': {
+    title: 'Balancing Equations',
+    body: 'Start by making the equals sign feel like a balance.',
+  },
+  'one-step-equations': {
     title: 'One-Step Equations',
     body: 'Next, use the same balancing idea with multiplication and division.',
-  }
+  },
+  'two-step-equations': {
+    title: 'Two-Step Equations',
+    body: 'Next, decide which operation to undo first when x has two changes.',
+  },
+  'like-terms-variables-both-sides': {
+    title: 'Like Terms & Variables on Both Sides',
+    body: 'Next, gather matching terms and prepare to move variables while preserving equality.',
+  },
+  'coordinate-plane': {
+    title: 'Coordinate Plane',
+    body: 'Next, place algebra on a grid by reading and plotting points.',
+  },
+  'graphing-lines': {
+    title: 'Graphing Lines',
+    body: 'Next, connect slope-intercept equations to the lines they draw.',
+  },
 }
 
 export const isLessonUnlocked = (lesson: Lesson, progressByLesson: ProgressByLesson) =>
   lesson.steps.length > 0 &&
-  lesson.prerequisites.every((lessonId) => progressByLesson[lessonId]?.status === 'completed')
+  lesson.prerequisites.every((lessonId) => hasCompletedLesson(progressByLesson[lessonId]))
+
+const getPathLessonIds = (course: Course, lessonCatalog: Record<LessonId, Lesson>) =>
+  course.lessonOrder.filter((lessonId) => lessonCatalog[lessonId]?.steps.length > 0)
+
+const getLastCompletedPathLessonId = (lessonIds: LessonId[], progressByLesson: ProgressByLesson) =>
+  lessonIds.findLast((lessonId) => hasCompletedLesson(progressByLesson[lessonId]))
 
 export const getRecommendedPathLessonId = (
   course: Course,
@@ -353,24 +502,62 @@ export const getRecommendedPathLessonId = (
   progressByLesson: ProgressByLesson,
   preferredLessonId?: LessonId,
 ) => {
-  const availableInProgress = course.lessonOrder.find((lessonId) => {
+  const pathLessonIds = getPathLessonIds(course, lessonCatalog)
+  const availableInProgress = pathLessonIds.find((lessonId) => {
     const lesson = lessonCatalog[lessonId]
     return isLessonUnlocked(lesson, progressByLesson) && progressByLesson[lessonId]?.status === 'inProgress'
   })
 
   if (availableInProgress) return availableInProgress
 
-  const nextAvailable = course.lessonOrder.find((lessonId) => {
+  const nextAvailable = pathLessonIds.find((lessonId) => {
     const lesson = lessonCatalog[lessonId]
     return isLessonUnlocked(lesson, progressByLesson) && progressByLesson[lessonId]?.status !== 'completed'
   })
 
   if (nextAvailable) return nextAvailable
 
+  const lastCompletedLessonId = getLastCompletedPathLessonId(pathLessonIds, progressByLesson)
+  if (lastCompletedLessonId) return lastCompletedLessonId
+
   if (preferredLessonId && lessonCatalog[preferredLessonId]?.steps.length) {
     return preferredLessonId
   }
 
-  return course.lessonOrder.find((lessonId) => lessonCatalog[lessonId].steps.length > 0) ?? course.lessonOrder[0]
+  return pathLessonIds[0] ?? course.lessonOrder[0]
+}
+
+export const getCourseProgressSummary = (
+  course: Course,
+  lessonCatalog: Record<LessonId, Lesson>,
+  progressByLesson: ProgressByLesson,
+  preferredLessonId?: LessonId,
+): CourseProgressSummary => {
+  const pathLessonIds = getPathLessonIds(course, lessonCatalog)
+  const completedLessonIds = pathLessonIds.filter((lessonId) => hasCompletedLesson(progressByLesson[lessonId]))
+  const lastCompletedLessonId = getLastCompletedPathLessonId(pathLessonIds, progressByLesson)
+  const recommendedLessonId = getRecommendedPathLessonId(course, lessonCatalog, progressByLesson, preferredLessonId)
+  const recommendedLesson = lessonCatalog[recommendedLessonId]
+  const recommendedProgress = progressByLesson[recommendedLessonId]
+  const lastCompletedLesson = lastCompletedLessonId ? lessonCatalog[lastCompletedLessonId] : undefined
+  const lastCompletedProgress = lastCompletedLessonId ? progressByLesson[lastCompletedLessonId] : undefined
+
+  return {
+    totalLessons: pathLessonIds.length,
+    completedLessons: completedLessonIds.length,
+    percentComplete:
+      pathLessonIds.length === 0 ? 0 : Math.round((completedLessonIds.length / pathLessonIds.length) * 100),
+    ...(lastCompletedLessonId ? { lastCompletedLessonId } : {}),
+    recommendedLessonId,
+    recommendedAction: recommendedProgress?.status === 'completed' ? 'view-summary' : recommendedProgress ? 'continue' : 'start',
+    ...(lastCompletedLesson
+      ? {
+          lastCompletedLatestScore: getLatestLessonScore(lastCompletedLesson, lastCompletedProgress),
+          lastCompletedBestScore: getBestLessonScore(lastCompletedLesson, lastCompletedProgress),
+        }
+      : {}),
+    recommendedLatestScore: getLatestLessonScore(recommendedLesson, recommendedProgress),
+    recommendedBestScore: getBestLessonScore(recommendedLesson, recommendedProgress),
+  }
 }
 

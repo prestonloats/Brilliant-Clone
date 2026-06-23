@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
 import { createAttemptEvent, LocalBackend } from '../src/backend'
-import type { AttemptEvent, LessonProgress, SkillMastery } from '../src/domain'
+import type { AttemptEvent, LessonProgress, LessonScore, SkillMastery } from '../src/domain'
 
 const STORAGE_KEY = 'balance-local-backend-v1'
 
@@ -54,6 +54,13 @@ const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress =>
   },
   startedAt: '2026-06-23T00:00:00.000Z',
   updatedAt: '2026-06-23T00:01:00.000Z',
+})
+
+const lessonScore = (scorePercent = 80): LessonScore => ({
+  scorePercent,
+  correctFirstTryCount: 4,
+  assessedStepCount: 5,
+  completedAt: '2026-06-23T00:02:00.000Z',
 })
 
 const skillMastery = (userId: string): SkillMastery => ({
@@ -176,6 +183,24 @@ test('local progress saves and resumes by user and lesson', () => {
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), saved)
   assert.equal(backend.progress.getLessonProgress('user-2', 'balancing-equations'), null)
   assert.equal(backend.progress.getLessonProgress('user-1', 'one-step-equations'), null)
+})
+
+test('local progress persists lesson score history', () => {
+  const backend = new LocalBackend()
+  const latestScore = lessonScore(80)
+  const bestScore = lessonScore(100)
+  const saved: LessonProgress = {
+    ...lessonProgress('user-1', 7),
+    status: 'completed',
+    latestScore,
+    bestScore,
+    completionHistory: [latestScore, bestScore],
+    completedAt: latestScore.completedAt,
+  }
+
+  backend.progress.saveLessonProgress(saved)
+
+  assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), saved)
 })
 
 test('local mastery counts correct and incorrect attempts', () => {
@@ -324,6 +349,53 @@ test('local backend ignores malformed persisted progress records', () => {
   assert.deepEqual(backend.progress.getLessonProgress('user-5', 'balancing-equations'), valid)
   assert.doesNotThrow(() => backend.progress.saveLessonProgress(valid))
   assert.deepEqual(backend.progress.getLessonProgress('user-5', 'balancing-equations'), valid)
+})
+
+test('local backend sanitizes malformed persisted lesson scores', () => {
+  const bestScore = lessonScore(100)
+  const progress = {
+    ...lessonProgress('user-1'),
+    status: 'completed',
+    latestScore: {
+      scorePercent: 120,
+      correctFirstTryCount: 6,
+      assessedStepCount: 5,
+      completedAt: '2026-06-23T00:02:00.000Z',
+    },
+    bestScore,
+    completionHistory: [
+      lessonScore(80),
+      {
+        scorePercent: 90,
+        correctFirstTryCount: -1,
+        assessedStepCount: 5,
+        completedAt: '2026-06-23T00:03:00.000Z',
+      },
+    ],
+    completedAt: '2026-06-23T00:02:00.000Z',
+  }
+
+  storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      users: {},
+      progress: {
+        'user-1:balancing-equations': progress,
+      },
+      mastery: {},
+      attempts: [],
+    }),
+  )
+
+  const backend = new LocalBackend()
+
+  assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), {
+    ...lessonProgress('user-1'),
+    status: 'completed',
+    bestScore,
+    completionHistory: [lessonScore(80)],
+    completedAt: '2026-06-23T00:02:00.000Z',
+  })
 })
 
 test('local backend sanitizes malformed persisted step results', () => {

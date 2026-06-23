@@ -277,8 +277,9 @@ Five-to-six lessons that build on one another:
 2. **One-Step Equations** — inverse operations with `+ − × ÷`.
 3. **Two-Step Equations** — undo in the right order; reorder-the-steps
    interaction.
-4. **Like Terms & Variables on Both Sides** — drag term tiles across `=`
-   (sign flips), combine like terms.
+4. **Like Terms & Variables on Both Sides** — classify variable terms, combine
+   like terms, move x-terms across `=` with the inverse sign, and solve equations
+   that have multiple variable terms before the course introduces line graphs.
 5. **The Coordinate Plane** — plot points; read/write coordinates.
 6. **Graphing Lines (slope–intercept)** — `m` / `b` sliders drive a live line;
    connect equation ↔ graph.

@@ -1,15 +1,19 @@
 # BrainLift — The Backend of Brilliant.org
 
-Author: Preston Loats · Status: Draft v1 · Topic: How the *actual* Brilliant app works under the hood (backend focus)
+Author: Preston Loats · Status: Draft v2 · Topic: How the *actual* Brilliant app works under the hood (backend focus)
 
 > **What this is.** A BrainLift to build a defensible, expert-level point of view on how
 > Brilliant.org's backend is architected — its content engine, answer-checking model,
 > persistence/sync, and infrastructure — and to surface the *spiky* truths that separate how
 > Brilliant actually works from how most people assume an edtech backend works.
 >
-> **Honesty constraint.** This was written without live web access, so every factual claim is
-> tagged with a confidence level. Treat anything below `[Verified]` as a hypothesis to confirm,
-> not a fact to repeat.
+> **Honesty constraint.** Every factual claim is tagged with a confidence level. Treat anything
+> below `[Verified]` as a hypothesis to confirm, not a fact to repeat.
+>
+> **Correction log (v2).** A web-research pass corrected the v1 draft's central error: Brilliant is
+> **not** a Clojure/ClojureScript shop. That claim came from conflating Brilliant with **Amperity**
+> (whose CTO Derek Slager gave the well-known "Why Clojure?" / "ClojureScript for Skeptics" talks).
+> Brilliant's real stack and a verified Experts list are now filled in below.
 
 **Confidence legend**
 
@@ -49,23 +53,49 @@ can copy the *reasoning*, not just the surface.
 
 ## 2. Experts & Sources (where the real signal is)
 
-A BrainLift names real sources. Since this draft is offline, these are the *channels* to mine —
-fill in specific names/links as you verify.
+*Verified via web research (June 2026). Links are starting points, not endorsements.*
 
-- **Brilliant's own engineering talks** — Brilliant is well known in the Clojure community and has
-  presented at Clojure conferences (Clojure/conj, re:Clojure, etc.). These talks are the highest-
-  signal source on their stack and content engine. `[Likely]`
-- **Brilliant careers / job listings** — the stack they hire for is the cheapest reliable tell
-  (languages, datastores, cloud). `[Verified method]`
-- **Stack-detection tools** — `BuiltWith`, `Wappalyzer`, `StackShare` profiles for brilliant.org. `[Verified method]`
-- **Network inspection of the live app** — open dev tools on a lesson and watch what's fetched:
-  payload shapes, where answer checking happens, what hits the server vs. stays local. This is the
-  single best primary source and requires no permission. `[Verified method]`
-- **Public engineering writing / interviews** — blog posts, podcasts, and conference Q&A from
-  Brilliant engineers. `[Unknown]` which specific ones — to be filled in.
+**People at Brilliant (named)**
 
-> **To do:** replace this section with named people + linked talks/posts. An Experts section
-> without names is a knowledge tree, not an experts list.
+- **Kevin Smith** — CTO, Brilliant.org. Top of the engineering org; sets technical direction.
+  `[Verified]` — [LinkedIn](https://linkedin.com/in/kvnsmth)
+- **Jared Silver** — Senior Director of Engineering (joined via Brilliant's 2022 acquisition of
+  Hellosaurus); runs the Growth, User Motivation, and Learning Experience teams. `[Verified]` —
+  [LinkedIn](https://www.linkedin.com/in/jaredasilver)
+- **Danny Greg** — Senior Staff Engineer on the **Interactives** team — i.e., the people who build
+  the hands-on lesson engine. `[Verified]` — [LinkedIn](https://linkedin.com/in/danny-greg-576153118)
+- **Pontus Granström** — built **Diagrammar**, Brilliant's in-house Elm tool for interactive
+  diagrams; the clearest public window into the interactive engine. `[Verified]` — talk below.
+- Also in the eng org chart: John Hergenroeder (Sr. Eng. Manager), Shirley Lin (Staff SWE / Tech
+  Lead), Thomas Corthouts (Sr. Eng. Manager), Jesse Levine (Interactives Engineer), Kevin Shain
+  (Director of ML), Graham Madden (Lead Data & Analytics Eng), plus dedicated **Unity** engineers.
+  `[Verified]` (org chart)
+
+**Primary sources (highest signal first)**
+
+- **"Diagrammar: Simply Make Interactive Diagrams" — Pontus Granström, Strange Loop 2022.** The
+  single best public source on how Brilliant builds interactive content (Elm + an in-house
+  framework). `[Verified]` — [YouTube](https://www.youtube.com/watch?v=gT9Xu-ctNqI)
+- **Brilliant "Creative Technologist" job listing (Lever).** Confirms the interactive stack in their
+  own words: "web standards, HTML, CSS, SVG, **Elm**, and sometimes TypeScript … using our in-house
+  frameworks, like Diagrammar." `[Verified]` —
+  [jobs.lever.co/brilliant](https://jobs.lever.co/brilliant/fe9f5add-2078-4fd3-b96c-1e5b6313253a)
+- **StackShare — Brilliant profile.** Broad stack inventory (Django, Python, PostgreSQL, Vue.js,
+  React, TypeScript, Elm, AWS, Stripe, Algolia, RabbitMQ/Celery, Sentry, Terraform). `[Verified]` —
+  [stackshare.io/brilliant/brilliant](https://stackshare.io/brilliant/brilliant)
+- **HackerX / RocketReach stack listings.** Corroborate Django, Python, Rust, TypeScript, Vue, Elm.
+  `[Verified]`
+- **Ex-employee portfolios** (e.g., Dipesh KC) describing the **Vue.js/Django → Next.js/GraphQL**
+  migration and growth/experimentation work. `[Likely]` (self-reported)
+
+**Methods to go deeper (no permission needed)**
+
+- **Network inspection of the live app** — open dev tools during a lesson; watch payload shapes and
+  where answer-checking happens. Still the best primary source for *backend behavior*. `[Verified method]`
+- **Brilliant careers page** — current openings reveal the live stack and team structure. `[Verified method]`
+
+> **Caution:** Don't confuse Brilliant with **Amperity** (Derek Slager's Clojure/ClojureScript
+> company) — the v1 draft did exactly that.
 
 ---
 
@@ -82,8 +112,16 @@ fill in specific names/links as you verify.
 - Business model is **freemium → subscription** (a limited free tier, paid for full access). `[Verified]`
 - Lessons are **interactive and visual** (drag, tap, sliders, step-through), implying a rich
   client and a data-driven content format. `[Verified]` (observable) / `[Inferred]` (data-driven)
-- Brilliant is a recognized **Clojure / ClojureScript** shop — a single Lisp spanning server
-  (Clojure) and browser (ClojureScript). `[Likely]`
+- **Backend:** **Python + Django**, serving lesson logic, user progress, and APIs; **PostgreSQL**
+  is the primary datastore, with **Memcached** caching and **Celery + RabbitMQ** for async work. `[Verified]`
+- **Frontend:** a **Vue.js** app being migrated to **Next.js / React (TypeScript)**, with **GraphQL**
+  as the client–server query layer. `[Verified]`
+- **Interactive content** is built in **Elm** via an in-house framework called **Diagrammar**;
+  **Rust** also appears in the stack (plausibly compiled to WebAssembly for in-browser simulation).
+  `[Verified]` (Elm/Diagrammar) / `[Likely]` (Rust→WASM)
+- **Native mobile** apps use Swift/Objective-C (iOS) and Kotlin (Android); some interactives use **Unity**. `[Verified]`
+- **Infra:** AWS (CloudFront CDN, EC2, S3), Docker, NGINX, Terraform; Stripe (billing), Algolia
+  (search), Amplitude/Redash (analytics), Sentry (errors). `[Verified]`
 - The frontend is a **single-page-style rich client** that fetches content and runs the
   interaction locally rather than re-rendering from the server per step. `[Inferred]`
 
@@ -103,14 +141,18 @@ fill in specific names/links as you verify.
   serve (versioned, cached) content; authenticate users; persist progress/mastery/streaks; run
   subscriptions/entitlements; collect analytics events. The "product logic" of a lesson is in the
   *content data*, not in feature endpoints. `[Inferred]`
-- **Content pipeline.** Authors create lessons in an **internal authoring tool** that emits the
-  structured format; content is versioned and published to a store/CDN the clients read. `[Inferred]`
+- **Content pipeline.** Authors and Creative Technologists build interactive content with in-house
+  tooling — notably **Diagrammar**, an Elm-based framework for **parametric, reusable, interactive
+  diagrams** — rather than hand-coding each lesson. Authors can share toolkits/styles, and any
+  diagram can be made interactive. `[Verified]` (Diagrammar) / `[Inferred]` (versioning/publish path)
 - **Cross-device progress** implies a user-keyed store of progress/mastery with last-write or
   merge semantics, plus enough client caching to keep play snappy and offline-tolerant. `[Inferred]`
-- **Why a Lisp + data orientation fits.** ClojureScript's "data first" ethos (lessons *are* data
-  structures; EDN/JSON over the wire) and code sharing across client/server reduce the
-  impedance between "author a lesson" and "play a lesson." The stack choice and the
-  content-as-data architecture reinforce each other. `[Inferred]`
+- **Why Elm for interactives (but not the whole stack).** Brilliant **quarantines** its interactive
+  visuals in **Elm** — a pure, statically-typed functional language whose "no runtime exceptions"
+  guarantee and data-first model suit many small, reliable, composable interactions — behind the
+  **Diagrammar** framework so authors/CTs can build diagrams. The mainstream
+  **Python/Django + GraphQL + Next.js** core handles everything else. The interactive engine is an
+  *island* with its own language, not the house style. `[Verified]` (the Elm island) / `[Inferred]` (the "why")
 
 ### DOK 3 — Strategic Thinking *(suggestions only — investigate, don't assume)*
 
@@ -132,9 +174,10 @@ thread to pull, framed as "go look into this."*
   the crown jewel and try to reverse-engineer its shape from network payloads. The expressiveness
   of that schema (how many interaction types, how composable) likely predicts their authoring
   velocity better than any infra choice.
-- **Stack-bet evaluation.** Suggestion: build the case *for and against* Clojure/ClojureScript for
-  this product — hiring pool vs. code-sharing/data-orientation payoff — and decide whether the bet
-  is a genuine moat or a legacy constraint.
+- **Stack-bet evaluation.** Suggestion: build the case *for and against* Brilliant's real bets — an
+  **Elm island for interactives** (reliability/composability vs. a tiny hiring pool and a second
+  toolchain) and the **Vue → Next.js/GraphQL migration** (developer experience and SEO vs. migration
+  cost). Decide which are genuine moats and which are legacy drag.
 - **Where adaptivity actually runs.** Suggestion: test the hypothesis that "adaptivity" is mostly
   cheap client-side rules over content metadata, with any ML/analytics computed *offline* and fed
   back as data — rather than ML in the request path. Look for batch vs. real-time signals.
@@ -157,11 +200,12 @@ the reasoning above — sharpen or kill it as you verify.*
    — instant feedback, offline play, near-infinite concurrency at near-zero per-answer cost — is
    enormous. `[Inferred]`
 
-2. **Consensus:** Pick the mainstream stack (JS/Python) so hiring is easy.
-   **Spiky:** Brilliant's bet on a niche **Lisp across the whole stack** is *correct for this
-   product*, because "a lesson is data" and "code shared between authoring and playing" matter more
-   than a big hiring pool. The stack is downstream of the content-as-data architecture, not a
-   fashion choice. `[Likely]`
+2. **Consensus:** Use one mainstream language across the stack so hiring and maintenance stay easy.
+   **Spiky:** Brilliant deliberately runs a **polyglot** shop and **quarantines its interactives in
+   Elm** (via Diagrammar) — accepting a tiny hiring pool and a second toolchain — because the
+   *reliability and composability of the interactions* (Elm's no-runtime-exceptions guarantee) matter
+   more there than stack uniformity. The real moat is **Diagrammar + the Elm interactive library**,
+   not the ordinary Python/Django/Next.js core. `[Verified]` (the bet) / `[Inferred]` (that it's the moat)
 
 3. **Consensus:** Interactive lessons are custom-built features, each shipped as code.
    **Spiky:** Brilliant's real backend product is a **content schema + a generic interpreter**.
@@ -189,9 +233,13 @@ the reasoning above — sharpen or kill it as you verify.*
 
 ## 6. Open Questions / To Verify
 
-- [ ] Confirm the language stack (Clojure/ClojureScript?) from a current job listing or talk. `[Likely → verify]`
-- [ ] Identify the primary datastore(s) for content vs. user progress. `[Unknown]`
-- [ ] Confirm content delivery: bundled, CDN-served, or fetched-and-cached — and how it's versioned. `[Unknown]`
-- [ ] Determine whether *any* answer checking is server-side (e.g., for certificates/graded paths). `[Unknown]`
-- [ ] Find and name 2–3 actual Brilliant engineers + their talks/posts for the Experts section. `[Unknown]`
+- [x] ~~Confirm the language stack~~ — **Done.** Python/Django + PostgreSQL backend; GraphQL;
+  Vue→Next.js/React (TS) frontend; **Elm/Diagrammar** for interactives; Rust; Unity for some.
+  *(Not Clojure.)* `[Verified]`
+- [x] ~~Find and name actual Brilliant engineers + talks~~ — **Done.** See Experts (Kevin Smith CTO,
+  Jared Silver, Danny Greg, Pontus Granström + the Diagrammar talk). `[Verified]`
+- [ ] Confirm **Rust → WebAssembly** powers in-browser simulations (vs. plain JS/Canvas/WebGL). `[Likely → verify]`
+- [ ] Pin down the **content delivery + versioning** path (bundled vs. GraphQL-fetched vs. CDN-cached). `[Unknown]`
+- [ ] Determine whether *any* answer checking is server-side (e.g., graded/certificate flows). `[Unknown]`
+- [ ] Map how **Elm interactives talk to the GraphQL/Django core** (where progress is recorded). `[Unknown]`
 - [ ] Inspect the live app's network traffic to validate the "content-as-data + client checking" model. `[To do]`

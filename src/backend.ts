@@ -2,6 +2,7 @@ import type {
   AttemptEvent,
   LessonId,
   LessonProgress,
+  LessonScore,
   SkillId,
   SkillMastery,
   StepResult,
@@ -88,6 +89,25 @@ const isStepResult = (value: unknown): value is StepResult => {
   )
 }
 
+const isLessonScore = (value: unknown): value is LessonScore => {
+  if (!isRecord(value)) return false
+
+  return (
+    isNumber(value.scorePercent) &&
+    Number.isInteger(value.scorePercent) &&
+    value.scorePercent >= 0 &&
+    value.scorePercent <= 100 &&
+    isNumber(value.correctFirstTryCount) &&
+    Number.isInteger(value.correctFirstTryCount) &&
+    value.correctFirstTryCount >= 0 &&
+    isNumber(value.assessedStepCount) &&
+    Number.isInteger(value.assessedStepCount) &&
+    value.assessedStepCount >= 0 &&
+    value.correctFirstTryCount <= value.assessedStepCount &&
+    isString(value.completedAt)
+  )
+}
+
 const normalizeRecord = <Value>(
   value: unknown,
   isValue: (candidate: unknown) => candidate is Value,
@@ -149,6 +169,9 @@ const normalizeLessonProgress = (value: unknown): LessonProgress | null => {
   if (value.currentStepIndex < 0 || value.currentStepIndex >= lesson.steps.length) return null
   if (!isString(value.startedAt) || !isString(value.updatedAt)) return null
   if (value.completedAt !== undefined && !isString(value.completedAt)) return null
+  const completionHistory = Array.isArray(value.completionHistory)
+    ? value.completionHistory.filter(isLessonScore)
+    : []
 
   return {
     userId: value.userId,
@@ -156,6 +179,9 @@ const normalizeLessonProgress = (value: unknown): LessonProgress | null => {
     status: value.status,
     currentStepIndex: value.currentStepIndex,
     stepResults: normalizeStepResults(value.stepResults, value.lessonId),
+    ...(isLessonScore(value.latestScore) ? { latestScore: value.latestScore } : {}),
+    ...(isLessonScore(value.bestScore) ? { bestScore: value.bestScore } : {}),
+    ...(completionHistory.length > 0 ? { completionHistory } : {}),
     startedAt: value.startedAt,
     updatedAt: value.updatedAt,
     ...(value.completedAt ? { completedAt: value.completedAt } : {}),

@@ -9,11 +9,16 @@ import {
   checkOperationChoiceStep,
   checkSequenceStep,
   createInitialProgress,
+  getBestLessonScore,
+  getCourseProgressSummary,
+  getLatestLessonScore,
   getRecommendedPathLessonId,
   getRecommendedNextLesson,
+  hasCompletedLesson,
   isLessonUnlocked,
   isLevel,
   MASTERY_READY_THRESHOLD,
+  restartLessonProgress,
   sideTotal,
   type BalanceCheckMeta,
   type ProgressByLesson,
@@ -28,6 +33,7 @@ import {
   type BalanceState,
   type Lesson,
   type LessonId,
+  type LessonScore,
   type BalanceStep,
   type ConceptStep,
   type LessonProgress,
@@ -77,7 +83,7 @@ function App() {
       step,
       result,
       progress.currentStepIndex + (shouldAdvance ? 1 : 0),
-      activeLesson.steps.length,
+      activeLesson,
       shouldRecordAttempt,
     )
 
@@ -134,6 +140,20 @@ function App() {
     setView(nextProgress.status === 'completed' ? 'complete' : 'lesson')
   }
 
+  const retakeLesson = (lessonId: LessonId) => {
+    if (!user) return
+
+    const lesson = lessons[lessonId]
+    const latestProgressByLesson = getProgressByLesson(user.id)
+    if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
+
+    const nextProgress = restartLessonProgress(getProgressForUser(user, lessonId), lesson)
+    localBackend.progress.saveLessonProgress(nextProgress)
+    setActiveLessonId(lessonId)
+    setProgress(nextProgress)
+    setView('lesson')
+  }
+
   return (
     <main className="app-shell">
       {user && (
@@ -164,6 +184,7 @@ function App() {
           progressByLesson={progressByLesson}
           mastery={mastery}
           onLaunchLesson={launchLesson}
+          onRetakeLesson={retakeLesson}
         />
       )}
       {view === 'lesson' && user && progress && currentStep && (
@@ -176,7 +197,13 @@ function App() {
         />
       )}
       {view === 'complete' && user && progress && (
-        <CompleteScreen lesson={activeLesson} recommendation={recommendation} onCourse={() => setView('course')} />
+        <CompleteScreen
+          lesson={activeLesson}
+          progress={progress}
+          recommendation={recommendation}
+          onCourse={() => setView('course')}
+          onRetake={() => retakeLesson(activeLesson.id)}
+        />
       )}
       {view === 'profile' && user && (
         <ProfileScreen user={user} mastery={mastery} attempts={localBackend.attempts.getAttempts(user.id)} />
@@ -339,15 +366,38 @@ type CourseMapProps = {
   progressByLesson: ProgressByLesson
   mastery: SkillMastery[]
   onLaunchLesson: (lessonId: LessonId) => void
+  onRetakeLesson: (lessonId: LessonId) => void
 }
 
-function CourseMap({ user, activeLesson, progress, progressByLesson, mastery, onLaunchLesson }: CourseMapProps) {
+function CourseMap({
+  user,
+  activeLesson,
+  progress,
+  progressByLesson,
+  mastery,
+  onLaunchLesson,
+  onRetakeLesson,
+}: CourseMapProps) {
   const reviewLessonId = getReviewSuggestedLessonId(progressByLesson, mastery)
-  const featuredLessonId = getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, activeLesson.id)
+  const pathSummary = getCourseProgressSummary(algebraCourse, lessons, progressByLesson, activeLesson.id)
+  const featuredLessonId = pathSummary.recommendedLessonId
   const reviewLesson = reviewLessonId && reviewLessonId !== featuredLessonId ? lessons[reviewLessonId] : null
   const featuredLesson = lessons[featuredLessonId]
   const featuredProgress = progressByLesson[featuredLessonId]
-  const progressPercent = getLessonProgressPercent(featuredLesson, featuredProgress)
+  const featuredProgressPercent = getLessonProgressPercent(featuredLesson, featuredProgress)
+  const featuredScore = getScoreSummaryText(pathSummary.recommendedLatestScore, pathSummary.recommendedBestScore)
+  const lastCompletedLesson = pathSummary.lastCompletedLessonId ? lessons[pathSummary.lastCompletedLessonId] : null
+  const lastCompletedScore = getScoreSummaryText(
+    pathSummary.lastCompletedLatestScore,
+    pathSummary.lastCompletedBestScore,
+  )
+  const progressLabel = `${pathSummary.completedLessons} of ${pathSummary.totalLessons} lessons complete`
+  const actionLabel =
+    pathSummary.recommendedAction === 'view-summary'
+      ? 'View summary'
+      : pathSummary.recommendedAction === 'continue'
+        ? 'Continue'
+        : 'Start'
 
   return (
     <section className="screen-stack">
@@ -355,21 +405,45 @@ function CourseMap({ user, activeLesson, progress, progressByLesson, mastery, on
         <p className="eyebrow">Welcome back, {user.displayName}</p>
         <h1>{algebraCourse.title}</h1>
         <p className="lead">{algebraCourse.description}</p>
+        <div className="path-overview" aria-label="Course progress overview">
+          <div className="overview-stat">
+            <span>Path progress</span>
+            <strong>{progressLabel}</strong>
+            <small>{pathSummary.percentComplete}% complete</small>
+          </div>
+          <div className="overview-stat">
+            <span>Last completed</span>
+            <strong>{lastCompletedLesson?.title ?? 'Nothing completed yet'}</strong>
+            <small>{lastCompletedScore || (lastCompletedLesson ? 'Completed' : 'Start the first lesson to begin your path.')}</small>
+          </div>
+        </div>
         <div className="continue-panel">
           <div>
+            <span>Recommended next</span>
             <strong>{featuredLesson.title}</strong>
             <span>{getLessonProgressLabel(featuredLesson, featuredProgress, mastery)}</span>
+            {featuredScore && <small className="score-line">{featuredScore}</small>}
           </div>
-          <button className="primary-action" type="button" onClick={() => onLaunchLesson(featuredLesson.id)}>
-            {featuredProgress?.status === 'completed' ? 'View summary' : featuredProgress ? 'Continue' : 'Start'}
-          </button>
+          <div className="continue-actions">
+            <button className="primary-action" type="button" onClick={() => onLaunchLesson(featuredLesson.id)}>
+              {actionLabel}
+            </button>
+            {featuredProgress?.status === 'completed' && (
+              <button className="secondary-inline" type="button" onClick={() => onRetakeLesson(featuredLesson.id)}>
+                Retake
+              </button>
+            )}
+          </div>
         </div>
         {reviewLesson && (
           <p className="review-note">
             Review suggested for {reviewLesson.title}, but {featuredLesson.title} is unlocked when you are ready.
           </p>
         )}
-        <ProgressBar value={progressPercent} label={`${progressPercent}% complete`} />
+        <ProgressBar value={pathSummary.percentComplete} label={progressLabel} />
+        {featuredProgress && featuredProgress.status !== 'completed' && (
+          <ProgressBar value={featuredProgressPercent} label={`${featuredLesson.title}: ${featuredProgressPercent}% complete`} />
+        )}
       </div>
 
       <div className="path-list" aria-label="Course path">
@@ -381,6 +455,7 @@ function CourseMap({ user, activeLesson, progress, progressByLesson, mastery, on
           const comingSoon = lesson.steps.length === 0
           const recommended = lesson.id === featuredLessonId && !completed && unlocked
           const status = getPathStatus({ comingSoon, recommended, unlocked, lesson, lessonProgress, mastery })
+          const scoreText = getLessonScoreText(lesson, lessonProgress)
 
           return (
             <article className={`path-node ${status.className}`} key={lesson.id}>
@@ -388,13 +463,21 @@ function CourseMap({ user, activeLesson, progress, progressByLesson, mastery, on
               <div>
                 <h2>{lessonNode.title}</h2>
                 <p>{lessonNode.description}</p>
+                {scoreText && <p className="score-line">{scoreText}</p>}
               </div>
               <div className="path-actions">
                 <span className="status-pill">{status.label}</span>
                 {unlocked && (
-                  <button type="button" onClick={() => onLaunchLesson(lesson.id)}>
-                    {completed ? 'View summary' : lessonProgress ? 'Continue' : 'Start'}
-                  </button>
+                  <>
+                    <button type="button" onClick={() => onLaunchLesson(lesson.id)}>
+                      {completed ? 'View summary' : lessonProgress ? 'Continue' : 'Start'}
+                    </button>
+                    {completed && (
+                      <button type="button" onClick={() => onRetakeLesson(lesson.id)}>
+                        Retake
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </article>
@@ -413,6 +496,7 @@ function getLessonProgressPercent(lesson: Lesson, progress?: LessonProgress) {
 
 function getLessonProgressLabel(lesson: Lesson, progress: LessonProgress | undefined, mastery: SkillMastery[]) {
   if (!progress) return 'Ready to start'
+  if (progress.status === 'inProgress' && hasCompletedLesson(progress)) return `Retaking step ${progress.currentStepIndex + 1} of ${lesson.steps.length}`
   if (progress.status === 'completed') {
     const completionState = getCompletionState(lesson, progress, mastery)
     if (completionState === 'mastered') return 'Mastered'
@@ -439,6 +523,9 @@ function getPathStatus({
 }) {
   const completionState = getCompletionState(lesson, lessonProgress, mastery)
 
+  if (lessonProgress?.status === 'inProgress' && hasCompletedLesson(lessonProgress)) {
+    return { label: 'Retaking', className: 'available' }
+  }
   if (completionState === 'mastered') return { label: 'Mastered', className: 'completed' }
   if (completionState === 'review-suggested') return { label: 'Review suggested', className: 'review' }
   if (completionState === 'completed') return { label: 'Completed', className: 'completed' }
@@ -467,6 +554,7 @@ function getCompletionState(lesson: Lesson, progress: LessonProgress | undefined
 }
 
 function getAverageLessonMastery(lesson: Lesson, mastery: SkillMastery[]) {
+  if (!lesson.steps.some((step) => step.type !== 'concept')) return 1
   if (lesson.skillIds.length === 0) return 0
 
   const total = lesson.skillIds.reduce(
@@ -484,6 +572,31 @@ function isCleanCompletion(lesson: Lesson, progress: LessonProgress) {
     const result = progress.stepResults[stepId]
     return result?.correct === true && result.attempts <= 1
   })
+}
+
+function getLessonScoreText(lesson: Lesson, progress?: LessonProgress) {
+  const latestScore = getLatestLessonScore(lesson, progress)
+  const bestScore = getBestLessonScore(lesson, progress)
+  return getScoreSummaryText(latestScore, bestScore)
+}
+
+function getScoreSummaryText(latestScore?: LessonScore, bestScore?: LessonScore) {
+  if (!latestScore) return ''
+
+  const latest = `Latest score: ${latestScore.scorePercent}% first try`
+  if (bestScore && bestScore.scorePercent !== latestScore.scorePercent) {
+    return `${latest} | Best: ${bestScore.scorePercent}%`
+  }
+
+  return latest
+}
+
+function getLessonScoreDetail(lesson: Lesson, progress: LessonProgress) {
+  const latestScore = getLatestLessonScore(lesson, progress)
+  if (!latestScore) return 'No scored completion yet.'
+  if (latestScore.assessedStepCount === 0) return 'No assessed steps in this lesson.'
+
+  return `${latestScore.correctFirstTryCount}/${latestScore.assessedStepCount} assessed steps correct on the first try.`
 }
 
 type LessonPlayerProps = {
@@ -596,6 +709,9 @@ function MultipleChoiceStep({
 }) {
   const [selectedFeedback, setSelectedFeedback] = useState(priorResult?.feedback ?? '')
   const [selectedId, setSelectedId] = useState('')
+  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
+  const [reveal, setReveal] = useState('')
+  const [retryGuidance, setRetryGuidance] = useState('')
   const wasCorrect = selectedId === step.correctId || Boolean(priorResult?.correct)
 
   return (
@@ -614,9 +730,25 @@ function MultipleChoiceStep({
               key={option.id}
               disabled={wasCorrect}
               onClick={() => {
+                const nextAttempt = attempts + 1
+                const correct = option.id === step.correctId
+                const feedback =
+                  correct
+                    ? step.feedback?.correct ?? option.feedback
+                    : nextAttempt >= 2 && step.feedback?.incorrect
+                      ? step.feedback.incorrect
+                      : option.feedback
+
                 setSelectedId(option.id)
-                setSelectedFeedback(option.feedback)
-                onComplete(option.id === step.correctId, option.feedback, { advance: false })
+                setAttempts(nextAttempt)
+                setSelectedFeedback(feedback)
+                setReveal(!correct && nextAttempt >= 3 ? step.feedback?.reveal ?? '' : '')
+                setRetryGuidance(
+                  !correct && nextAttempt >= 3 && step.feedback?.reveal
+                    ? 'Use the reveal, then choose the prediction that matches the totals.'
+                    : 'Compare the two totals, then choose another option.',
+                )
+                onComplete(correct, feedback, { advance: false })
               }}
             >
               {option.label}
@@ -625,8 +757,8 @@ function MultipleChoiceStep({
           )
         })}
       </div>
-      {selectedFeedback && <FeedbackPanel correct={wasCorrect} message={selectedFeedback} />}
-      {selectedFeedback && !wasCorrect && <RetryPrompt message="Choose another option to try again." />}
+      {selectedFeedback && <FeedbackPanel correct={wasCorrect} message={selectedFeedback} reveal={!wasCorrect ? reveal : undefined} />}
+      {selectedFeedback && !wasCorrect && <RetryPrompt message={retryGuidance || 'Choose another option to try again.'} />}
       {wasCorrect && (
         <button className="primary-action continue-step" type="button" onClick={() => onAdvance(selectedFeedback)}>
           Continue
@@ -1395,33 +1527,73 @@ function ProgressBar({ value, label }: { value: number; label: string }) {
 
 function CompleteScreen({
   lesson,
+  progress,
   recommendation,
   onCourse,
+  onRetake,
 }: {
   lesson: Lesson
+  progress: LessonProgress
   recommendation: { title: string; body: string }
   onCourse: () => void
+  onRetake: () => void
 }) {
   const copy = getCompletionCopy(lesson)
+  const latestScore = getLatestLessonScore(lesson, progress)
+  const bestScore = getBestLessonScore(lesson, progress)
 
   return (
     <section className="complete-card card">
       <p className="eyebrow">Lesson complete</p>
       <h1>{copy.title}</h1>
       <p className="lead">{copy.body}</p>
+      {latestScore && (
+        <div className="score-card">
+          <span>First-try score</span>
+          <strong>{latestScore.scorePercent}%</strong>
+          <p>{getLessonScoreDetail(lesson, progress)}</p>
+          {bestScore && bestScore.scorePercent !== latestScore.scorePercent && <small>Best score: {bestScore.scorePercent}%</small>}
+        </div>
+      )}
       <div className="next-card">
         <span>Recommended next</span>
         <strong>{recommendation.title}</strong>
         <p>{recommendation.body}</p>
       </div>
-      <button className="primary-action" type="button" onClick={onCourse}>
-        Back to course path
-      </button>
+      <div className="complete-actions">
+        <button className="primary-action" type="button" onClick={onCourse}>
+          Back to course path
+        </button>
+        <button className="secondary-action" type="button" onClick={onRetake}>
+          Retake lesson
+        </button>
+      </div>
     </section>
   )
 }
 
 function getCompletionCopy(lesson: Lesson) {
+  if (lesson.id === 'graphing-lines') {
+    return {
+      title: 'You graphed lines from equations.',
+      body: 'You used slope, intercepts, points, and tables to recognize linear equations.',
+    }
+  }
+
+  if (lesson.id === 'coordinate-plane') {
+    return {
+      title: 'You read the coordinate plane.',
+      body: 'You located points by moving horizontally for x and vertically for y.',
+    }
+  }
+
+  if (lesson.id === 'like-terms-variables-both-sides') {
+    return {
+      title: 'You solved after gathering terms.',
+      body: 'You classified x-terms, combined like terms, caught a wrong sign move, and gathered variables before isolating x.',
+    }
+  }
+
   if (lesson.id === 'two-step-equations') {
     return {
       title: 'You solved two-step equations.',

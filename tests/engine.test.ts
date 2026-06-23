@@ -1,18 +1,33 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { algebraCourse, balancingEquationsLesson, lessons, type Lesson, type LessonStep, type SkillMastery } from '../src/domain'
+import {
+  algebraCourse,
+  balancingEquationsLesson,
+  lessons,
+  type Lesson,
+  type LessonId,
+  type LessonProgress,
+  type LessonStep,
+  type SkillMastery,
+} from '../src/domain'
 import {
   applyBalanceOperation,
   applyStepResult,
+  calculateLessonScore,
   checkBalanceStep,
   checkInputStep,
   checkOperationChoiceStep,
   checkSequenceStep,
   createInitialProgress,
+  getBestLessonScore,
+  getCourseProgressSummary,
+  getLatestLessonScore,
   getRecommendedPathLessonId,
   getRecommendedNextLesson,
+  hasCompletedLesson,
   isLessonUnlocked,
+  restartLessonProgress,
   type ProgressByLesson,
 } from '../src/engine'
 
@@ -25,6 +40,24 @@ const lessonStep = <Type extends LessonStep['type']>(
   assert.ok(step)
   assert.equal(step.type, type)
   return step as Extract<LessonStep, { type: Type }>
+}
+
+const expectedLessonOrder: LessonId[] = [
+  'balancing-equations',
+  'one-step-equations',
+  'two-step-equations',
+  'like-terms-variables-both-sides',
+  'coordinate-plane',
+  'graphing-lines',
+]
+
+const expectedPrerequisites: Record<LessonId, LessonId[]> = {
+  'balancing-equations': [],
+  'one-step-equations': ['balancing-equations'],
+  'two-step-equations': ['one-step-equations'],
+  'like-terms-variables-both-sides': ['two-step-equations'],
+  'coordinate-plane': ['like-terms-variables-both-sides'],
+  'graphing-lines': ['coordinate-plane'],
 }
 
 test('input recovery escalates from hint to explanation to reveal', () => {
@@ -161,7 +194,7 @@ test('wrong assessed results stay on the same step and remain retryable', () => 
     step,
     { correct: false, feedback: 'Try again.' },
     currentStepIndex + 1,
-    balancingEquationsLesson.steps.length,
+    balancingEquationsLesson,
   )
 
   assert.equal(nextProgress.currentStepIndex, currentStepIndex)
@@ -173,7 +206,7 @@ test('wrong assessed results stay on the same step and remain retryable', () => 
 const finalSummaryCases = [
   {
     lesson: balancingEquationsLesson,
-    finalAssessedId: 'choose-balanced-move',
+    finalAssessedId: 'order-balance-repair',
     finalSummaryId: 'complete-summary',
   },
   {
@@ -185,6 +218,21 @@ const finalSummaryCases = [
     lesson: lessons['two-step-equations'],
     finalAssessedId: 'spot-two-step-mistake',
     finalSummaryId: 'complete-two-step-summary',
+  },
+  {
+    lesson: lessons['like-terms-variables-both-sides'],
+    finalAssessedId: 'input-variable-both-sides',
+    finalSummaryId: 'complete-like-terms-summary',
+  },
+  {
+    lesson: lessons['coordinate-plane'],
+    finalAssessedId: 'choose-quadrant',
+    finalSummaryId: 'complete-coordinate-plane-summary',
+  },
+  {
+    lesson: lessons['graphing-lines'],
+    finalAssessedId: 'choose-line-table',
+    finalSummaryId: 'complete-graphing-lines-summary',
   },
 ]
 
@@ -212,7 +260,7 @@ finalSummaryCases.forEach(({ lesson, finalAssessedId, finalSummaryId }) => {
       finalAssessedStep,
       { correct: true, feedback: 'Correct.' },
       finalAssessedIndex + 1,
-      lesson.steps.length,
+      lesson,
       false,
     )
 
@@ -236,7 +284,7 @@ finalSummaryCases.forEach(({ lesson, finalAssessedId, finalSummaryId }) => {
       finalSummaryStep,
       { correct: true, feedback: 'Concept viewed.' },
       finalSummaryIndex + 1,
-      lesson.steps.length,
+      lesson,
       false,
     )
 
@@ -245,6 +293,116 @@ finalSummaryCases.forEach(({ lesson, finalAssessedId, finalSummaryId }) => {
     assert.equal(nextProgress.stepResults[finalSummaryStep.id].attempts, 0)
     assert.ok(nextProgress.completedAt)
   })
+})
+
+test('lesson completion records latest and best first-try scores', () => {
+  const lesson = balancingEquationsLesson
+  const finalSummaryStep = lessonStep('complete-summary', 'concept', lesson)
+  const finalSummaryIndex = lesson.steps.findIndex((step) => step.id === finalSummaryStep.id)
+  const assessedSteps = lesson.steps.filter((step) => step.type !== 'concept')
+  const activeProgress = {
+    ...createInitialProgress('user-1', lesson.id),
+    currentStepIndex: finalSummaryIndex,
+    stepResults: assessedSteps.reduce<LessonProgress['stepResults']>((results, step, index) => {
+      results[step.id] = {
+        correct: true,
+        attempts: index % 2 === 0 ? 1 : 2,
+        feedback: 'Correct.',
+      }
+      return results
+    }, {}),
+  }
+
+  const completed = applyStepResult(
+    activeProgress,
+    finalSummaryStep,
+    { correct: true, feedback: 'Concept viewed.' },
+    finalSummaryIndex + 1,
+    lesson,
+    false,
+  )
+
+  assert.equal(completed.status, 'completed')
+  const expectedFirstTryCount = assessedSteps.filter((_, index) => index % 2 === 0).length
+  const expectedScorePercent = Math.round((expectedFirstTryCount / assessedSteps.length) * 100)
+  assert.equal(completed.latestScore?.correctFirstTryCount, expectedFirstTryCount)
+  assert.equal(completed.latestScore?.assessedStepCount, assessedSteps.length)
+  assert.equal(completed.latestScore?.scorePercent, expectedScorePercent)
+  assert.equal(completed.bestScore?.scorePercent, expectedScorePercent)
+  assert.equal(completed.completionHistory?.length, 1)
+  assert.equal(getLatestLessonScore(lesson, completed)?.scorePercent, expectedScorePercent)
+  assert.equal(getBestLessonScore(lesson, completed)?.scorePercent, expectedScorePercent)
+  assert.deepEqual(calculateLessonScore(lesson, completed, completed.completedAt).scorePercent, expectedScorePercent)
+})
+
+test('retaking a completed lesson resets the run and preserves score history', () => {
+  const lesson = balancingEquationsLesson
+  const finalSummaryStep = lessonStep('complete-summary', 'concept', lesson)
+  const finalSummaryIndex = lesson.steps.findIndex((step) => step.id === finalSummaryStep.id)
+  const assessedSteps = lesson.steps.filter((step) => step.type !== 'concept')
+  const completed = {
+    ...createInitialProgress('user-1', lesson.id),
+    status: 'completed' as const,
+    currentStepIndex: finalSummaryIndex,
+    latestScore: {
+      scorePercent: 60,
+      correctFirstTryCount: 3,
+      assessedStepCount: 5,
+      completedAt: '2026-06-23T00:00:00.000Z',
+    },
+    bestScore: {
+      scorePercent: 60,
+      correctFirstTryCount: 3,
+      assessedStepCount: 5,
+      completedAt: '2026-06-23T00:00:00.000Z',
+    },
+    completionHistory: [
+      {
+        scorePercent: 60,
+        correctFirstTryCount: 3,
+        assessedStepCount: 5,
+        completedAt: '2026-06-23T00:00:00.000Z',
+      },
+    ],
+    completedAt: '2026-06-23T00:00:00.000Z',
+  }
+
+  const retake = restartLessonProgress(completed, lesson)
+
+  assert.equal(retake.status, 'inProgress')
+  assert.equal(retake.currentStepIndex, 0)
+  assert.deepEqual(retake.stepResults, {})
+  assert.equal(retake.completedAt, undefined)
+  assert.equal(retake.latestScore?.scorePercent, 60)
+  assert.equal(retake.bestScore?.scorePercent, 60)
+  assert.equal(retake.completionHistory?.length, 1)
+  assert.equal(hasCompletedLesson(retake), true)
+  assert.equal(isLessonUnlocked(lessons['one-step-equations'], { 'balancing-equations': retake }), true)
+
+  const perfectRun = {
+    ...retake,
+    currentStepIndex: finalSummaryIndex,
+    stepResults: assessedSteps.reduce<LessonProgress['stepResults']>((results, step) => {
+      results[step.id] = {
+        correct: true,
+        attempts: 1,
+        feedback: 'Correct.',
+      }
+      return results
+    }, {}),
+  }
+  const recompleted = applyStepResult(
+    perfectRun,
+    finalSummaryStep,
+    { correct: true, feedback: 'Concept viewed.' },
+    finalSummaryIndex + 1,
+    lesson,
+    false,
+  )
+
+  assert.equal(recompleted.latestScore?.scorePercent, 100)
+  assert.equal(recompleted.bestScore?.scorePercent, 100)
+  assert.equal(recompleted.completionHistory?.map((score) => score.scorePercent).join(','), '60,100')
 })
 
 test('recommendations distinguish clean mastery from repeated misses', () => {
@@ -288,7 +446,7 @@ test('recommendations use average mastery threshold and end-of-path copy', () =>
       lastPracticedAt: '2026-06-23T00:00:00.000Z',
     },
   ]
-  const finalLessonMastery: SkillMastery[] = [
+  const twoStepMastery: SkillMastery[] = [
     {
       userId: 'user-1',
       skillId: 'two-step-equations',
@@ -298,10 +456,34 @@ test('recommendations use average mastery threshold and end-of-path copy', () =>
       lastPracticedAt: '2026-06-23T00:00:00.000Z',
     },
   ]
+  const likeTermsMastery: SkillMastery[] = lessons['like-terms-variables-both-sides'].skillIds.map((skillId) => ({
+    userId: 'user-1',
+    skillId,
+    score: 1,
+    attempts: 4,
+    correct: 4,
+    lastPracticedAt: '2026-06-23T00:00:00.000Z',
+  }))
+  const graphingMastery: SkillMastery[] = lessons['graphing-lines'].skillIds.map((skillId) => ({
+    userId: 'user-1',
+    skillId,
+    score: 1,
+    attempts: 4,
+    correct: 4,
+    lastPracticedAt: '2026-06-23T00:00:00.000Z',
+  }))
 
   assert.equal(getRecommendedNextLesson(balancingEquationsLesson, masteryAtThreshold).title, 'One-Step Equations')
   assert.equal(getRecommendedNextLesson(balancingEquationsLesson, missingSkillMastery).title, 'Review Balancing Equations')
-  assert.equal(getRecommendedNextLesson(lessons['two-step-equations'], finalLessonMastery).title, 'Course path complete')
+  assert.equal(
+    getRecommendedNextLesson(lessons['two-step-equations'], twoStepMastery).title,
+    'Like Terms & Variables on Both Sides',
+  )
+  assert.equal(
+    getRecommendedNextLesson(lessons['like-terms-variables-both-sides'], likeTermsMastery).title,
+    'Coordinate Plane',
+  )
+  assert.equal(getRecommendedNextLesson(lessons['graphing-lines'], graphingMastery).title, 'Course path complete')
 })
 
 test('path recommends one-step equations after balancing is completed', () => {
@@ -337,7 +519,35 @@ test('path recommends two-step equations after one-step is completed', () => {
   }
 
   assert.equal(isLessonUnlocked(lessons['two-step-equations'], progressByLesson), true)
+  assert.equal(isLessonUnlocked(lessons['like-terms-variables-both-sides'], progressByLesson), false)
   assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson), 'two-step-equations')
+})
+
+test('path recommends like terms after two-step equations are completed', () => {
+  const progressByLesson: ProgressByLesson = {
+    'balancing-equations': {
+      ...createInitialProgress('user-1', 'balancing-equations'),
+      status: 'completed',
+      currentStepIndex: balancingEquationsLesson.steps.length - 1,
+      completedAt: '2026-06-23T00:00:00.000Z',
+    },
+    'one-step-equations': {
+      ...createInitialProgress('user-1', 'one-step-equations'),
+      status: 'completed',
+      currentStepIndex: lessons['one-step-equations'].steps.length - 1,
+      completedAt: '2026-06-23T00:00:00.000Z',
+    },
+    'two-step-equations': {
+      ...createInitialProgress('user-1', 'two-step-equations'),
+      status: 'completed',
+      currentStepIndex: lessons['two-step-equations'].steps.length - 1,
+      completedAt: '2026-06-23T00:00:00.000Z',
+    },
+  }
+
+  assert.equal(isLessonUnlocked(lessons['like-terms-variables-both-sides'], progressByLesson), true)
+  assert.equal(isLessonUnlocked(lessons['coordinate-plane'], progressByLesson), false)
+  assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson), 'like-terms-variables-both-sides')
 })
 
 test('review suggestion does not block starting the unlocked next lesson', () => {
@@ -382,6 +592,71 @@ test('path prefers unlocked in-progress lessons before new available lessons', (
   }
 
   assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson), 'one-step-equations')
+})
+
+test('course progress summary shows path progress and first available recommendation', () => {
+  const summary = getCourseProgressSummary(algebraCourse, lessons, {})
+
+  assert.equal(summary.totalLessons, 6)
+  assert.equal(summary.completedLessons, 0)
+  assert.equal(summary.percentComplete, 0)
+  assert.equal(summary.lastCompletedLessonId, undefined)
+  assert.equal(summary.recommendedLessonId, 'balancing-equations')
+  assert.equal(summary.recommendedAction, 'start')
+})
+
+test('course progress summary reports last completed scores and next lesson', () => {
+  const progressByLesson: ProgressByLesson = {
+    'balancing-equations': {
+      ...createInitialProgress('user-1', 'balancing-equations'),
+      status: 'completed',
+      currentStepIndex: balancingEquationsLesson.steps.length - 1,
+      latestScore: {
+        scorePercent: 80,
+        correctFirstTryCount: 4,
+        assessedStepCount: 5,
+        completedAt: '2026-06-23T00:00:00.000Z',
+      },
+      bestScore: {
+        scorePercent: 100,
+        correctFirstTryCount: 5,
+        assessedStepCount: 5,
+        completedAt: '2026-06-23T00:00:00.000Z',
+      },
+      completedAt: '2026-06-23T00:00:00.000Z',
+    },
+  }
+
+  const summary = getCourseProgressSummary(algebraCourse, lessons, progressByLesson)
+
+  assert.equal(summary.completedLessons, 1)
+  assert.equal(summary.percentComplete, 17)
+  assert.equal(summary.lastCompletedLessonId, 'balancing-equations')
+  assert.equal(summary.recommendedLessonId, 'one-step-equations')
+  assert.equal(summary.recommendedAction, 'start')
+  assert.equal(summary.lastCompletedLatestScore?.scorePercent, 80)
+  assert.equal(summary.lastCompletedBestScore?.scorePercent, 100)
+})
+
+test('course progress summary uses the furthest completed lesson when the path is complete', () => {
+  const progressByLesson = algebraCourse.lessonOrder.reduce<ProgressByLesson>((items, lessonId) => {
+    items[lessonId] = {
+      ...createInitialProgress('user-1', lessonId),
+      status: 'completed',
+      currentStepIndex: lessons[lessonId].steps.length - 1,
+      completedAt: '2026-06-23T00:00:00.000Z',
+    }
+    return items
+  }, {})
+
+  const summary = getCourseProgressSummary(algebraCourse, lessons, progressByLesson, 'balancing-equations')
+
+  assert.equal(summary.completedLessons, 6)
+  assert.equal(summary.percentComplete, 100)
+  assert.equal(summary.lastCompletedLessonId, 'graphing-lines')
+  assert.equal(summary.recommendedLessonId, 'graphing-lines')
+  assert.equal(summary.recommendedAction, 'view-summary')
+  assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, 'balancing-equations'), 'graphing-lines')
 })
 
 test('one-step balance operation isolates x minus three', () => {
@@ -435,19 +710,76 @@ test('sequence puzzle checks order and gives tile-specific misconceptions', () =
   assert.equal(solved.feedback, 'Correct. First subtract 6 from both sides, then x = 4.')
 })
 
+test('new lesson one sequence reinforces balanced undoing', () => {
+  const step = lessonStep('order-balance-repair', 'sequence')
+
+  const oneSideOnly = checkSequenceStep(step, ['subtract-one-left', 'y-equals-five'], 1)
+  assert.equal(oneSideOnly.correct, false)
+  assert.equal(oneSideOnly.feedback, 'That isolates y, but it changes only one side of the equation.')
+
+  const thirdMiss = checkSequenceStep(step, ['y-equals-six', 'subtract-one-both'], 3)
+  assert.equal(thirdMiss.reveal, 'Tap "Subtract 1 from both sides", then "y = 5".')
+
+  const solved = checkSequenceStep(step, ['subtract-one-both', 'y-equals-five'], 1)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, 'Correct. Removing 1 from both sides leaves y = 5.')
+})
+
+test('new one-step puzzles target one-side and division misconceptions', () => {
+  const oneSideMistake = lessonStep('spot-one-side-only-mistake', 'operation-choice', lessons['one-step-equations'])
+  const divisionOrder = lessonStep('order-division-undo', 'sequence', lessons['one-step-equations'])
+
+  assert.equal(
+    checkOperationChoiceStep(oneSideMistake, 'wrong-inverse', 1).feedback,
+    'Subtracting 5 would move farther from x. The inverse is +5, but it must be applied to both sides.',
+  )
+  assert.equal(
+    checkOperationChoiceStep(oneSideMistake, 'answer-too-large', 3).reveal,
+    'The mistake is adding 5 only on the left. Correct path: x - 5 = 9 -> x = 14.',
+  )
+
+  const repeatedDivision = checkSequenceStep(divisionOrder, ['divide-four-both', 'x-equals-eight'], 1)
+  assert.equal(repeatedDivision.feedback, 'Dividing by 4 again repeats the operation. Use multiplication to undo division.')
+
+  const solved = checkSequenceStep(divisionOrder, ['multiply-four-both', 'x-equals-eight'], 1)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, 'Correct. Multiplying both sides by 4 gives x = 8.')
+})
+
 test('one-step input and two-step mistake feedback catch inverse-operation misconceptions', () => {
   const divisionStep = lessonStep('input-x-divided-by-four', 'input', lessons['one-step-equations'])
   const twoStepMistake = lessonStep('spot-two-step-mistake', 'operation-choice', lessons['two-step-equations'])
 
   assert.equal(checkInputStep(divisionStep, '0.5', 3).reveal, 'x = 8 because 2 x 4 = 8.')
   assert.equal(
-    checkOperationChoiceStep(twoStepMistake, 'one-side-only', 1).feedback,
-    'They changed both sides by division. The issue is the order of the undoing moves.',
+    checkOperationChoiceStep(twoStepMistake, 'divided-too-early', 1).feedback,
+    'They did clear the +6 position first, but used the wrong inverse operation.',
   )
   assert.equal(
-    checkOperationChoiceStep(twoStepMistake, 'subtracted-wrong', 3).reveal,
-    'The mistake is dividing by 2 before removing +3. Correct path: 2x + 3 = 11 -> 2x = 8 -> x = 4.',
+    checkOperationChoiceStep(twoStepMistake, 'arithmetic-slip', 3).reveal,
+    'The mistake is adding 6 instead of subtracting it. Correct path: 3x + 6 = 21 -> 3x = 15 -> x = 5.',
   )
+})
+
+test('two-step inputs and balance puzzle catch authored misconceptions', () => {
+  const gateInput = lessonStep('input-puzzle-gate', 'input', lessons['two-step-equations'])
+  const negativeInput = lessonStep('input-negative-constant', 'input', lessons['two-step-equations'])
+  const balance = lessonStep('balance-clear-four-x', 'balance', lessons['two-step-equations'])
+  const addFiveBoth = balance.operations?.find((operation) => operation.id === 'add-five-both')
+  const addFiveLeft = balance.operations?.find((operation) => operation.id === 'add-five-left')
+  assert.ok(addFiveBoth)
+  assert.ok(addFiveLeft)
+
+  assert.equal(checkInputStep(gateInput, '21', 1).feedback, '21 is the value of the whole expression 3x + 6, not x.')
+  assert.equal(checkInputStep(gateInput, '9', 1).feedback, 'That looks like adding 6 before dividing. The +6 should be subtracted away.')
+  assert.equal(checkInputStep(negativeInput, '4', 1).feedback, 'Check the arithmetic after adding 7: 5 + 7 is 12, then 12 / 2 is 6.')
+
+  const oneSideOnly = checkBalanceStep(balance, applyBalanceOperation(balance.state, addFiveLeft), { movedOneSideOnly: true }, 1)
+  assert.equal(oneSideOnly.feedback, 'You cleared the x side only. A balanced equation needs the same +5 on the right side.')
+
+  const solved = checkBalanceStep(balance, applyBalanceOperation(balance.state, addFiveBoth), {}, 1)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, 'The 4x bundle is alone now: 4x = 24. One more inverse move will split it into x = 6.')
 })
 
 test('two-step lesson teaches reverse order with operation and sequence puzzles', () => {
@@ -456,29 +788,164 @@ test('two-step lesson teaches reverse order with operation and sequence puzzles'
   const mistake = lessonStep('spot-two-step-mistake', 'operation-choice', lessons['two-step-equations'])
 
   assert.equal(
-    checkOperationChoiceStep(firstMove, 'divide-two-both', 1).feedback,
-    'That is the second undoing move. The +3 is outside the 2x, so clear it first.',
+    checkOperationChoiceStep(firstMove, 'divide-four-both', 1).feedback,
+    'That split comes second. The -5 is outside the 4x bundle, so clear it before dividing.',
   )
-  assert.equal(checkOperationChoiceStep(firstMove, 'subtract-three-left', 3).reveal, 'Choose "-3 from both sides" first. Then divide both sides by 2.')
+  assert.equal(checkOperationChoiceStep(firstMove, 'add-five-left', 3).reveal, 'Choose "+5 to both sides" first. Then divide both sides by 4.')
 
-  const wrongOrder = checkSequenceStep(ordered, ['divide-two-first', 'subtract-three-both', 'x-equals-four'], 1)
-  assert.equal(wrongOrder.feedback, 'Dividing first is tempting, but the +3 is outside the multiplication.')
+  const wrongOrder = checkSequenceStep(ordered, ['divide-four-first', 'add-five-both', 'x-equals-six'], 1)
+  assert.equal(wrongOrder.feedback, 'Dividing first is tempting, but the -5 still changes the 4x bundle.')
 
-  const solvedOrder = checkSequenceStep(ordered, ['subtract-three-both', 'divide-two-both', 'x-equals-four'], 1)
+  const solvedOrder = checkSequenceStep(ordered, ['add-five-both', 'divide-four-both', 'x-equals-six'], 1)
   assert.equal(solvedOrder.correct, true)
 
-  const spottedMistake = checkOperationChoiceStep(mistake, 'divided-too-early', 1)
+  const spottedMistake = checkOperationChoiceStep(mistake, 'added-instead-of-subtracted', 1)
   assert.equal(spottedMistake.correct, true)
-  assert.equal(spottedMistake.feedback, 'Right. Undo +3 first to make 2x = 8, then divide by 2 to get x = 4.')
+  assert.equal(spottedMistake.feedback, 'Right. The inverse of +6 is -6, so the path is 3x = 15, then x = 5.')
+})
+
+test('like-terms lesson combines terms before variables-on-both-sides solving', () => {
+  const pairChoice = lessonStep(
+    'choose-like-term-pair',
+    'operation-choice',
+    lessons['like-terms-variables-both-sides'],
+  )
+  const classifyTerms = lessonStep(
+    'choose-equation-variable-terms',
+    'operation-choice',
+    lessons['like-terms-variables-both-sides'],
+  )
+  const solveOrder = lessonStep(
+    'order-variable-both-sides-solution',
+    'sequence',
+    lessons['like-terms-variables-both-sides'],
+  )
+  const mistakenMove = lessonStep(
+    'spot-variable-move-mistake',
+    'operation-choice',
+    lessons['like-terms-variables-both-sides'],
+  )
+  const finalInput = lessonStep('input-variable-both-sides', 'input', lessons['like-terms-variables-both-sides'])
+
+  assert.equal(
+    checkOperationChoiceStep(pairChoice, 'x-and-y', 1).feedback,
+    'Those both have variables, but x and y are different variable parts, so they cannot combine.',
+  )
+  assert.equal(
+    checkOperationChoiceStep(pairChoice, 'number-and-x', 3).reveal,
+    'Choose "4x and -x" because both are x-terms.',
+  )
+  assert.equal(
+    checkOperationChoiceStep(classifyTerms, 'left-x-terms-only', 1).feedback,
+    'Those are x-terms, but 3x on the right is also a variable term. The equals sign separates sides, not term types.',
+  )
+  assert.equal(checkOperationChoiceStep(classifyTerms, 'all-x-terms', 1).correct, true)
+
+  const wrongVariableMove = checkSequenceStep(
+    solveOrder,
+    ['add-two-x-both', 'subtract-seven-both', 'divide-three-both', 'x-equals-four'],
+    1,
+  )
+  assert.equal(wrongVariableMove.feedback, 'Adding 2x creates more variable terms. Subtract the smaller x-term instead.')
+
+  const solved = checkSequenceStep(
+    solveOrder,
+    ['subtract-two-x-both', 'subtract-seven-both', 'divide-three-both', 'x-equals-four'],
+    1,
+  )
+  assert.equal(solved.correct, true)
+  assert.equal(
+    checkOperationChoiceStep(mistakenMove, 'variables-cannot-move', 1).feedback,
+    'Variable terms can move if you apply the inverse to both sides. The issue is choosing the wrong inverse move.',
+  )
+  assert.equal(
+    checkOperationChoiceStep(mistakenMove, 'added-instead-of-subtracted', 3).feedback,
+    'Correct. Moving +2x off the right side means subtracting 2x from both sides, not adding it.',
+  )
+  assert.equal(checkInputStep(finalInput, '15', 3).reveal, '4x - 5 = x + 10 -> 3x - 5 = 10 -> 3x = 15 -> x = 5.')
+  assert.equal(checkInputStep(finalInput, 'x = 5', 1).correct, true)
+})
+
+test('coordinate-plane lesson checks ordered-pair direction and quadrant misconceptions', () => {
+  const coordinateLesson = lessons['coordinate-plane']
+  const plotOrder = lessonStep('order-plot-point', 'sequence', lessons['coordinate-plane'])
+  const pointChoice = lessonStep('choose-coordinate-point', 'operation-choice', lessons['coordinate-plane'])
+  const robotInput = lessonStep('input-robot-coordinate', 'input', lessons['coordinate-plane'])
+  const quadrantChoice = lessonStep('choose-quadrant', 'operation-choice', lessons['coordinate-plane'])
+  const quadrantConcept = lessonStep('concept-quadrants', 'concept', lessons['coordinate-plane'])
+
+  assert.ok(
+    coordinateLesson.steps.findIndex((step) => step.id === 'concept-quadrants') <
+      coordinateLesson.steps.findIndex((step) => step.id === 'choose-quadrant'),
+  )
+  assert.match(quadrantConcept.body, /split the plane into four regions called quadrants/i)
+  assert.match(quadrantConcept.body, /Quadrant I is \(\+,\+\)/)
+  assert.match(quadrantConcept.body, /Quadrant II is \(-,\+\)/)
+  assert.match(quadrantConcept.body, /Quadrant III is \(-,-\)/)
+  assert.match(quadrantConcept.body, /Quadrant IV is \(\+,-\)/)
+  assert.match(quadrantConcept.body, /not inside any quadrant/i)
+
+  assert.equal(
+    checkSequenceStep(plotOrder, ['move-left-three', 'move-down-two', 'arrive-three-negative-two'], 1).feedback,
+    'Left is for negative x-values. Here x is positive 3.',
+  )
+
+  const solvedPlot = checkSequenceStep(plotOrder, ['move-right-three', 'move-down-two', 'arrive-three-negative-two'], 1)
+  assert.equal(solvedPlot.correct, true)
+
+  assert.equal(
+    checkOperationChoiceStep(pointChoice, 'two-negative-four', 1).feedback,
+    'This reverses the order. x is the first coordinate, so -4 must come first.',
+  )
+  assert.equal(checkInputStep(robotInput, '-5,1', 1).correct, true)
+  assert.equal(
+    checkInputStep(robotInput, '(5,1)', 1).feedback,
+    'Right 5 would be positive. Moving left makes the x-coordinate negative.',
+  )
+  assert.equal(
+    checkOperationChoiceStep(quadrantChoice, 'quadrant-one', 3).reveal,
+    'Choose "Quadrant IV" because x > 0 and y < 0 gives the sign pattern (+,-), the lower-right quadrant.',
+  )
+})
+
+test('graphing-lines lesson connects slope-intercept equations, points, and tables', () => {
+  const equationChoice = lessonStep('choose-slope-intercept-equation', 'operation-choice', lessons['graphing-lines'])
+  const plotOrder = lessonStep('order-plot-line', 'sequence', lessons['graphing-lines'])
+  const yValue = lessonStep('input-line-y-value', 'input', lessons['graphing-lines'])
+  const tableChoice = lessonStep('choose-line-table', 'operation-choice', lessons['graphing-lines'])
+
+  assert.equal(
+    checkOperationChoiceStep(equationChoice, 'y-equals-two-x-plus-three', 1).feedback,
+    'This swaps the two clues. The intercept is 2, so the constant should be +2.',
+  )
+
+  const flippedSlope = checkSequenceStep(plotOrder, ['start-at-intercept', 'move-right-two-up-one', 'mark-one-one'], 1)
+  assert.equal(flippedSlope.feedback, 'Slope 2 is 2/1, so rise 2 and run 1.')
+
+  const solvedPlot = checkSequenceStep(plotOrder, ['start-at-intercept', 'move-right-one-up-two', 'mark-one-one'], 1)
+  assert.equal(solvedPlot.correct, true)
+  assert.equal(checkInputStep(yValue, '7', 1).feedback, 'That uses +3 + 4. The equation has -x, so use -3.')
+  assert.equal(
+    checkOperationChoiceStep(tableChoice, 'table-two-x-minus-one', 3).reveal,
+    'Choose "x: 0, 1, 2 -> y: 1, 3, 5" because 2(0)+1=1, 2(1)+1=3, and 2(2)+1=5.',
+  )
 })
 
 test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', () => {
+  assert.deepEqual(algebraCourse.lessonOrder, expectedLessonOrder)
+  assert.deepEqual(
+    algebraCourse.lessons.map((lesson) => lesson.id),
+    expectedLessonOrder,
+  )
+
   algebraCourse.lessonOrder.forEach((lessonId) => {
     assert.equal(lessons[lessonId].id, lessonId)
     assert.ok(algebraCourse.lessons.some((node) => node.id === lessonId))
+    assert.deepEqual(lessons[lessonId].prerequisites, expectedPrerequisites[lessonId])
+    assert.equal(lessons[lessonId].nextLessonId, expectedLessonOrder[expectedLessonOrder.indexOf(lessonId) + 1])
   })
 
-  ;([balancingEquationsLesson, lessons['one-step-equations'], lessons['two-step-equations']] satisfies Lesson[]).forEach((lesson) => {
+  expectedLessonOrder.map((lessonId) => lessons[lessonId]).forEach((lesson) => {
     assert.ok(lesson.steps.length > 0)
     assert.equal(lesson.steps.at(-1)?.type, 'concept')
     assert.match(lesson.steps.at(-1)?.id ?? '', /summary/)
@@ -488,6 +955,9 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
       if (step.type === 'mcq') {
         assert.ok(step.options.some((option) => option.id === step.correctId))
         assert.ok(step.options.every((option) => option.feedback.length > 0))
+        assert.ok(step.feedback?.correct.length)
+        assert.ok(step.feedback?.incorrect.length)
+        assert.ok(step.feedback?.reveal)
       }
 
       if (step.type === 'operation-choice') {
@@ -526,4 +996,5 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
   assert.ok(lessons['two-step-equations'].steps.length > 0)
   assert.equal(algebraCourse.lessons.find((node) => node.id === 'two-step-equations')?.status, 'locked')
   assert.deepEqual(lessons['two-step-equations'].prerequisites, ['one-step-equations'])
+  assert.equal(algebraCourse.lessons.length, 6)
 })
