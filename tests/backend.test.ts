@@ -553,3 +553,105 @@ test('local backend sanitizes malformed persisted step results', () => {
     },
   })
 })
+
+test('createAttemptEvent maps inputs to a timestamped, uniquely identified event', () => {
+  const first = createAttemptEvent('user-1', 'balancing-equations', 'input-box-value', true, 2, 1500)
+
+  assert.equal(first.userId, 'user-1')
+  assert.equal(first.lessonId, 'balancing-equations')
+  assert.equal(first.stepId, 'input-box-value')
+  assert.equal(first.correct, true)
+  assert.equal(first.attemptCount, 2)
+  assert.equal(first.msToAnswer, 1500)
+  assert.match(first.id, /^attempt-/)
+  assert.ok(!Number.isNaN(Date.parse(first.at)))
+
+  const second = createAttemptEvent('user-1', 'balancing-equations', 'input-box-value', false, 1, 900)
+  assert.notEqual(first.id, second.id)
+})
+
+test('getCurrentUser returns null when the active session points to a missing user', () => {
+  const backend = new LocalBackend()
+  setActiveUser('ghost-user')
+
+  assert.equal(backend.auth.getCurrentUser(), null)
+})
+
+test('backend provider parsing is case-insensitive and trims whitespace', () => {
+  assert.equal(getBackendProviderFromEnv('  LOCAL  '), 'local')
+  assert.equal(getBackendProviderFromEnv('Firebase'), 'firebase')
+  assert.equal(getBackendProviderFromEnv(''), 'local')
+  assert.equal(getBackendProviderFromEnv('   '), 'local')
+})
+
+test('firebase config trims values and includes measurementId only when present', () => {
+  const requiredEnv = {
+    VITE_FIREBASE_API_KEY: '  api-key  ',
+    VITE_FIREBASE_AUTH_DOMAIN: 'example.firebaseapp.com',
+    VITE_FIREBASE_PROJECT_ID: 'project-id',
+    VITE_FIREBASE_STORAGE_BUCKET: 'project-id.appspot.com',
+    VITE_FIREBASE_MESSAGING_SENDER_ID: 'sender',
+    VITE_FIREBASE_APP_ID: 'app-id',
+  }
+
+  const withMeasurement = getFirebaseConfigFromEnv({ ...requiredEnv, VITE_FIREBASE_MEASUREMENT_ID: '  measure-1  ' })
+  assert.ok(withMeasurement)
+  assert.equal(withMeasurement?.apiKey, 'api-key')
+  assert.equal(withMeasurement?.measurementId, 'measure-1')
+
+  const withoutMeasurement = getFirebaseConfigFromEnv(requiredEnv)
+  assert.ok(withoutMeasurement)
+  assert.equal(withoutMeasurement?.measurementId, undefined)
+})
+
+test('firebase config returns null when a required key is blank', () => {
+  assert.equal(
+    getFirebaseConfigFromEnv({
+      VITE_FIREBASE_API_KEY: '   ',
+      VITE_FIREBASE_AUTH_DOMAIN: 'example.firebaseapp.com',
+      VITE_FIREBASE_PROJECT_ID: 'project-id',
+      VITE_FIREBASE_STORAGE_BUCKET: 'project-id.appspot.com',
+      VITE_FIREBASE_MESSAGING_SENDER_ID: 'sender',
+      VITE_FIREBASE_APP_ID: 'app-id',
+    }),
+    null,
+  )
+})
+
+test('missing firebase keys lists only the absent or blank required keys', () => {
+  assert.deepEqual(
+    getMissingFirebaseEnvKeysFromEnv({
+      VITE_FIREBASE_API_KEY: 'api-key',
+      VITE_FIREBASE_AUTH_DOMAIN: 'example.firebaseapp.com',
+      VITE_FIREBASE_PROJECT_ID: '   ',
+    }),
+    [
+      'VITE_FIREBASE_PROJECT_ID',
+      'VITE_FIREBASE_STORAGE_BUCKET',
+      'VITE_FIREBASE_MESSAGING_SENDER_ID',
+      'VITE_FIREBASE_APP_ID',
+    ],
+  )
+})
+
+test('local backend treats a non-object persisted payload as an empty database', () => {
+  storage.setItem(STORAGE_KEY, JSON.stringify(['not', 'a', 'db']))
+
+  const backend = new LocalBackend()
+  setActiveUser('user-1')
+
+  assert.equal(backend.auth.getCurrentUser(), null)
+  assert.deepEqual(backend.attempts.getAttempts('user-1'), [])
+})
+
+test('local backend drops a non-array attempts collection', () => {
+  storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ users: {}, progress: {}, mastery: {}, attempts: { not: 'array' } }),
+  )
+
+  const backend = new LocalBackend()
+  setActiveUser('user-1')
+
+  assert.deepEqual(backend.attempts.getAttempts('user-1'), [])
+})

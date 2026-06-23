@@ -5,9 +5,12 @@ import {
   algebraCourse,
   balancingEquationsLesson,
   lessons,
+  type BalanceOperation,
+  type BalanceState,
   type Lesson,
   type LessonId,
   type LessonProgress,
+  type LessonScore,
   type LessonStep,
   type SkillMastery,
 } from '../src/domain'
@@ -23,11 +26,17 @@ import {
   getBestLessonScore,
   getCourseProgressSummary,
   getLatestLessonScore,
+  getLessonCompletionHistory,
   getRecommendedPathLessonId,
   getRecommendedNextLesson,
   hasCompletedLesson,
+  isAssessedLessonStep,
   isLessonUnlocked,
+  isLevel,
+  MASTERY_READY_THRESHOLD,
+  normalizeExpression,
   restartLessonProgress,
+  sideTotal,
   type ProgressByLesson,
 } from '../src/engine'
 
@@ -997,4 +1006,339 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
   assert.equal(algebraCourse.lessons.find((node) => node.id === 'two-step-equations')?.status, 'locked')
   assert.deepEqual(lessons['two-step-equations'].prerequisites, ['one-step-equations'])
   assert.equal(algebraCourse.lessons.length, 6)
+})
+
+// --- Pure helper and edge-case coverage -------------------------------------
+
+const weight = (id: string, value: number): BalanceState['left'][number] => ({
+  id,
+  label: String(value),
+  value,
+  kind: 'weight',
+})
+
+const conceptStep = (id: string): LessonStep => ({ id, type: 'concept', title: id, body: id })
+
+const inputStep = (id: string, accept: string[]): LessonStep => ({
+  id,
+  type: 'input',
+  prompt: id,
+  accept,
+  feedback: { correct: 'Correct.', incorrect: 'Try again.' },
+})
+
+const buildLesson = (id: LessonId, steps: LessonStep[]): Lesson => ({
+  id,
+  title: id,
+  subtitle: id,
+  skillIds: [],
+  prerequisites: [],
+  steps,
+})
+
+test('normalizeExpression lowercases, strips whitespace, and removes a single leading x=', () => {
+  assert.equal(normalizeExpression('X = 3'), '3')
+  assert.equal(normalizeExpression('  x=3  '), '3')
+  assert.equal(normalizeExpression(' 3 . 5 '), '3.5')
+  assert.equal(normalizeExpression('x = 6/2'), '6/2')
+  assert.equal(normalizeExpression('-5, 1'), '-5,1')
+  assert.equal(normalizeExpression('y = 4'), 'y=4')
+})
+
+test('sideTotal sums item values and isLevel compares both pans', () => {
+  assert.equal(sideTotal([]), 0)
+  assert.equal(
+    sideTotal([weight('a', 3), { id: 'x', label: 'x', value: 2, kind: 'unknown' }]),
+    5,
+  )
+
+  const level: BalanceState = { left: [weight('l', 5)], right: [weight('r1', 2), weight('r2', 3)] }
+  assert.equal(isLevel(level), true)
+
+  const tilted: BalanceState = { left: [weight('l', 6)], right: [] }
+  assert.equal(isLevel(tilted), false)
+})
+
+test('applyBalanceOperation removes exact and reduces larger weights without mutating input', () => {
+  const base: BalanceState = {
+    left: [{ id: 'x', label: 'x', value: 3, kind: 'unknown' }, weight('plus2', 2)],
+    right: [weight('five', 5)],
+  }
+  const removeTwoBoth: BalanceOperation = { id: 'op', label: '-2 both', amount: -2, sides: 'both' }
+
+  const result = applyBalanceOperation(base, removeTwoBoth)
+
+  assert.equal(result.left.length, 1)
+  assert.equal(sideTotal(result.left), 3)
+  assert.equal(result.right.length, 1)
+  assert.equal(sideTotal(result.right), 3)
+  assert.equal(isLevel(result), true)
+
+  assert.equal(base.left.length, 2)
+  assert.equal(sideTotal(base.right), 5)
+})
+
+test('applyBalanceOperation appends a weight when adding to a side with no inverse', () => {
+  const base: BalanceState = { left: [], right: [] }
+  const addThreeLeft: BalanceOperation = { id: 'op', label: '+3 left', amount: 3, sides: 'left' }
+
+  const result = applyBalanceOperation(base, addThreeLeft)
+
+  assert.equal(result.left.length, 1)
+  assert.equal(result.left[0].value, 3)
+  assert.equal(result.left[0].kind, 'weight')
+  assert.equal(result.right.length, 0)
+})
+
+test('applyBalanceOperation cancels an inverse weight instead of stacking', () => {
+  const base: BalanceState = { left: [weight('neg3', -3)], right: [] }
+  const addThreeLeft: BalanceOperation = { id: 'op', label: '+3 left', amount: 3, sides: 'left' }
+
+  const result = applyBalanceOperation(base, addThreeLeft)
+
+  assert.equal(result.left.length, 0)
+})
+
+test('applyBalanceOperation with amount 0 returns an equivalent but cloned state', () => {
+  const base: BalanceState = {
+    left: [{ id: 'x', label: 'x', value: 3, kind: 'unknown' }],
+    right: [weight('three', 3)],
+  }
+  const noop: BalanceOperation = { id: 'op', label: 'noop', amount: 0, sides: 'both' }
+
+  const result = applyBalanceOperation(base, noop)
+
+  assert.notStrictEqual(result, base)
+  assert.notStrictEqual(result.left, base.left)
+  assert.deepEqual(result.left, base.left)
+  assert.deepEqual(result.right, base.right)
+})
+
+test('isAssessedLessonStep treats every non-concept step as assessed', () => {
+  assert.equal(isAssessedLessonStep(conceptStep('intro')), false)
+  assert.equal(isAssessedLessonStep(inputStep('q', ['1'])), true)
+})
+
+test('calculateLessonScore returns 100 percent when a lesson has no assessed steps', () => {
+  const lesson = buildLesson('balancing-equations', [conceptStep('intro'), conceptStep('summary')])
+  const progress = createInitialProgress('user-1', lesson.id)
+
+  const score = calculateLessonScore(lesson, progress, '2026-06-23T00:00:00.000Z')
+
+  assert.equal(score.scorePercent, 100)
+  assert.equal(score.assessedStepCount, 0)
+  assert.equal(score.correctFirstTryCount, 0)
+  assert.equal(score.completedAt, '2026-06-23T00:00:00.000Z')
+})
+
+test('calculateLessonScore counts only assessed steps solved on the first attempt', () => {
+  const lesson = buildLesson('balancing-equations', [
+    conceptStep('concept'),
+    inputStep('q1', ['1']),
+    inputStep('q2', ['2']),
+    inputStep('q3', ['3']),
+    inputStep('q4', ['4']),
+  ])
+  const progress: LessonProgress = {
+    ...createInitialProgress('user-1', lesson.id),
+    stepResults: {
+      q1: { correct: true, attempts: 1, feedback: 'c' },
+      q2: { correct: true, attempts: 3, feedback: 'c' },
+      q3: { correct: false, attempts: 2, feedback: 'i' },
+    },
+  }
+
+  const score = calculateLessonScore(lesson, progress, '2026-06-23T00:00:00.000Z')
+
+  assert.equal(score.assessedStepCount, 4)
+  assert.equal(score.correctFirstTryCount, 1)
+  assert.equal(score.scorePercent, 25)
+})
+
+test('getLessonCompletionHistory prefers explicit history then the latest score', () => {
+  const score: LessonScore = { scorePercent: 70, correctFirstTryCount: 3, assessedStepCount: 5, completedAt: 'x' }
+
+  assert.deepEqual(getLessonCompletionHistory(undefined), [])
+  assert.deepEqual(
+    getLessonCompletionHistory({ ...createInitialProgress('user-1', 'balancing-equations'), completionHistory: [score] }),
+    [score],
+  )
+  assert.deepEqual(
+    getLessonCompletionHistory({ ...createInitialProgress('user-1', 'balancing-equations'), latestScore: score }),
+    [score],
+  )
+  assert.deepEqual(getLessonCompletionHistory(createInitialProgress('user-1', 'balancing-equations')), [])
+})
+
+test('latest and best scores fall back to a computed legacy score for older completed runs', () => {
+  const lesson = balancingEquationsLesson
+  const assessed = lesson.steps.filter((step) => step.type !== 'concept')
+  const progress: LessonProgress = {
+    ...createInitialProgress('user-1', lesson.id),
+    status: 'completed',
+    currentStepIndex: lesson.steps.length - 1,
+    stepResults: assessed.reduce<LessonProgress['stepResults']>((acc, step) => {
+      acc[step.id] = { correct: true, attempts: 1, feedback: 'c' }
+      return acc
+    }, {}),
+    completedAt: '2026-06-23T00:00:00.000Z',
+  }
+
+  assert.equal(getLatestLessonScore(lesson, progress)?.scorePercent, 100)
+  assert.equal(getBestLessonScore(lesson, progress)?.scorePercent, 100)
+  assert.equal(getLatestLessonScore(lesson, undefined), undefined)
+  assert.equal(getBestLessonScore(lesson, undefined), undefined)
+})
+
+test('getBestLessonScore selects the highest score across history, latest, and best', () => {
+  const lesson = balancingEquationsLesson
+  const score = (scorePercent: number, completedAt: string): LessonScore => ({
+    scorePercent,
+    correctFirstTryCount: 0,
+    assessedStepCount: 5,
+    completedAt,
+  })
+  const progress: LessonProgress = {
+    ...createInitialProgress('user-1', lesson.id),
+    status: 'inProgress',
+    completionHistory: [score(40, 'a'), score(90, 'b')],
+    latestScore: score(60, 'c'),
+    bestScore: score(80, 'd'),
+  }
+
+  assert.equal(getBestLessonScore(lesson, progress)?.scorePercent, 90)
+  assert.equal(getLatestLessonScore(lesson, progress)?.scorePercent, 60)
+})
+
+test('hasCompletedLesson recognizes completed status and prior completion history', () => {
+  assert.equal(hasCompletedLesson(undefined), false)
+  assert.equal(hasCompletedLesson(createInitialProgress('user-1', 'balancing-equations')), false)
+  assert.equal(
+    hasCompletedLesson({ ...createInitialProgress('user-1', 'balancing-equations'), status: 'completed', completedAt: 'x' }),
+    true,
+  )
+  assert.equal(
+    hasCompletedLesson({
+      ...createInitialProgress('user-1', 'balancing-equations'),
+      completionHistory: [{ scorePercent: 80, correctFirstTryCount: 4, assessedStepCount: 5, completedAt: 'x' }],
+    }),
+    true,
+  )
+})
+
+test('createInitialProgress starts an empty in-progress run with matching timestamps', () => {
+  const progress = createInitialProgress('user-9', 'one-step-equations')
+
+  assert.equal(progress.userId, 'user-9')
+  assert.equal(progress.lessonId, 'one-step-equations')
+  assert.equal(progress.status, 'inProgress')
+  assert.equal(progress.currentStepIndex, 0)
+  assert.deepEqual(progress.stepResults, {})
+  assert.equal(progress.completedAt, undefined)
+  assert.equal(progress.startedAt, progress.updatedAt)
+  assert.ok(!Number.isNaN(Date.parse(progress.startedAt)))
+})
+
+test('isLessonUnlocked requires authored steps and completed prerequisites', () => {
+  const emptyLesson = buildLesson('two-step-equations', [])
+  assert.equal(isLessonUnlocked(emptyLesson, {}), false)
+
+  const oneStep = lessons['one-step-equations']
+  assert.equal(isLessonUnlocked(oneStep, {}), false)
+  assert.equal(
+    isLessonUnlocked(oneStep, {
+      'balancing-equations': {
+        ...createInitialProgress('user-1', 'balancing-equations'),
+        status: 'completed',
+        completedAt: 'x',
+      },
+    }),
+    true,
+  )
+})
+
+test('applyStepResult accumulates attempt counts across retries on the same step', () => {
+  const lesson = balancingEquationsLesson
+  const step = lessonStep('input-box-value', 'input')
+  const start = { ...createInitialProgress('user-1', lesson.id), currentStepIndex: 4 }
+
+  const afterFirst = applyStepResult(start, step, { correct: false, feedback: 'no' }, 5, lesson)
+  const afterSecond = applyStepResult(afterFirst, step, { correct: false, feedback: 'no' }, 5, lesson)
+
+  assert.equal(afterFirst.stepResults[step.id].attempts, 1)
+  assert.equal(afterSecond.stepResults[step.id].attempts, 2)
+  assert.equal(afterSecond.currentStepIndex, 4)
+  assert.equal(afterSecond.status, 'inProgress')
+})
+
+test('course progress summary marks an in-progress recommended lesson as continue', () => {
+  const progressByLesson: ProgressByLesson = {
+    'balancing-equations': { ...createInitialProgress('user-1', 'balancing-equations'), currentStepIndex: 2 },
+  }
+
+  const summary = getCourseProgressSummary(algebraCourse, lessons, progressByLesson)
+
+  assert.equal(summary.recommendedLessonId, 'balancing-equations')
+  assert.equal(summary.recommendedAction, 'continue')
+  assert.equal(summary.completedLessons, 0)
+})
+
+test('restartLessonProgress preserves a computed legacy score when given the lesson', () => {
+  const lesson = balancingEquationsLesson
+  const assessed = lesson.steps.filter((step) => step.type !== 'concept')
+  const completed: LessonProgress = {
+    ...createInitialProgress('user-1', lesson.id),
+    status: 'completed',
+    currentStepIndex: lesson.steps.length - 1,
+    stepResults: assessed.reduce<LessonProgress['stepResults']>((acc, step) => {
+      acc[step.id] = { correct: true, attempts: 1, feedback: 'c' }
+      return acc
+    }, {}),
+    completedAt: '2026-06-23T00:00:00.000Z',
+  }
+
+  const restarted = restartLessonProgress(completed, lesson)
+
+  assert.equal(restarted.status, 'inProgress')
+  assert.equal(restarted.currentStepIndex, 0)
+  assert.deepEqual(restarted.stepResults, {})
+  assert.equal(restarted.completedAt, undefined)
+  assert.equal(restarted.latestScore?.scorePercent, 100)
+  assert.equal(restarted.bestScore?.scorePercent, 100)
+  assert.equal(restarted.completionHistory?.length, 1)
+})
+
+test('restartLessonProgress without a lesson keeps no score history for legacy completion', () => {
+  const completed: LessonProgress = {
+    ...createInitialProgress('user-1', 'balancing-equations'),
+    status: 'completed',
+    currentStepIndex: balancingEquationsLesson.steps.length - 1,
+    completedAt: '2026-06-23T00:00:00.000Z',
+  }
+
+  const restarted = restartLessonProgress(completed)
+
+  assert.equal(restarted.status, 'inProgress')
+  assert.equal(restarted.latestScore, undefined)
+  assert.equal(restarted.bestScore, undefined)
+  assert.equal(restarted.completionHistory, undefined)
+})
+
+test('mastery exactly at the ready threshold advances instead of recommending review', () => {
+  const oneStep = lessons['one-step-equations']
+  const masteryFor = (score: number): SkillMastery[] =>
+    oneStep.skillIds.map((skillId) => ({
+      userId: 'user-1',
+      skillId,
+      score,
+      attempts: 10,
+      correct: 7,
+      lastPracticedAt: '2026-06-23T00:00:00.000Z',
+    }))
+
+  assert.equal(getRecommendedNextLesson(oneStep, masteryFor(MASTERY_READY_THRESHOLD)).title, 'Two-Step Equations')
+  assert.equal(
+    getRecommendedNextLesson(oneStep, masteryFor(MASTERY_READY_THRESHOLD - 0.01)).title,
+    `Review ${oneStep.title}`,
+  )
 })
