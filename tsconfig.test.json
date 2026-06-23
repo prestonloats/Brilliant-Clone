@@ -11,5 +11,5 @@
     "rootDir": ".",
     "outDir": "dist-tests"
   },
-  "include": ["src/domain.ts", "src/engine.ts", "src/backend.ts", "tests/**/*.ts"]
+  "include": ["src/domain.ts", "src/engine.ts", "src/backend.ts", "src/firebaseConfigCore.ts", "tests/**/*.ts"]
 }

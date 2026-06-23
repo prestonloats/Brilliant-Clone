@@ -11,25 +11,24 @@ import type {
 import { lessons } from './domain'
 
 type LocalDatabase = {
-  currentUserId?: string
   users: Record<string, LocalUser>
   progress: Record<string, LessonProgress>
   mastery: Record<string, SkillMastery>
   attempts: AttemptEvent[]
 }
 
-type LocalUser = UserProfile & { password: string }
+type LocalUser = UserProfile
 
 export type SignUpInput = {
   email: string
-  password: string
+  password?: string
   displayName: string
 }
 
 export type AuthRepository = {
   getCurrentUser(): UserProfile | null
   signUp(input: SignUpInput): UserProfile
-  signIn(email: string, password: string): UserProfile
+  signIn(email: string, password?: string): UserProfile
   signOut(): void
 }
 
@@ -56,6 +55,7 @@ export type Backend = {
 }
 
 const STORAGE_KEY = 'balance-local-backend-v1'
+const SESSION_KEY = 'balance-local-session-v1'
 
 const emptyDatabase = (): LocalDatabase => ({
   users: {},
@@ -123,17 +123,39 @@ const normalizeRecord = <Value>(
   }, {})
 }
 
-const isLocalUser = (value: unknown): value is LocalUser => {
-  if (!isRecord(value)) return false
+const normalizeLocalUser = (value: unknown): LocalUser | null => {
+  if (!isRecord(value)) return null
 
-  return (
-    isString(value.id) &&
-    isString(value.email) &&
-    isString(value.displayName) &&
-    isString(value.password) &&
-    isString(value.createdAt) &&
-    (value.avatarUrl === undefined || isString(value.avatarUrl))
-  )
+  if (
+    !isString(value.id) ||
+    !isString(value.email) ||
+    !isString(value.displayName) ||
+    !isString(value.createdAt) ||
+    (value.avatarUrl !== undefined && !isString(value.avatarUrl))
+  ) {
+    return null
+  }
+
+  return {
+    id: value.id,
+    email: value.email,
+    displayName: value.displayName,
+    ...(value.avatarUrl ? { avatarUrl: value.avatarUrl } : {}),
+    createdAt: value.createdAt,
+  }
+}
+
+const normalizeUserRecord = (value: unknown): Record<string, LocalUser> => {
+  if (!isRecord(value)) return {}
+
+  return Object.entries(value).reduce<Record<string, LocalUser>>((record, [key, candidate]) => {
+    const user = normalizeLocalUser(candidate)
+    if (user) {
+      record[key] = user
+    }
+
+    return record
+  }, {})
 }
 
 const normalizeStepResults = (
@@ -232,25 +254,17 @@ const isAttemptEvent = (value: unknown): value is AttemptEvent => {
 const normalizeDatabase = (value: unknown): LocalDatabase => {
   if (!isRecord(value)) return emptyDatabase()
 
-  const users = normalizeRecord(value.users, isLocalUser)
-  const currentUserId =
-    isString(value.currentUserId) && users[value.currentUserId]
-      ? value.currentUserId
-      : undefined
-
   return {
-    users,
+    users: normalizeUserRecord(value.users),
     progress: normalizeLessonProgressRecord(value.progress),
     mastery: normalizeRecord(value.mastery, isSkillMastery),
     attempts: Array.isArray(value.attempts) ? value.attempts.filter(isAttemptEvent) : [],
-    ...(currentUserId ? { currentUserId } : {}),
   }
 }
 
 const validateSignUpInput = (input: SignUpInput) => {
   const email = input.email.trim().toLowerCase()
   const displayName = input.displayName.trim()
-  const passwordLength = input.password.trim().length
 
   if (!email) {
     throw new Error('Email is required.')
@@ -260,12 +274,6 @@ const validateSignUpInput = (input: SignUpInput) => {
   }
   if (!displayName) {
     throw new Error('Display name is required.')
-  }
-  if (passwordLength === 0) {
-    throw new Error('Password is required.')
-  }
-  if (passwordLength < 6) {
-    throw new Error('Password must be at least 6 characters.')
   }
 
   return { email, displayName }
@@ -294,8 +302,9 @@ export class LocalBackend implements Backend {
     this.auth = {
       getCurrentUser: () => {
         const db = this.read()
-        if (!db.currentUserId) return null
-        const user = db.users[db.currentUserId]
+        const currentUserId = this.getCurrentUserId()
+        if (!currentUserId) return null
+        const user = db.users[currentUserId]
         return user ? toPublicUser(user) : null
       },
       signUp: (input) => {
@@ -306,46 +315,44 @@ export class LocalBackend implements Backend {
           throw new Error('An account with that email already exists.')
         }
 
-        const user: UserProfile & { password: string } = {
+        const user: UserProfile = {
           id: createId('user'),
           email: normalizedEmail,
           displayName,
-          password: input.password,
           createdAt: new Date().toISOString(),
         }
 
         db.users[user.id] = user
-        db.currentUserId = user.id
+        this.setCurrentUserId(user.id)
         this.write(db)
         return toPublicUser(user)
       },
-      signIn: (email, password) => {
+      signIn: (email) => {
         const db = this.read()
         const normalizedEmail = email.trim().toLowerCase()
-        const user = Object.values(db.users).find(
-          (candidate) => candidate.email === normalizedEmail && candidate.password === password,
-        )
+        const user = Object.values(db.users).find((candidate) => candidate.email === normalizedEmail)
         if (!user) {
-          throw new Error('Check your email and password, then try again.')
+          throw new Error('No local demo profile was found for that email.')
         }
 
-        db.currentUserId = user.id
+        this.setCurrentUserId(user.id)
         this.write(db)
         return toPublicUser(user)
       },
       signOut: () => {
-        const db = this.read()
-        delete db.currentUserId
-        this.write(db)
+        this.clearCurrentUserId()
+        this.write(this.read())
       },
     }
 
     this.progress = {
       getLessonProgress: (userId, lessonId) => {
+        this.requireActiveUser(userId)
         const db = this.read()
         return db.progress[this.progressKey(userId, lessonId)] ?? null
       },
       saveLessonProgress: (progress) => {
+        this.requireActiveUser(progress.userId)
         const db = this.read()
         db.progress[this.progressKey(progress.userId, progress.lessonId)] = progress
         this.write(db)
@@ -354,10 +361,12 @@ export class LocalBackend implements Backend {
 
     this.mastery = {
       getUserMastery: (userId) => {
+        this.requireActiveUser(userId)
         const db = this.read()
         return Object.values(db.mastery).filter((mastery) => mastery.userId === userId)
       },
       updateSkillMastery: (userId, skillId, correct) => {
+        this.requireActiveUser(userId)
         const db = this.read()
         const key = this.masteryKey(userId, skillId)
         const existing =
@@ -389,11 +398,13 @@ export class LocalBackend implements Backend {
 
     this.attempts = {
       recordAttempt: (event) => {
+        this.requireActiveUser(event.userId)
         const db = this.read()
         db.attempts.push(event)
         this.write(db)
       },
       getAttempts: (userId) => {
+        this.requireActiveUser(userId)
         const db = this.read()
         return db.attempts.filter((attempt) => attempt.userId === userId)
       },
@@ -415,6 +426,24 @@ export class LocalBackend implements Backend {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
   }
 
+  private getCurrentUserId() {
+    return window.sessionStorage.getItem(SESSION_KEY) ?? undefined
+  }
+
+  private setCurrentUserId(userId: string) {
+    window.sessionStorage.setItem(SESSION_KEY, userId)
+  }
+
+  private clearCurrentUserId() {
+    window.sessionStorage.removeItem(SESSION_KEY)
+  }
+
+  private requireActiveUser(userId: string) {
+    if (this.getCurrentUserId() !== userId) {
+      throw new Error('Sign in with this local demo profile before accessing its local data.')
+    }
+  }
+
   private progressKey(userId: string, lessonId: LessonId) {
     return `${userId}:${lessonId}`
   }
@@ -425,6 +454,18 @@ export class LocalBackend implements Backend {
 }
 
 export const localBackend = new LocalBackend()
+
+export type BackendProvider = 'local' | 'firebase'
+
+export const createBackend = (provider: BackendProvider): Backend => {
+  if (provider === 'firebase') {
+    throw new Error(
+      'Firebase backend mode is not available yet. The app refused to fall back to local mode because VITE_BACKEND_PROVIDER=firebase was requested.',
+    )
+  }
+
+  return new LocalBackend()
+}
 
 export const createAttemptEvent = (
   userId: string,

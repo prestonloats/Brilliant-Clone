@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { createAttemptEvent, localBackend } from './backend'
+import { createAttemptEvent, createBackend, type Backend } from './backend'
 import {
   applyBalanceOperation,
   applyStepResult,
@@ -44,9 +44,52 @@ import {
   type SkillMastery,
   type UserProfile,
 } from './domain'
+import { getBackendProvider, getMissingFirebaseEnvKeys } from './firebaseConfig'
+
+type BackendStartup =
+  | { status: 'ready'; backend: Backend }
+  | { status: 'error'; title: string; message: string; details: string[] }
+
+const backendStartup = initializeBackend()
+
+function initializeBackend(): BackendStartup {
+  try {
+    const provider = getBackendProvider()
+
+    if (provider === 'firebase') {
+      const missingKeys = getMissingFirebaseEnvKeys()
+      if (missingKeys.length > 0) {
+        return {
+          status: 'error',
+          title: 'Firebase configuration is incomplete.',
+          message:
+            'VITE_BACKEND_PROVIDER=firebase is set, but required Firebase web config values are missing. The app did not fall back to local demo mode.',
+          details: missingKeys,
+        }
+      }
+    }
+
+    return { status: 'ready', backend: createBackend(provider) }
+  } catch (error) {
+    return {
+      status: 'error',
+      title: 'Backend configuration error.',
+      message: error instanceof Error ? error.message : 'The selected backend could not be started.',
+      details: [],
+    }
+  }
+}
 
 function App() {
-  const initialSession = getInitialSession()
+  if (backendStartup.status === 'error') {
+    return <BackendConfigurationError startup={backendStartup} />
+  }
+
+  return <LearningApp backend={backendStartup.backend} />
+}
+
+function LearningApp({ backend }: { backend: Backend }) {
+  const initialSession = getInitialSession(backend)
   const [user, setUser] = useState<UserProfile | null>(initialSession.user)
   const [view, setView] = useState<'auth' | 'course' | 'lesson' | 'complete' | 'profile'>(
     initialSession.user ? 'course' : 'auth',
@@ -54,14 +97,14 @@ function App() {
   const [activeLessonId, setActiveLessonId] = useState<LessonId>(initialSession.activeLessonId)
   const [progress, setProgress] = useState<LessonProgress | null>(initialSession.progress)
 
-  const mastery = user ? localBackend.mastery.getUserMastery(user.id) : []
-  const progressByLesson = user ? getProgressByLesson(user.id) : {}
+  const mastery = user ? backend.mastery.getUserMastery(user.id) : []
+  const progressByLesson = user ? getProgressByLesson(backend, user.id) : {}
   const activeLesson = lessons[activeLessonId]
   const currentStep = progress ? activeLesson.steps[progress.currentStepIndex] : null
   const recommendation = getRecommendedNextLesson(activeLesson, mastery)
 
   const saveProgress = (nextProgress: LessonProgress) => {
-    localBackend.progress.saveLessonProgress(nextProgress)
+    backend.progress.saveLessonProgress(nextProgress)
     setProgress(nextProgress)
   }
 
@@ -88,7 +131,7 @@ function App() {
     )
 
     if (shouldRecordAttempt) {
-      localBackend.attempts.recordAttempt(
+      backend.attempts.recordAttempt(
         createAttemptEvent(
           user.id,
           activeLesson.id,
@@ -102,7 +145,7 @@ function App() {
 
     if (shouldRecordAttempt) {
       activeLesson.skillIds.forEach((skillId) =>
-        localBackend.mastery.updateSkillMastery(user.id, skillId, correct),
+        backend.mastery.updateSkillMastery(user.id, skillId, correct),
       )
     }
 
@@ -114,7 +157,7 @@ function App() {
   }
 
   const handleSignedIn = (signedInUser: UserProfile) => {
-    const saved = getInitialLessonSession(signedInUser)
+    const saved = getInitialLessonSession(backend, signedInUser)
     setUser(signedInUser)
     setActiveLessonId(saved.activeLessonId)
     setProgress(saved.progress)
@@ -122,7 +165,7 @@ function App() {
   }
 
   const handleSignOut = () => {
-    localBackend.auth.signOut()
+    backend.auth.signOut()
     setUser(null)
     setView('auth')
   }
@@ -131,10 +174,10 @@ function App() {
     if (!user) return
 
     const lesson = lessons[lessonId]
-    const latestProgressByLesson = getProgressByLesson(user.id)
+    const latestProgressByLesson = getProgressByLesson(backend, user.id)
     if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
 
-    const nextProgress = getProgressForUser(user, lessonId)
+    const nextProgress = getProgressForUser(backend, user, lessonId)
     setActiveLessonId(lessonId)
     setProgress(nextProgress)
     setView(nextProgress.status === 'completed' ? 'complete' : 'lesson')
@@ -144,11 +187,11 @@ function App() {
     if (!user) return
 
     const lesson = lessons[lessonId]
-    const latestProgressByLesson = getProgressByLesson(user.id)
+    const latestProgressByLesson = getProgressByLesson(backend, user.id)
     if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
 
-    const nextProgress = restartLessonProgress(getProgressForUser(user, lessonId), lesson)
-    localBackend.progress.saveLessonProgress(nextProgress)
+    const nextProgress = restartLessonProgress(getProgressForUser(backend, user, lessonId), lesson)
+    backend.progress.saveLessonProgress(nextProgress)
     setActiveLessonId(lessonId)
     setProgress(nextProgress)
     setView('lesson')
@@ -175,7 +218,7 @@ function App() {
         </header>
       )}
 
-      {view === 'auth' && <AuthScreen onSignedIn={handleSignedIn} />}
+      {view === 'auth' && <AuthScreen backend={backend} onSignedIn={handleSignedIn} />}
       {view === 'course' && user && progress && (
         <CourseMap
           user={user}
@@ -206,15 +249,38 @@ function App() {
         />
       )}
       {view === 'profile' && user && (
-        <ProfileScreen user={user} mastery={mastery} attempts={localBackend.attempts.getAttempts(user.id)} />
+        <ProfileScreen user={user} mastery={mastery} attempts={backend.attempts.getAttempts(user.id)} />
       )}
     </main>
   )
 }
 
-function getInitialSession() {
-  const currentUser = localBackend.auth.getCurrentUser()
-  const lessonSession = currentUser ? getInitialLessonSession(currentUser) : null
+function BackendConfigurationError({ startup }: { startup: Extract<BackendStartup, { status: 'error' }> }) {
+  return (
+    <main className="app-shell">
+      <section className="auth-screen card">
+        <p className="eyebrow">Backend setup required</p>
+        <h1>{startup.title}</h1>
+        <p className="lead">{startup.message}</p>
+        {startup.details.length > 0 && (
+          <ul className="fine-print">
+            {startup.details.map((detail) => (
+              <li key={detail}>{detail}</li>
+            ))}
+          </ul>
+        )}
+        <p className="fine-print">
+          Use `VITE_BACKEND_PROVIDER=local` for the browser-only demo, or finish the Firebase adapter before enabling
+          Firebase mode.
+        </p>
+      </section>
+    </main>
+  )
+}
+
+function getInitialSession(backend: Backend) {
+  const currentUser = backend.auth.getCurrentUser()
+  const lessonSession = currentUser ? getInitialLessonSession(backend, currentUser) : null
   return {
     user: currentUser,
     activeLessonId: lessonSession?.activeLessonId ?? 'balancing-equations',
@@ -222,27 +288,27 @@ function getInitialSession() {
   }
 }
 
-function getInitialLessonSession(user: UserProfile) {
-  const progressByLesson = getProgressByLesson(user.id)
+function getInitialLessonSession(backend: Backend, user: UserProfile) {
+  const progressByLesson = getProgressByLesson(backend, user.id)
   const activeLessonId = getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, 'balancing-equations')
   return {
     activeLessonId,
-    progress: getProgressForUser(user, activeLessonId),
+    progress: getProgressForUser(backend, user, activeLessonId),
   }
 }
 
-function getProgressForUser(user: UserProfile, lessonId: LessonId) {
-  const saved = localBackend.progress.getLessonProgress(user.id, lessonId)
+function getProgressForUser(backend: Backend, user: UserProfile, lessonId: LessonId) {
+  const saved = backend.progress.getLessonProgress(user.id, lessonId)
   if (saved) return saved
 
   const progress = createInitialProgress(user.id, lessonId)
-  localBackend.progress.saveLessonProgress(progress)
+  backend.progress.saveLessonProgress(progress)
   return progress
 }
 
-function getProgressByLesson(userId: string): ProgressByLesson {
+function getProgressByLesson(backend: Backend, userId: string): ProgressByLesson {
   return algebraCourse.lessonOrder.reduce<ProgressByLesson>((items, lessonId) => {
-    const progress = localBackend.progress.getLessonProgress(userId, lessonId)
+    const progress = backend.progress.getLessonProgress(userId, lessonId)
     if (progress) {
       items[lessonId] = progress
     }
@@ -251,14 +317,14 @@ function getProgressByLesson(userId: string): ProgressByLesson {
 }
 
 type AuthScreenProps = {
+  backend: Backend
   onSignedIn: (user: UserProfile) => void
 }
 
-function AuthScreen({ onSignedIn }: AuthScreenProps) {
+function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
   const [mode, setMode] = useState<'signup' | 'login'>('signup')
   const [displayName, setDisplayName] = useState('Maya')
   const [email, setEmail] = useState('maya@example.com')
-  const [password, setPassword] = useState('balance123')
   const [error, setError] = useState('')
 
   const submit = () => {
@@ -266,8 +332,8 @@ function AuthScreen({ onSignedIn }: AuthScreenProps) {
     try {
       const signedIn =
         mode === 'signup'
-          ? localBackend.auth.signUp({ displayName, email, password })
-          : localBackend.auth.signIn(email, password)
+          ? backend.auth.signUp({ displayName, email })
+          : backend.auth.signIn(email)
       onSignedIn(signedIn)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
@@ -278,10 +344,9 @@ function AuthScreen({ onSignedIn }: AuthScreenProps) {
     setError('')
     try {
       onSignedIn(
-        localBackend.auth.signUp({
+        backend.auth.signUp({
           displayName: `Maya ${Math.floor(Math.random() * 100)}`,
           email: `maya-${Date.now()}@example.com`,
-          password: 'balance123',
         }),
       )
     } catch (err) {
@@ -306,7 +371,7 @@ function AuthScreen({ onSignedIn }: AuthScreenProps) {
           type="button"
           onClick={() => setMode('signup')}
         >
-          Sign up
+          New demo profile
           {mode === 'signup' && <span className="tab-state">Current</span>}
         </button>
         <button
@@ -317,7 +382,7 @@ function AuthScreen({ onSignedIn }: AuthScreenProps) {
           type="button"
           onClick={() => setMode('login')}
         >
-          Log in
+          Resume profile
           {mode === 'login' && <span className="tab-state">Current</span>}
         </button>
       </div>
@@ -338,22 +403,20 @@ function AuthScreen({ onSignedIn }: AuthScreenProps) {
           Email
           <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
         </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
       </div>
 
       {error && <p className="feedback bad">{error}</p>}
 
       <button className="primary-action" type="button" onClick={submit}>
-        {mode === 'signup' ? 'Create account' : 'Log in'}
+        {mode === 'signup' ? 'Create local demo profile' : 'Resume local demo profile'}
       </button>
       <button className="secondary-action" type="button" onClick={demo}>
         Start with a local demo account
       </button>
       <p className="fine-print">
-        This build stores accounts and progress locally in your browser. Firebase or Supabase can replace the adapter later.
+        Local demo mode stores profiles and progress in this browser only and does not collect passwords. Use Firebase
+        Auth before accepting production credentials. Closing the browser can sign you out, but local progress remains
+        on this device until browser storage is cleared.
       </p>
     </section>
   )
@@ -1629,7 +1692,10 @@ function ProfileScreen({
         <p className="eyebrow">Profile</p>
         <h1>{user.displayName}</h1>
         <p>{user.email}</p>
-        <p className="fine-print">Local account ID: {user.id}</p>
+        <p className="fine-print">Local demo profile ID: {user.id}</p>
+        <p className="fine-print">
+          Sign out before sharing this browser. This demo keeps progress on this device until browser storage is cleared.
+        </p>
       </div>
 
       <div className="mastery-grid">

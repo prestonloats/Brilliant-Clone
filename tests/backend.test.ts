@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
-import { createAttemptEvent, LocalBackend } from '../src/backend'
+import { createAttemptEvent, createBackend, LocalBackend } from '../src/backend'
 import type { AttemptEvent, LessonProgress, LessonScore, SkillMastery } from '../src/domain'
+import {
+  getBackendProviderFromEnv,
+  getFirebaseConfigFromEnv,
+  getMissingFirebaseEnvKeysFromEnv,
+} from '../src/firebaseConfigCore'
 
 const STORAGE_KEY = 'balance-local-backend-v1'
+const SESSION_KEY = 'balance-local-session-v1'
 
 class MemoryStorage {
   private values = new Map<string, string>()
@@ -27,17 +33,24 @@ class MemoryStorage {
 }
 
 let storage: MemoryStorage
+let sessionStorage: MemoryStorage
 
 const installLocalStorage = () => {
   const nextStorage = new MemoryStorage()
+  const nextSessionStorage = new MemoryStorage()
 
   Object.defineProperty(globalThis, 'window', {
-    value: { localStorage: nextStorage },
+    value: { localStorage: nextStorage, sessionStorage: nextSessionStorage },
     configurable: true,
     writable: true,
   })
 
+  sessionStorage = nextSessionStorage
   return nextStorage
+}
+
+const setActiveUser = (userId: string) => {
+  sessionStorage.setItem(SESSION_KEY, userId)
 }
 
 const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
@@ -92,7 +105,6 @@ test('local auth signs up, logs in, and logs out', () => {
 
   const user = backend.auth.signUp({
     email: ' learner@example.com ',
-    password: 'secret',
     displayName: ' Learner One ',
   })
 
@@ -103,27 +115,56 @@ test('local auth signs up, logs in, and logs out', () => {
   backend.auth.signOut()
   assert.equal(backend.auth.getCurrentUser(), null)
 
-  const signedIn = backend.auth.signIn('learner@example.com', 'secret')
+  const signedIn = backend.auth.signIn('learner@example.com')
   assert.equal(signedIn.id, user.id)
 })
 
-test('local auth normalizes email for login and duplicate checks', () => {
+test('local auth does not persist plaintext passwords', () => {
+  const backend = new LocalBackend()
+
+  backend.auth.signUp({
+    email: 'learner@example.com',
+    password: 'real-password-that-local-mode-must-ignore',
+    displayName: 'Learner',
+  })
+
+  const raw = storage.getItem(STORAGE_KEY)
+  assert.ok(raw)
+  assert.doesNotMatch(raw, /real-password-that-local-mode-must-ignore/)
+  assert.doesNotMatch(raw, /"password"/)
+})
+
+test('local auth keeps the active session out of persistent storage', () => {
+  const backend = new LocalBackend()
+
+  const user = backend.auth.signUp({
+    email: 'learner@example.com',
+    displayName: 'Learner',
+  })
+
+  assert.equal(backend.auth.getCurrentUser()?.id, user.id)
+  assert.doesNotMatch(storage.getItem(STORAGE_KEY) ?? '', /currentUserId/)
+  assert.equal(sessionStorage.getItem(SESSION_KEY), user.id)
+
+  backend.auth.signOut()
+  assert.equal(sessionStorage.getItem(SESSION_KEY), null)
+})
+
+test('local auth normalizes email for resume and duplicate checks', () => {
   const backend = new LocalBackend()
 
   const user = backend.auth.signUp({
     email: ' Learner@Example.COM ',
-    password: 'secret',
     displayName: 'Learner',
   })
 
   backend.auth.signOut()
 
-  assert.equal(backend.auth.signIn(' LEARNER@example.com ', 'secret').id, user.id)
+  assert.equal(backend.auth.signIn(' LEARNER@example.com ').id, user.id)
   assert.throws(
     () =>
       backend.auth.signUp({
         email: 'learner@EXAMPLE.com',
-        password: 'secret',
         displayName: 'Duplicate',
       }),
     /already exists/i,
@@ -134,54 +175,79 @@ test('local auth rejects invalid sign-up input with clear errors', () => {
   const backend = new LocalBackend()
 
   assert.throws(
-    () => backend.auth.signUp({ email: ' ', password: 'secret', displayName: 'Learner' }),
+    () => backend.auth.signUp({ email: ' ', displayName: 'Learner' }),
     /email is required/i,
   )
   assert.throws(
-    () => backend.auth.signUp({ email: 'learner', password: 'secret', displayName: 'Learner' }),
+    () => backend.auth.signUp({ email: 'learner', displayName: 'Learner' }),
     /valid email/i,
   )
   assert.throws(
-    () => backend.auth.signUp({ email: 'learner@example.com', password: 'secret', displayName: ' ' }),
+    () => backend.auth.signUp({ email: 'learner@example.com', displayName: ' ' }),
     /display name is required/i,
-  )
-  assert.throws(
-    () => backend.auth.signUp({ email: 'learner@example.com', password: ' ', displayName: 'Learner' }),
-    /password is required/i,
-  )
-  assert.throws(
-    () => backend.auth.signUp({ email: 'learner@example.com', password: '12345', displayName: 'Learner' }),
-    /at least 6 characters/i,
   )
 
   assert.equal(backend.auth.getCurrentUser(), null)
 })
 
-test('local auth rejects bad sign-in credentials without changing session', () => {
+test('local auth rejects missing demo profiles without changing session', () => {
   const backend = new LocalBackend()
   const user = backend.auth.signUp({
     email: 'learner@example.com',
-    password: 'secret',
     displayName: 'Learner',
   })
 
-  assert.throws(() => backend.auth.signIn('learner@example.com', 'wrong-password'), /check your email and password/i)
+  assert.throws(() => backend.auth.signIn('missing@example.com'), /no local demo profile/i)
   assert.equal(backend.auth.getCurrentUser()?.id, user.id)
 
   backend.auth.signOut()
 
-  assert.throws(() => backend.auth.signIn('missing@example.com', 'secret'), /check your email and password/i)
+  assert.throws(() => backend.auth.signIn('missing@example.com'), /no local demo profile/i)
   assert.equal(backend.auth.getCurrentUser(), null)
+})
+
+test('backend provider selection fails closed for firebase mode', () => {
+  assert.equal(getBackendProviderFromEnv(undefined), 'local')
+  assert.equal(getBackendProviderFromEnv('local'), 'local')
+  assert.equal(getBackendProviderFromEnv('firebase'), 'firebase')
+  assert.throws(() => getBackendProviderFromEnv('supabase'), /local.*firebase/i)
+  assert.throws(() => createBackend('firebase'), /refused to fall back to local mode/i)
+})
+
+test('firebase config validation reports missing keys without live Firebase', () => {
+  assert.deepEqual(getMissingFirebaseEnvKeysFromEnv({}), [
+    'VITE_FIREBASE_API_KEY',
+    'VITE_FIREBASE_AUTH_DOMAIN',
+    'VITE_FIREBASE_PROJECT_ID',
+    'VITE_FIREBASE_STORAGE_BUCKET',
+    'VITE_FIREBASE_MESSAGING_SENDER_ID',
+    'VITE_FIREBASE_APP_ID',
+  ])
+  assert.equal(
+    getFirebaseConfigFromEnv({
+      VITE_FIREBASE_API_KEY: 'api-key',
+      VITE_FIREBASE_AUTH_DOMAIN: 'example.firebaseapp.com',
+      VITE_FIREBASE_PROJECT_ID: 'project-id',
+      VITE_FIREBASE_STORAGE_BUCKET: 'project-id.appspot.com',
+      VITE_FIREBASE_MESSAGING_SENDER_ID: 'sender',
+      VITE_FIREBASE_APP_ID: 'app-id',
+    })?.projectId,
+    'project-id',
+  )
+  assert.equal(getFirebaseConfigFromEnv({ VITE_FIREBASE_PROJECT_ID: 'project-id' }), null)
 })
 
 test('local progress saves and resumes by user and lesson', () => {
   const backend = new LocalBackend()
   const saved = lessonProgress('user-1')
+  setActiveUser('user-1')
 
   backend.progress.saveLessonProgress(saved)
 
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), saved)
+  setActiveUser('user-2')
   assert.equal(backend.progress.getLessonProgress('user-2', 'balancing-equations'), null)
+  setActiveUser('user-1')
   assert.equal(backend.progress.getLessonProgress('user-1', 'one-step-equations'), null)
 })
 
@@ -197,6 +263,7 @@ test('local progress persists lesson score history', () => {
     completionHistory: [latestScore, bestScore],
     completedAt: latestScore.completedAt,
   }
+  setActiveUser('user-1')
 
   backend.progress.saveLessonProgress(saved)
 
@@ -205,6 +272,7 @@ test('local progress persists lesson score history', () => {
 
 test('local mastery counts correct and incorrect attempts', () => {
   const backend = new LocalBackend()
+  setActiveUser('user-1')
 
   const first = backend.mastery.updateSkillMastery('user-1', 'equality', true)
 
@@ -220,16 +288,19 @@ test('local mastery counts correct and incorrect attempts', () => {
   assert.equal(updated.attempts, 2)
   assert.equal(updated.correct, 1)
   assert.equal(updated.score, 0.5)
+  setActiveUser('user-2')
   assert.deepEqual(backend.mastery.getUserMastery('user-2'), [])
 })
 
 test('local mastery is isolated by user and skill with rounded scores', () => {
   const backend = new LocalBackend()
+  setActiveUser('user-1')
 
   backend.mastery.updateSkillMastery('user-1', 'equality', true)
   backend.mastery.updateSkillMastery('user-1', 'equality', false)
   const userOneEquality = backend.mastery.updateSkillMastery('user-1', 'equality', true)
   const userOneInverse = backend.mastery.updateSkillMastery('user-1', 'inverse-operations', false)
+  setActiveUser('user-2')
   const userTwoEquality = backend.mastery.updateSkillMastery('user-2', 'equality', true)
 
   assert.equal(userOneEquality.attempts, 3)
@@ -237,10 +308,12 @@ test('local mastery is isolated by user and skill with rounded scores', () => {
   assert.equal(userOneEquality.score, 0.67)
   assert.equal(userOneInverse.score, 0)
   assert.equal(userTwoEquality.score, 1)
+  setActiveUser('user-1')
   assert.deepEqual(
     backend.mastery.getUserMastery('user-1').map((item) => item.skillId).sort(),
     ['equality', 'inverse-operations'],
   )
+  setActiveUser('user-2')
   assert.deepEqual(
     backend.mastery.getUserMastery('user-2').map((item) => item.skillId),
     ['equality'],
@@ -252,16 +325,38 @@ test('local attempts are recorded and filtered by user', () => {
   const first = createAttemptEvent('user-1', 'balancing-equations', 'input-box-value', true, 1, 1200)
   const second = createAttemptEvent('user-2', 'balancing-equations', 'input-box-value', false, 2, 1800)
 
+  setActiveUser('user-1')
   backend.attempts.recordAttempt(first)
+  setActiveUser('user-2')
   backend.attempts.recordAttempt(second)
 
+  setActiveUser('user-1')
   assert.deepEqual(backend.attempts.getAttempts('user-1'), [first])
+})
+
+test('local repositories reject access for non-active users', () => {
+  const backend = new LocalBackend()
+  setActiveUser('user-1')
+
+  assert.throws(
+    () => backend.progress.saveLessonProgress(lessonProgress('user-2')),
+    /sign in with this local demo profile/i,
+  )
+  assert.throws(
+    () => backend.mastery.updateSkillMastery('user-2', 'equality', true),
+    /sign in with this local demo profile/i,
+  )
+  assert.throws(
+    () => backend.attempts.recordAttempt(attemptEvent('user-2')),
+    /sign in with this local demo profile/i,
+  )
 })
 
 test('local backend recovers from corrupt localStorage without crashing', () => {
   storage.setItem(STORAGE_KEY, '{this is not json')
 
   const backend = new LocalBackend()
+  setActiveUser('user-1')
 
   assert.equal(backend.auth.getCurrentUser(), null)
   assert.deepEqual(backend.attempts.getAttempts('user-1'), [])
@@ -303,10 +398,11 @@ test('local backend ignores malformed persisted collections', () => {
   const backend = new LocalBackend()
 
   assert.equal(backend.auth.getCurrentUser(), null)
-  assert.equal(backend.auth.signIn('learner@example.com', 'secret').id, 'user-1')
+  assert.equal(backend.auth.signIn('learner@example.com').id, 'user-1')
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), progress)
   assert.deepEqual(backend.mastery.getUserMastery('user-1'), [mastery])
   assert.deepEqual(backend.attempts.getAttempts('user-1'), [attempt])
+  assert.doesNotMatch(storage.getItem(STORAGE_KEY) ?? '', /"password"/)
 })
 
 test('local backend ignores malformed persisted progress records', () => {
@@ -342,10 +438,15 @@ test('local backend ignores malformed persisted progress records', () => {
 
   const backend = new LocalBackend()
 
+  setActiveUser('user-1')
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), null)
+  setActiveUser('user-2')
   assert.deepEqual(backend.progress.getLessonProgress('user-2', 'balancing-equations'), null)
+  setActiveUser('user-3')
   assert.deepEqual(backend.progress.getLessonProgress('user-3', 'balancing-equations'), null)
+  setActiveUser('user-4')
   assert.deepEqual(backend.progress.getLessonProgress('user-4', 'balancing-equations'), null)
+  setActiveUser('user-5')
   assert.deepEqual(backend.progress.getLessonProgress('user-5', 'balancing-equations'), valid)
   assert.doesNotThrow(() => backend.progress.saveLessonProgress(valid))
   assert.deepEqual(backend.progress.getLessonProgress('user-5', 'balancing-equations'), valid)
@@ -388,6 +489,7 @@ test('local backend sanitizes malformed persisted lesson scores', () => {
   )
 
   const backend = new LocalBackend()
+  setActiveUser('user-1')
 
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), {
     ...lessonProgress('user-1'),
@@ -438,6 +540,7 @@ test('local backend sanitizes malformed persisted step results', () => {
   )
 
   const backend = new LocalBackend()
+  setActiveUser('user-1')
 
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), {
     ...lessonProgress('user-1'),
