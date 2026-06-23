@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // --- Authentication helpers ---
     function signedIn() {
       return request.auth != null;
     }
@@ -10,28 +11,110 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // --- Validation helpers (defense in depth) ---
+    // Ownership alone is not enough: a signed-in client could still write
+    // malformed or oversized payloads into its own paths. These helpers keep
+    // stored documents aligned with the data model in src/domain.ts and bound
+    // string sizes so a compromised client cannot bloat documents.
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isBoundedString(value, maxLen) {
+      return value is string && value.size() > 0 && value.size() <= maxLen;
+    }
+
+    function isOptionalBoundedString(data, field, maxLen) {
+      return !(field in data) || isBoundedString(data[field], maxLen);
+    }
+
+    function isNonNegativeNumber(value) {
+      return value is number && value >= 0;
+    }
+
+    // --- User profiles (UserProfile) ---
+    // The profile id must equal the auth uid so a user cannot store a profile
+    // that claims to belong to someone else. Update the allowed key list if the
+    // UserProfile shape in src/domain.ts changes.
+    function validUser(uid) {
+      let data = incoming();
+      return data.id == uid
+        && isBoundedString(data.email, 320)
+        && isBoundedString(data.displayName, 200)
+        && isBoundedString(data.createdAt, 40)
+        && isOptionalBoundedString(data, 'avatarUrl', 2048)
+        && data.keys().hasOnly(['id', 'email', 'displayName', 'avatarUrl', 'createdAt']);
+    }
+
     match /users/{uid} {
-      allow read, create, update, delete: if owns(uid);
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid) && validUser(uid);
+    }
+
+    // --- Lesson progress (LessonProgress) ---
+    // The embedded userId must match the owner path. Nested maps/lists
+    // (stepResults, scores, completionHistory) are type-checked but not deeply
+    // validated, since rules cannot iterate their contents.
+    function validProgress(uid) {
+      let data = incoming();
+      return data.userId == uid
+        && isBoundedString(data.lessonId, 100)
+        && data.status in ['notStarted', 'inProgress', 'completed']
+        && isNonNegativeNumber(data.currentStepIndex)
+        && data.stepResults is map
+        && isBoundedString(data.startedAt, 40)
+        && isBoundedString(data.updatedAt, 40);
     }
 
     match /progress/{uid}/lessons/{lessonId} {
-      allow read, write: if owns(uid);
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid) && validProgress(uid);
+    }
+
+    // --- Skill mastery (SkillMastery) ---
+    function validMastery(uid) {
+      let data = incoming();
+      return data.userId == uid
+        && isBoundedString(data.skillId, 100)
+        && data.score is number
+        && isNonNegativeNumber(data.attempts)
+        && isNonNegativeNumber(data.correct)
+        && isBoundedString(data.lastPracticedAt, 40);
     }
 
     match /mastery/{uid}/skills/{skillId} {
-      allow read, write: if owns(uid);
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid) && validMastery(uid);
+    }
+
+    // --- Attempt events (AttemptEvent) ---
+    // Append-only audit log: events can be created and read by the owner, but
+    // never updated or deleted, so the history cannot be tampered with.
+    function validAttempt(uid) {
+      let data = incoming();
+      return data.userId == uid
+        && isBoundedString(data.id, 100)
+        && isBoundedString(data.lessonId, 100)
+        && isBoundedString(data.stepId, 100)
+        && data.correct is bool
+        && isNonNegativeNumber(data.attemptCount)
+        && isNonNegativeNumber(data.msToAnswer)
+        && isBoundedString(data.at, 40);
     }
 
     match /attempts/{uid}/events/{eventId} {
-      allow read, create: if owns(uid);
+      allow read: if owns(uid);
+      allow create: if owns(uid) && validAttempt(uid);
       allow update, delete: if false;
     }
 
+    // --- Public read-only content ---
     match /content/{document=**} {
       allow read: if true;
       allow write: if false;
     }
 
+    // --- Default deny ---
     match /{document=**} {
       allow read, write: if false;
     }
