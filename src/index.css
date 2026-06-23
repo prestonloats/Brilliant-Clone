@@ -1,0 +1,68 @@
+:root {
+  --text: #4b5563;
+  --text-h: #111827;
+  --muted: #6b7280;
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-strong: #eef2ff;
+  --border: #dbe3ef;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #dbeafe;
+  --shadow: rgba(15, 23, 42, 0.08) 0 18px 55px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font: 16px/1.45 var(--sans);
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+#root {
+  min-height: 100svh;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 34rem),
+    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.12), transparent 28rem),
+    var(--bg);
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2 {
+  color: var(--text-h);
+  line-height: 1.05;
+}
+
+h1 {
+  font-size: clamp(38px, 7vw, 68px);
+  letter-spacing: -0.055em;
+  margin: 0 0 18px;
+}
+
+h2 {
+  font-size: 20px;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
