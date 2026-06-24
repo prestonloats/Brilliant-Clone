@@ -19,6 +19,7 @@ import {
   checkBalanceStep,
   checkDragTermsStep,
   checkInputStep,
+  checkMcqStep,
   checkOperationChoiceStep,
   checkPlotStep,
   checkSequenceStep,
@@ -1042,6 +1043,79 @@ test('operation-choice surfaces each newly selected wrong option misconception o
   const secondMiss = checkOperationChoiceStep(step, secondWrong.id, 2)
   assert.equal(secondMiss.feedback, secondWrong.feedback)
   assert.notEqual(secondMiss.feedback, step.feedback.incorrect)
+})
+
+test('mcq accepts the correct option with the authored success feedback', () => {
+  const step = lessonStep('predict-add-left', 'mcq')
+
+  const result = checkMcqStep(step, step.correctId, 1)
+  assert.equal(result.correct, true)
+  assert.equal(result.feedback, step.feedback?.correct)
+  assert.equal(result.reveal, undefined)
+})
+
+test('mcq keeps the chosen misconception while layering explanation then reveal', () => {
+  const step = lessonStep('predict-add-left', 'mcq')
+  const wrong = step.options.find(
+    (option) => option.id !== step.correctId && option.feedback !== step.feedback?.incorrect,
+  )
+  assert.ok(wrong)
+
+  // Attempt 1 leads with the option's own authored misconception, no reveal yet.
+  const firstMiss = checkMcqStep(step, wrong.id, 1)
+  assert.equal(firstMiss.correct, false)
+  assert.equal(firstMiss.feedback, wrong.feedback)
+  assert.equal(firstMiss.reveal, undefined)
+
+  // Attempt 2 keeps the misconception and layers the generic explanation into the reveal slot.
+  const secondMiss = checkMcqStep(step, wrong.id, 2)
+  assert.equal(secondMiss.feedback, wrong.feedback)
+  assert.equal(secondMiss.reveal, step.feedback?.incorrect)
+
+  // Attempt 3 keeps the misconception and swaps the reveal slot to the exact reveal.
+  const thirdMiss = checkMcqStep(step, wrong.id, 3)
+  assert.equal(thirdMiss.feedback, wrong.feedback)
+  assert.equal(thirdMiss.reveal, step.feedback?.reveal)
+})
+
+test('mcq surfaces each newly selected wrong option misconception on later attempts', () => {
+  const step = lessonStep('predict-add-left', 'mcq')
+  const wrongOptions = step.options.filter(
+    (option) => option.id !== step.correctId && option.feedback !== step.feedback?.incorrect,
+  )
+  assert.ok(wrongOptions.length >= 2)
+  const [firstWrong, secondWrong] = wrongOptions
+
+  assert.equal(checkMcqStep(step, firstWrong.id, 1).feedback, firstWrong.feedback)
+
+  // A different wrong option on attempt 2 still shows THAT option's misconception as the lead.
+  const secondMiss = checkMcqStep(step, secondWrong.id, 2)
+  assert.equal(secondMiss.feedback, secondWrong.feedback)
+  assert.notEqual(secondMiss.feedback, step.feedback?.incorrect)
+})
+
+test('mcq falls back to option feedback when step-level feedback is absent', () => {
+  // McqStep.feedback is optional; a step without it must still grade and explain via options.
+  const step = {
+    id: 'synthetic-mcq',
+    type: 'mcq',
+    prompt: 'Pick the heavier pan.',
+    correctId: 'left',
+    options: [
+      { id: 'left', label: 'Left', feedback: 'Right — the left pan totals more.' },
+      { id: 'right', label: 'Right', feedback: 'Not quite — recount the left pan.' },
+    ],
+  } as Extract<LessonStep, { type: 'mcq' }>
+
+  const correct = checkMcqStep(step, 'left', 1)
+  assert.equal(correct.correct, true)
+  assert.equal(correct.feedback, 'Right — the left pan totals more.')
+
+  const wrong = checkMcqStep(step, 'right', 3)
+  assert.equal(wrong.correct, false)
+  assert.equal(wrong.feedback, 'Not quite — recount the left pan.')
+  // No authored step.feedback.reveal exists, so no reveal is produced even at attempt 3.
+  assert.equal(wrong.reveal, undefined)
 })
 
 test('sequence puzzle checks order and gives tile-specific misconceptions', () => {

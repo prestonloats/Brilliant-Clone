@@ -180,6 +180,31 @@ export const checkOperationChoiceStep = (
   })
 }
 
+// Multiple-choice prediction step. Behaves exactly like operation-choice (per-option
+// misconception stays as the lead feedback, with the generic explanation then the exact
+// reveal layered in by attempt), so every choice-style step shares one escalation path
+// instead of the renderer reimplementing it. `step.feedback` is optional on McqStep, so
+// each field falls back to the option's own authored feedback when absent.
+export const checkMcqStep = (
+  step: Extract<LessonStep, { type: 'mcq' }>,
+  optionId: string,
+  attemptNumber = 1,
+): CheckResult => {
+  const option = step.options.find((candidate) => candidate.id === optionId)
+
+  if (optionId === step.correctId) {
+    return { correct: true, feedback: step.feedback?.correct || option?.feedback || 'Correct.' }
+  }
+
+  return buildWrongResult({
+    attemptNumber,
+    hint: option?.feedback ?? step.feedback?.incorrect ?? 'Not quite. Compare the options and try again.',
+    explanation: step.feedback?.incorrect ?? option?.feedback ?? '',
+    reveal: step.feedback?.reveal,
+    keepHint: true,
+  })
+}
+
 export const checkSequenceStep = (
   step: Extract<LessonStep, { type: 'sequence' }>,
   selectedIds: string[],

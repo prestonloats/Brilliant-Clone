@@ -11,6 +11,7 @@ import {
   checkDragTermsStep,
   checkInputStep,
   checkManipulativeStep,
+  checkMcqStep,
   checkOperationChoiceStep,
   checkPlotStep,
   checkSequenceStep,
@@ -1352,6 +1353,19 @@ function MultipleChoiceStep({
   const [retryGuidance, setRetryGuidance] = useState('')
   const wasCorrect = selectedId === step.correctId || Boolean(priorResult?.correct)
 
+  // Delegates to the engine's checkMcqStep so the hint -> explanation -> reveal escalation
+  // is the single source of truth shared with operation-choice (no duplicated view logic).
+  const choose = (optionId: string) => {
+    const nextAttempt = attempts + 1
+    const result = checkMcqStep(step, optionId, nextAttempt)
+    setSelectedId(optionId)
+    setAttempts(nextAttempt)
+    setSelectedFeedback(result.feedback)
+    setReveal(result.reveal ?? '')
+    setRetryGuidance(result.retryGuidance ?? '')
+    onComplete(result.correct, result.feedback, { advance: false })
+  }
+
   return (
     <article className="lesson-card card">
       <p className="eyebrow">Predict</p>
@@ -1367,35 +1381,7 @@ function MultipleChoiceStep({
               type="button"
               key={option.id}
               disabled={wasCorrect}
-              onClick={() => {
-                const nextAttempt = attempts + 1
-                const correct = option.id === step.correctId
-                // A newly selected wrong option always shows ITS OWN authored misconception.
-                // The generic explanation layers into the reveal slot at attempt 2, and the
-                // exact reveal takes over at attempt 3 (mirrors the engine's choice-step
-                // escalation in buildWrongResult so mcq and operation-choice behave alike).
-                const feedback = correct ? step.feedback?.correct ?? option.feedback : option.feedback
-                const explanation = step.feedback?.incorrect
-                const revealText = step.feedback?.reveal
-                const layeredReveal = correct
-                  ? ''
-                  : nextAttempt >= 3 && revealText
-                    ? revealText
-                    : nextAttempt >= 2 && explanation && explanation !== option.feedback
-                      ? explanation
-                      : ''
-
-                setSelectedId(option.id)
-                setAttempts(nextAttempt)
-                setSelectedFeedback(feedback)
-                setReveal(layeredReveal)
-                setRetryGuidance(
-                  !correct && nextAttempt >= 3 && revealText
-                    ? 'Use the reveal, then choose the prediction that matches the totals.'
-                    : 'Compare the two totals, then choose another option.',
-                )
-                onComplete(correct, feedback, { advance: false })
-              }}
+              onClick={() => choose(option.id)}
             >
               {option.label}
               {selected && <span className="option-state">Selected</span>}
