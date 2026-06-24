@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { chunkForModuleId } from './buildChunks'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -7,14 +8,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Split the rarely-changing third-party runtime (React, etc.) into its own
-        // chunk so returning visitors can reuse it from cache across app deploys
-        // instead of re-downloading the whole bundle on every release.
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            return 'vendor'
-          }
-        },
+        // Keep the rarely-changing React runtime and KaTeX in their own cacheable
+        // chunks while leaving the dynamic-only Firebase SDK out of the eager
+        // first load. See `buildChunks.ts` for the full rationale.
+        manualChunks: chunkForModuleId,
       },
     },
   },

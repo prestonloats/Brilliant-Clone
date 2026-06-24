@@ -12,6 +12,7 @@
     "outDir": "dist-tests"
   },
   "include": [
+    "buildChunks.ts",
     "src/domain.ts",
     "src/engine.ts",
     "src/backend.ts",
