@@ -19,6 +19,7 @@
     "src/firebaseConfigCore.ts",
     "src/firebaseBackendCore.ts",
     "src/content/**/*.ts",
+    "build/**/*.ts",
     "tests/**/*.ts"
   ]
 }
