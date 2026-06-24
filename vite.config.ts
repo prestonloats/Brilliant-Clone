@@ -1,20 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+import { getManualChunk } from './build/chunking'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
       output: {
-        // Split the rarely-changing third-party runtime (React, etc.) into its own
-        // chunk so returning visitors can reuse it from cache across app deploys
-        // instead of re-downloading the whole bundle on every release.
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            return 'vendor'
-          }
-        },
+        // Route third-party modules into cache-friendly chunks. Firebase (only reached
+        // through the dynamic Firebase-mode import) is split into its own lazy chunk so
+        // the default local build never eagerly ships the SDK. See `build/chunking.ts`.
+        manualChunks: (id) => getManualChunk(id),
       },
     },
   },
