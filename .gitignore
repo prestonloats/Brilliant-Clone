@@ -16,6 +16,8 @@ dist-ssr
 # Environment files
 .env
 .env.*
+*.env
+*.env.*
 !.env.example
 .envrc
 
@@ -51,6 +53,21 @@ id_ed25519
 *credential*.json
 *credential*.yaml
 *credential*.yml
+*apikey*.env
+*apikey*.txt
+*apikey*.json
+*apikey*.yaml
+*apikey*.yml
+*api-key*.env
+*api-key*.txt
+*api-key*.json
+*api-key*.yaml
+*api-key*.yml
+*api_key*.env
+*api_key*.txt
+*api_key*.json
+*api_key*.yaml
+*api_key*.yml
 serviceAccountKey.json
 service-account*.json
 *-service-account.json
