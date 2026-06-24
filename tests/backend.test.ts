@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
 import { createAttemptEvent, createBackend, LocalBackend, type Backend } from '../src/backend'
-import type { AttemptEvent, LessonProgress, LessonScore, SkillMastery } from '../src/domain'
+import type { AttemptEvent, LessonProgress, LessonScore, SkillId, SkillMastery } from '../src/domain'
 import {
   getBackendProviderFromEnv,
   getFirebaseConfigFromEnv,
@@ -275,6 +275,26 @@ test('firebase path helpers derive user-scoped Firestore document paths', () => 
   assert.equal(firebaseAttemptPath('uid-1', 'attempt-1'), 'attempts/uid-1/events/attempt-1')
   assert.throws(() => firebaseUserPath('bad/uid'), /document id segment/i)
   assert.throws(() => firebaseAttemptPath('uid-1', 'bad/attempt'), /document id segment/i)
+})
+
+test('firebase path helpers reject every Firestore-illegal document id', () => {
+  // Empty / whitespace-only ids would collapse the path or target a collection root.
+  assert.throws(() => firebaseUserPath(''), /document id segment/i)
+  assert.throws(() => firebaseUserPath('   '), /document id segment/i)
+  // "." and ".." are reserved by Firestore and would be ambiguous path segments.
+  assert.throws(() => firebaseUserPath('.'), /document id segment/i)
+  assert.throws(() => firebaseUserPath('..'), /document id segment/i)
+  // Slashes anywhere in any segment must be rejected so an id cannot escape its collection.
+  assert.throws(() => firebaseProgressPath('uid-1/../other', 'balancing-equations'), /document id segment/i)
+  assert.throws(() => firebaseMasteryPath('uid-1', 'a/b' as SkillId), /document id segment/i)
+  // The reserved __.*__ pattern is not a valid document id.
+  assert.throws(() => firebaseUserPath('__proto__'), /document id segment/i)
+  assert.throws(() => firebaseAttemptPath('uid-1', '__meta__'), /document id segment/i)
+  // Ids past Firestore's 1,500-byte limit are rejected.
+  assert.throws(() => firebaseUserPath('a'.repeat(1501)), /document id segment/i)
+  // A double-underscore prefix that is not also suffixed stays valid (e.g. legitimate ids).
+  assert.equal(firebaseUserPath('__leading'), 'users/__leading')
+  assert.equal(firebaseUserPath('a'.repeat(1500)), `users/${'a'.repeat(1500)}`)
 })
 
 test('firebase serializers overwrite payload user ids with authenticated uid', () => {

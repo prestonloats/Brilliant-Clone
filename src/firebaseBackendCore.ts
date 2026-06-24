@@ -1,8 +1,25 @@
 import type { BackendProvider } from './firebaseConfigCore'
 import type { AttemptEvent, LessonId, LessonProgress, SkillId, SkillMastery, UserProfile } from './domain'
 
+// Firestore's documented document-id rules: a non-empty id that is not "." or "..",
+// contains no forward slash (which would escape into another collection/path), does not
+// match the reserved __.*__ pattern, and stays within the 1,500-byte limit. Enforcing the
+// full set here is defense-in-depth — it stops a malformed or hostile id from ever being
+// interpolated into a Firestore path, independent of (and before) the security rules.
+const MAX_DOCUMENT_ID_BYTES = 1500
+const RESERVED_DOCUMENT_ID = /^__.*__$/
+const documentIdEncoder = new TextEncoder()
+
 const assertSafeDocumentId = (value: string, label: string) => {
-  if (!value.trim() || value.includes('/')) {
+  const invalid =
+    !value.trim() ||
+    value.includes('/') ||
+    value === '.' ||
+    value === '..' ||
+    RESERVED_DOCUMENT_ID.test(value) ||
+    documentIdEncoder.encode(value).length > MAX_DOCUMENT_ID_BYTES
+
+  if (invalid) {
     throw new Error(`${label} must be a non-empty Firestore document id segment.`)
   }
 
