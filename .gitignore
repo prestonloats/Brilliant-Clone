@@ -18,6 +18,18 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local secrets / credential material
+*secret*.json
+*credential*.json
+*service-account*.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+google-services.json
+*.pem
+*.key
+*.p12
+*.p8
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
