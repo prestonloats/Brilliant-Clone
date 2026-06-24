@@ -21,37 +21,31 @@ export const algebraCourse: Course = {
       id: 'balancing-equations',
       title: 'Balancing Equations',
       description: 'Use a balance scale to feel what equality means.',
-      status: 'available',
     },
     {
       id: 'one-step-equations',
       title: 'One-Step Equations',
       description: 'Practice inverse operations with addition, subtraction, multiplication, and division.',
-      status: 'locked',
     },
     {
       id: 'two-step-equations',
       title: 'Two-Step Equations',
       description: 'Undo operations in the right order.',
-      status: 'locked',
     },
     {
       id: 'like-terms-variables-both-sides',
       title: 'Like Terms & Variables on Both Sides',
       description: 'Classify x-terms, combine matching terms, and move variables while keeping equality true.',
-      status: 'locked',
     },
     {
       id: 'coordinate-plane',
       title: 'Coordinate Plane',
       description: 'Read and plot ordered pairs on x- and y-axes.',
-      status: 'locked',
     },
     {
       id: 'graphing-lines',
       title: 'Graphing Lines',
       description: 'Connect slope and intercept to the shape of a line.',
-      status: 'locked',
     },
   ],
 }

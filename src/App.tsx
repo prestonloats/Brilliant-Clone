@@ -1031,9 +1031,8 @@ function CoursePathNode({
   const lessonProgress = progress && node.id === progress.lessonId ? progress : progressByLesson[node.id]
   const unlocked = isLessonUnlocked(lesson, progressByLesson)
   const completed = lessonProgress?.status === 'completed'
-  const comingSoon = lesson.steps.length === 0
   const recommended = node.id === featuredLessonId && !completed && unlocked
-  const status = getPathStatus({ comingSoon, recommended, unlocked, lesson, lessonProgress, mastery })
+  const status = getPathStatus({ recommended, unlocked, lesson, lessonProgress, mastery })
   const scoreText = getLessonScoreText(lesson, lessonProgress)
   const position = algebraCourse.lessonOrder.indexOf(node.id) + 1
 
@@ -1116,14 +1115,12 @@ function getLessonProgressLabel(lesson: Lesson, progress: LessonProgress | undef
 }
 
 function getPathStatus({
-  comingSoon,
   recommended,
   unlocked,
   lesson,
   lessonProgress,
   mastery,
 }: {
-  comingSoon: boolean
   recommended: boolean
   unlocked: boolean
   lesson: Lesson
@@ -1138,7 +1135,6 @@ function getPathStatus({
   if (completionState === 'mastered') return { label: 'Mastered', className: 'completed' }
   if (completionState === 'review-suggested') return { label: 'Review suggested', className: 'review' }
   if (completionState === 'completed') return { label: 'Completed', className: 'completed' }
-  if (comingSoon) return { label: 'Coming soon', className: 'coming-soon' }
   if (recommended) return { label: 'Recommended', className: 'available' }
   if (lessonProgress?.status === 'inProgress') return { label: 'In progress', className: 'available' }
   if (unlocked) return { label: 'Available', className: 'available' }

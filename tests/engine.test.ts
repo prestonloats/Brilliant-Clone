@@ -1488,7 +1488,10 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
   })
 
   assert.ok(lessons['two-step-equations'].steps.length > 0)
-  assert.equal(algebraCourse.lessons.find((node) => node.id === 'two-step-equations')?.status, 'locked')
+  assert.equal(
+    algebraCourse.lessons.find((node) => node.id === 'two-step-equations')?.title,
+    'Two-Step Equations',
+  )
   assert.deepEqual(lessons['two-step-equations'].prerequisites, ['one-step-equations'])
   assert.equal(algebraCourse.lessons.length, 6)
 })

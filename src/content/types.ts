@@ -381,7 +381,6 @@ export type CourseLessonNode = {
   id: LessonId
   title: string
   description: string
-  status: 'available' | 'locked' | 'coming-soon'
 }
 
 export type Course = {
