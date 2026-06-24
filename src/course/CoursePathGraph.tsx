@@ -63,7 +63,7 @@ function StageConnector({ connector }: { connector: LessonGraphConnector }) {
     return (
       <div className="stage-connector connector-split" aria-hidden="true">
         <svg viewBox="0 0 200 46" preserveAspectRatio="none" className="connector-art">
-          <path d="M100 0 L100 14 M100 14 L50 46 M100 14 L150 46" pathLength={1} />
+          <path d="M100 0 L100 14 M100 14 L50 46 M100 14 L150 46" />
         </svg>
       </div>
     )
@@ -73,7 +73,7 @@ function StageConnector({ connector }: { connector: LessonGraphConnector }) {
     return (
       <div className="stage-connector connector-merge" aria-hidden="true">
         <svg viewBox="0 0 200 46" preserveAspectRatio="none" className="connector-art">
-          <path d="M50 0 L100 32 M150 0 L100 32 M100 32 L100 46" pathLength={1} />
+          <path d="M50 0 L100 32 M150 0 L100 32 M100 32 L100 46" />
         </svg>
       </div>
     )

@@ -299,22 +299,22 @@
 
 .connector-art path {
   fill: none;
-  opacity: 0.55;
+  opacity: 0.8;
   stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: connector-draw 760ms ease forwards;
+  animation: connector-fade 520ms ease both;
   animation-delay: 240ms;
 }
 
-/* Paths carry pathLength="1", so a single dashoffset value draws the whole branch. */
-@keyframes connector-draw {
+@keyframes connector-fade {
+  from {
+    opacity: 0;
+  }
   to {
-    stroke-dashoffset: 0;
+    opacity: 0.8;
   }
 }
 
@@ -509,4 +509,4 @@
   font-size: 13px;
   font-weight: 700;
 }
-
+

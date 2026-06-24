@@ -170,12 +170,6 @@
     transform: none !important;
   }
 
-  /* The connector paths hide themselves via a dash offset in their base rule, so disabling
-     the draw animation alone would leave them blank. Snap them fully drawn instead. */
-  .connector-art path {
-    stroke-dashoffset: 0 !important;
-  }
-
   /* Skip the celebratory confetti entirely under reduced motion. */
   .score-celebrate {
     display: none !important;
