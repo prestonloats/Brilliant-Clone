@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import './App.css'
 import { createAttemptEvent, createBackend, type Backend } from './backend'
 import {
@@ -1903,17 +1904,17 @@ function ManipulativeStepView({
       </div>
 
       {dragging && (
-        <div
+        <DragPreview
           className="drag-preview object-chip"
-          style={{
-            left: dragging.x - dragging.offsetX,
-            top: dragging.y - dragging.offsetY,
-            width: dragging.width,
-            height: dragging.height,
-          }}
+          x={dragging.x}
+          y={dragging.y}
+          offsetX={dragging.offsetX}
+          offsetY={dragging.offsetY}
+          width={dragging.width}
+          height={dragging.height}
         >
           {chipGlyph}
-        </div>
+        </DragPreview>
       )}
 
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
@@ -2867,17 +2868,17 @@ function DragTermsStepView({
       </p>
 
       {dragging?.moved && (
-        <div
+        <DragPreview
           className="drag-preview term-tile"
-          style={{
-            left: dragging.x - dragging.offsetX,
-            top: dragging.y - dragging.offsetY,
-            width: dragging.width,
-            height: dragging.height,
-          }}
+          x={dragging.x}
+          y={dragging.y}
+          offsetX={dragging.offsetX}
+          offsetY={dragging.offsetY}
+          width={dragging.width}
+          height={dragging.height}
         >
           {dragging.label}
-        </div>
+        </DragPreview>
       )}
 
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
@@ -2897,6 +2898,41 @@ function DragTermsStepView({
         </button>
       )}
     </article>
+  )
+}
+
+// The floating "ghost" tile that follows the pointer while dragging. It is portaled to
+// <body> on purpose: its ancestor .lesson-card keeps a transform after its card-enter
+// entrance animation (animation-fill-mode: both leaves transform: translateY(0)), and a
+// transformed ancestor becomes the containing block for position: fixed children. Left
+// inside the card, this fixed element's left/top would be measured from the card's box
+// instead of the viewport, so the ghost drifted away from the cursor (and worse as the
+// page scrolled). Portaling to <body> restores viewport-relative fixed positioning, so
+// left = clientX - grabOffsetX tracks the pointer exactly for both mouse and touch.
+function DragPreview({
+  className,
+  x,
+  y,
+  offsetX,
+  offsetY,
+  width,
+  height,
+  children,
+}: {
+  className: string
+  x: number
+  y: number
+  offsetX: number
+  offsetY: number
+  width: number
+  height: number
+  children: React.ReactNode
+}) {
+  return createPortal(
+    <div className={className} style={{ left: x - offsetX, top: y - offsetY, width, height }}>
+      {children}
+    </div>,
+    document.body,
   )
 }
 
@@ -3275,17 +3311,17 @@ function BalanceStepView({
       )}
 
       {dragging && (
-        <div
+        <DragPreview
           className="drag-preview tile"
-          style={{
-            left: dragging.x - dragging.offsetX,
-            top: dragging.y - dragging.offsetY,
-            width: dragging.width,
-            height: dragging.height,
-          }}
+          x={dragging.x}
+          y={dragging.y}
+          offsetX={dragging.offsetX}
+          offsetY={dragging.offsetY}
+          width={dragging.width}
+          height={dragging.height}
         >
           {dragging.item.label}
-        </div>
+        </DragPreview>
       )}
 
       {step.operations && (
