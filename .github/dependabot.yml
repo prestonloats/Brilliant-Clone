@@ -1,0 +1,49 @@
+# Dependabot configuration for automated dependency maintenance.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+
+updates:
+  # npm packages (package.json / package-lock.json at the repo root).
+  # Routine minor/patch bumps are grouped per dependency tier so they arrive
+  # as a single PR instead of many, keeping CI runs and review effort low.
+  # Major bumps stay ungrouped so breaking changes get individual scrutiny.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+    groups:
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by workflows under .github/workflows.
+  # Harmless no-op until a workflow exists; activates automatically once one
+  # lands, keeping action versions current and pinned together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
