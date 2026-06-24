@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsc -p tsconfig.test.json && node tests/prepare-test-output.cjs && node --test \"dist-tests/tests/**/*.test.js\"",
+    "test": "node tests/build-tests.mjs && node --test \"dist-tests/tests/**/*.test.js\"",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test:ci": "npm run typecheck && npm test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "esbuild": "^0.28.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",

@@ -108,7 +108,7 @@ export function getLessonScoreText(lesson: Lesson, progress?: LessonProgress) {
 export function getScoreSummaryText(latestScore?: LessonScore, bestScore?: LessonScore) {
   if (!latestScore) return ''
 
-  const latest = `Latest score: ${latestScore.scorePercent}% first try`
+  const latest = `Latest score: ${latestScore.scorePercent}%`
   if (bestScore && bestScore.scorePercent !== latestScore.scorePercent) {
     return `${latest} | Best: ${bestScore.scorePercent}%`
   }

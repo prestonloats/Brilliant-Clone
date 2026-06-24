@@ -128,6 +128,11 @@
     height: 100%;
     width: 3px;
   }
+
+  .connector-split.is-locked::after,
+  .connector-merge.is-locked::after {
+    background: linear-gradient(180deg, #cbd5e1, rgba(203, 213, 225, 0.4));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
