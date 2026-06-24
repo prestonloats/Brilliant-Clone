@@ -59,10 +59,14 @@ as by-design, so please review this list first.
   `localStorage`, and the active session lives in tab-scoped `sessionStorage`.
   This data is not encrypted and is not synced to any server. Sign out before
   sharing a device or browser profile.
-- **No hosted backend yet.** Firebase and Supabase adapters are not wired into
-  the runtime. Selecting `VITE_BACKEND_PROVIDER=firebase` before the adapter is
-  complete causes the app to fail closed with a setup error rather than fall
-  back to local mode.
+- **Local demo mode is the default, but a real Firebase backend adapter is
+  wired in.** The app still defaults to the browser-only `LocalBackend`. Setting
+  `VITE_BACKEND_PROVIDER=firebase` (with valid Firebase web config) selects the
+  implemented `FirebaseBackend`, which uses Firebase Authentication
+  (email/password + email verification) and Firestore. If `firebase` is selected
+  without complete config or working services, the app **fails closed** with a
+  setup error rather than silently falling back to local mode. A Supabase adapter
+  is documented as a future direction but is not implemented.
 
 The following areas **are** in scope and we appreciate reports about them:
 
