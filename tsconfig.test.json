@@ -16,6 +16,7 @@
     "src/engine.ts",
     "src/backend.ts",
     "src/authValidation.ts",
+    "src/equationLatex.ts",
     "src/firebaseConfigCore.ts",
     "src/firebaseBackendCore.ts",
     "src/content/**/*.ts",
