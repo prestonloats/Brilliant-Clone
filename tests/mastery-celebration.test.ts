@@ -93,6 +93,38 @@ test('a completed-but-not-clean run is "completed", not mastered', () => {
   assert.equal(celebration.className, '')
 })
 
+test('a worse retake stays "mastered" when the best run was still 100%', () => {
+  const assessed = sampleLesson.steps.filter((s) => s.type !== 'concept')
+  const perfect = {
+    scorePercent: 100,
+    correctFirstTryCount: assessed.length,
+    assessedStepCount: assessed.length,
+    completedAt: '2026-06-23T00:00:00.000Z',
+  }
+  const worse = {
+    scorePercent: Math.round(((assessed.length - 1) / assessed.length) * 100),
+    correctFirstTryCount: assessed.length - 1,
+    assessedStepCount: assessed.length,
+    completedAt: '2026-06-24T00:00:00.000Z',
+  }
+  // The latest run was imperfect (one step took two tries), but a prior run was a clean 100%.
+  const completedWithBest100: LessonProgress = {
+    ...masteredProgress(sampleLesson),
+    stepResults: {
+      ...masteredProgress(sampleLesson).stepResults,
+      [assessed[0].id]: { correct: true, attempts: 2, feedback: 'ok' },
+    },
+    latestScore: worse,
+    bestScore: perfect,
+    completionHistory: [perfect, worse],
+  }
+
+  assert.equal(getCompletionState(sampleLesson, completedWithBest100, fullMastery), 'mastered')
+  const celebration = getNodeMasteryCelebration(sampleLesson, completedWithBest100, fullMastery)
+  assert.equal(celebration.isMastered, true)
+  assert.equal(celebration.className, 'is-mastered')
+})
+
 test('a completed run with low mastery is "review-suggested", not mastered', () => {
   const progress = masteredProgress(sampleLesson)
   const lowMastery = zeroMastery(sampleLesson)

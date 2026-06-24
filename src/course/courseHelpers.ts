@@ -84,7 +84,17 @@ export function getCompletionState(
     return 'review-suggested'
   }
 
-  return isCleanCompletion(lesson, progress) ? 'mastered' : 'completed'
+  return hasMasteryGradeCompletion(lesson, progress) ? 'mastered' : 'completed'
+}
+
+// A "mastery-grade" completion means the learner's BEST recorded run was perfect — every
+// assessed step right on the first try (100%). Keying off the best score (not just the latest
+// run) means a weaker retake never strips a mastery the learner has already earned. Falls back
+// to the current run when no score has been recorded yet.
+function hasMasteryGradeCompletion(lesson: Lesson, progress: LessonProgress) {
+  const best = getBestLessonScore(lesson, progress)
+  if (!best) return isCleanCompletion(lesson, progress)
+  return best.assessedStepCount === 0 || best.correctFirstTryCount === best.assessedStepCount
 }
 
 export function getAverageLessonMastery(lesson: Lesson, mastery: SkillMastery[]) {
