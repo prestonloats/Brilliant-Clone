@@ -15,6 +15,7 @@
     "buildChunks.ts",
     "src/domain.ts",
     "src/engine.ts",
+    "src/equationLatex.ts",
     "src/backend.ts",
     "src/authValidation.ts",
     "src/firebaseConfigCore.ts",

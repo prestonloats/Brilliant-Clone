@@ -273,8 +273,14 @@ test('firebase path helpers derive user-scoped Firestore document paths', () => 
   )
   assert.equal(firebaseMasteryPath('uid-1', 'equality'), 'mastery/uid-1/skills/equality')
   assert.equal(firebaseAttemptPath('uid-1', 'attempt-1'), 'attempts/uid-1/events/attempt-1')
+  // A document id containing a slash could traverse into another collection/document,
+  // so path construction must reject it instead of building an injected path.
   assert.throws(() => firebaseUserPath('bad/uid'), /document id segment/i)
   assert.throws(() => firebaseAttemptPath('uid-1', 'bad/attempt'), /document id segment/i)
+  assert.throws(() => firebaseProgressPath('a/b', 'balancing-equations'), /document id segment/i)
+  // Empty or whitespace-only ids would collapse the path and must also be rejected.
+  assert.throws(() => firebaseUserPath(''), /document id segment/i)
+  assert.throws(() => firebaseUserPath('   '), /document id segment/i)
 })
 
 test('firebase serializers overwrite payload user ids with authenticated uid', () => {
