@@ -17,6 +17,44 @@ dist-ssr
 .env
 .env.*
 !.env.example
+.envrc
+
+# Local secrets and credentials
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*password*.env
+*password*.txt
+*password*.json
+*password*.csv
+*password*.yaml
+*password*.yml
+*secret*.env
+*secret*.txt
+*secret*.json
+*secret*.yaml
+*secret*.yml
+*token*.env
+*token*.txt
+*token*.json
+*token*.yaml
+*token*.yml
+*credential*.env
+*credential*.txt
+*credential*.json
+*credential*.yaml
+*credential*.yml
+serviceAccountKey.json
+service-account*.json
+*-service-account.json
+firebase-service-account*.json
 
 # Editor directories and files
 .vscode/*
