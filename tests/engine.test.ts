@@ -31,6 +31,7 @@ import {
   getRecommendedNextLesson,
   hasCompletedLesson,
   isLessonUnlocked,
+  quadrantOf,
   restartLessonProgress,
   type ProgressByLesson,
 } from '../src/engine'
@@ -1272,6 +1273,21 @@ test('plot checker validates one off-axis point per quadrant by sign pattern', (
   const thirdMiss = checkPlotStep(step, [{ x: 1, y: 1 }], 3)
   assert.equal(thirdMiss.correct, false)
   assert.equal(thirdMiss.reveal, step.feedback.reveal)
+})
+
+test('quadrantOf maps signed coordinates to quadrants and treats axes as none', () => {
+  // Counterclockwise from the upper right: I (+,+), II (-,+), III (-,-), IV (+,-).
+  assert.equal(quadrantOf({ x: 3, y: 5 }), 1)
+  assert.equal(quadrantOf({ x: -3, y: 5 }), 2)
+  assert.equal(quadrantOf({ x: -3, y: -5 }), 3)
+  assert.equal(quadrantOf({ x: 3, y: -5 }), 4)
+
+  // A zero on either coordinate puts the point on an axis, so it belongs to no quadrant.
+  assert.equal(quadrantOf({ x: 0, y: 0 }), null)
+  assert.equal(quadrantOf({ x: 0, y: 4 }), null)
+  assert.equal(quadrantOf({ x: 0, y: -4 }), null)
+  assert.equal(quadrantOf({ x: 4, y: 0 }), null)
+  assert.equal(quadrantOf({ x: -4, y: 0 }), null)
 })
 
 test('slider checker matches slope and intercept and routes targeted hints', () => {
