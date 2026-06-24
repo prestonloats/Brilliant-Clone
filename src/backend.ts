@@ -312,8 +312,15 @@ export const validateSignUpInput = (input: SignUpInput) => {
   return { email, displayName }
 }
 
-const createId = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const createId = (prefix: string) => {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return `${prefix}-${cryptoApi.randomUUID()}`
+  }
+
+  // Fallback for non-secure contexts that do not expose crypto.randomUUID.
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
 
 const toPublicUser = (user: LocalUser): UserProfile => {
   return {
@@ -334,6 +341,12 @@ export class LocalBackend implements Backend {
   progress: LocalProgressRepository
   mastery: LocalMasteryRepository
   attempts: LocalAttemptRepository
+
+  // Cache the parsed/validated database keyed on the raw stored string so we
+  // avoid re-running JSON.parse + full normalization on every read. The raw
+  // comparison still detects external writes (other tabs, tests) and falls
+  // back to a fresh parse, so reads stay correct.
+  private cache: { raw: string; db: LocalDatabase } | null = null
 
   constructor() {
     this.auth = {
@@ -454,17 +467,29 @@ export class LocalBackend implements Backend {
 
   private read(): LocalDatabase {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return emptyDatabase()
+    if (!raw) {
+      this.cache = null
+      return emptyDatabase()
+    }
+
+    if (this.cache && this.cache.raw === raw) {
+      return this.cache.db
+    }
 
     try {
-      return normalizeDatabase(JSON.parse(raw))
+      const db = normalizeDatabase(JSON.parse(raw))
+      this.cache = { raw, db }
+      return db
     } catch {
+      this.cache = null
       return emptyDatabase()
     }
   }
 
   private write(db: LocalDatabase) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
+    const raw = JSON.stringify(db)
+    window.localStorage.setItem(STORAGE_KEY, raw)
+    this.cache = { raw, db }
   }
 
   private getCurrentUserId() {

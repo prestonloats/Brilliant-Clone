@@ -526,6 +526,15 @@ const cloneBalanceState = (state: BalanceState): BalanceState => ({
   bank: state.bank?.map((item) => ({ ...item })),
 })
 
+const createWeightId = (amount: number) => {
+  const cryptoApi = globalThis.crypto
+  const suffix =
+    cryptoApi && typeof cryptoApi.randomUUID === 'function'
+      ? cryptoApi.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return `added-${amount}-${suffix}`
+}
+
 const applyAmount = (items: BalanceState[BalanceSide], amount: number) => {
   if (amount === 0) return items
 
@@ -538,7 +547,7 @@ const applyAmount = (items: BalanceState[BalanceSide], amount: number) => {
     return [
       ...items,
       {
-        id: `added-${amount}-${Date.now()}`,
+        id: createWeightId(amount),
         label: String(amount),
         value: amount,
         kind: 'weight' as const,
