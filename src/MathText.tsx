@@ -31,6 +31,10 @@ export function MathText({ children, display = false, className, ariaLabel }: Ma
         throwOnError: false,
         displayMode: display,
         output: 'html',
+        // Defense-in-depth: refuse KaTeX commands that can emit URLs or raw HTML
+        // (\href, \url, \htmlData, ...). This is KaTeX's default, but pinning it
+        // keeps MathText safe if it is ever reused with learner-derived input.
+        trust: false,
       })
     } catch {
       target.textContent = children
