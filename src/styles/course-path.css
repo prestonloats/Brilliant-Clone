@@ -94,6 +94,12 @@
   gap: 8px;
 }
 
+/* Add a little breathing room when two progress bars stack (overall path progress above
+   the in-progress lesson's bar) so the second label isn't crowded against the first. */
+.progress-block + .progress-block {
+  margin-top: 6px;
+}
+
 .progress-meta {
   color: var(--muted);
   font-size: 13px;
@@ -213,27 +219,6 @@
 .path-graph-section {
   display: grid;
   gap: 14px;
-}
-
-.path-graph-head {
-  display: grid;
-  gap: 6px;
-  text-align: left;
-}
-
-.path-graph-head h2 {
-  font-size: clamp(20px, 3vw, 26px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-
-.path-graph-sub {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0;
-  max-width: 640px;
 }
 
 .path-graph {

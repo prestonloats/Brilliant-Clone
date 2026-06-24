@@ -22,14 +22,7 @@ export function CoursePathGraph({
   const graph = buildLessonGraph(algebraCourse, lessons)
 
   return (
-    <section className="path-graph-section" aria-labelledby="path-graph-heading">
-      <div className="path-graph-head">
-        <h2 id="path-graph-heading">Your learning path</h2>
-        <p className="path-graph-sub">
-          Each lesson unlocks once its prerequisites are complete. After Two-Step Equations the path
-          splits into two parallel branches that merge again at Graphing Lines.
-        </p>
-      </div>
+    <section className="path-graph-section" aria-label="Your learning path">
       <ol className="path-graph">
         {graph.stages.map((stage) => (
           <li
