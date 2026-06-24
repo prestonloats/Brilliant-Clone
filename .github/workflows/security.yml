@@ -1,0 +1,71 @@
+name: Security
+
+# Continuous security scanning so the project stays free of known
+# vulnerabilities. This is intentionally separate from the general
+# lint/build/test CI workflow and only adds read-only / security-events
+# permissions where required.
+
+on:
+  push:
+    branches: [main, local]
+  pull_request:
+  schedule:
+    # Weekly run catches newly disclosed advisories in already-pinned deps.
+    - cron: '17 4 * * 1'
+
+# Least privilege by default; the CodeQL job opts into the extra scope it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    name: Dependency audit (npm)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Shipped (production) dependencies must have no high/critical advisories.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # Dev/build tooling is reported for visibility but does not fail the run,
+      # since those packages are not served to end users.
+      - name: Audit all dependencies (report only)
+        if: always()
+        run: npm audit --audit-level=low || true
+
+  codeql:
+    name: CodeQL analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript-typescript']
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
