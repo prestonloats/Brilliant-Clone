@@ -31,6 +31,10 @@ export function MathText({ children, display = false, className, ariaLabel }: Ma
         throwOnError: false,
         displayMode: display,
         output: 'html',
+        // Defense-in-depth: keep KaTeX's default-deny for "trusted" commands explicit.
+        // This disables \href/\url/\htmlData/etc., so even if MathText is ever pointed at
+        // less-trusted input it cannot inject links or arbitrary attributes.
+        trust: false,
       })
     } catch {
       target.textContent = children
