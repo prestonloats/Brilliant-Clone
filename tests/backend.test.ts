@@ -242,6 +242,19 @@ test('backend provider selection fails closed for firebase mode', () => {
   assert.equal(createBackend('firebase', { firebaseBackend: fakeFirebaseBackend }).provider, 'firebase')
 })
 
+test('backend provider parsing normalizes case/whitespace and defaults to local', () => {
+  // Provider selection decides between real Firebase auth and the passwordless local
+  // demo, so parsing must be forgiving about case/whitespace, fall back to the safe
+  // local default when unset, and still reject anything outside the known contract.
+  assert.equal(getBackendProviderFromEnv('FIREBASE'), 'firebase')
+  assert.equal(getBackendProviderFromEnv('  Firebase  '), 'firebase')
+  assert.equal(getBackendProviderFromEnv('LOCAL'), 'local')
+  assert.equal(getBackendProviderFromEnv(''), 'local')
+  assert.equal(getBackendProviderFromEnv('   '), 'local')
+  assert.throws(() => getBackendProviderFromEnv('firebas'), /local.*firebase/i)
+  assert.throws(() => getBackendProviderFromEnv('local-demo'), /local.*firebase/i)
+})
+
 test('firebase config validation reports missing keys without live Firebase', () => {
   assert.deepEqual(getMissingFirebaseEnvKeysFromEnv({}), [
     'VITE_FIREBASE_API_KEY',
