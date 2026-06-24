@@ -33,6 +33,9 @@ source, tests, configuration, and the planning documents (`Brilliant Practice PR
 >   `eval`/`Function`/`innerHTML`/`dangerouslySetInnerHTML` in source, injection-safe numeric input
 >   parsing (strict regex + `Number()`), validated `localStorage`/`sessionStorage`, hardened
 >   `firestore.rules`, and a strict CSP — `npm audit` is **0 vulnerabilities** (prod-only too).
+> - **Maintainability — dead code removed (§6.7).** The unused `CourseLessonNode.status` field and the
+>   unreachable `comingSoon`/"Coming soon" `getPathStatus` branch (plus dead `.coming-soon` CSS) were
+>   deleted; the catalog test now asserts the node title instead. No behavior change.
 >
 > Lint, the full test suite (**174 tests**), the production build, and `npm audit` all run green. The
 > remaining headline open item is **going live** (§7). Note Vite still prints a ">500 kB chunk" warning,
@@ -294,14 +297,16 @@ Unlike the eight step types with engine checkers, there is no `checkMcqStep`; co
 `MultipleChoiceStep`. A code comment even notes it "mirrors the engine's choice-step escalation," so
 the two can drift apart.
 
-### 6.7 Dead `CourseLessonNode.status` field (now also an unreachable UI state)
+### 6.7 Dead `CourseLessonNode.status` field — FIXED (was dead/unreachable)
 
-Each lesson node in `content/course.ts` carries `status: 'available' | 'locked'`, and the type in
-`content/types.ts` was widened to include `'coming-soon'` — but the UI **never reads this field**.
-Lock/unlock is computed dynamically from progress + prerequisites, and `comingSoon` is derived from
-`lesson.steps.length === 0`, which is **always false** now that all six lessons are authored. So both
-the `status` field and the "Coming soon" path-status branch (`getPathStatus`) are dead/unreachable
-and can drift from reality.
+**Resolved in `1e38f90`.** Each lesson node in `content/course.ts` carried
+`status: 'available' | 'locked'` (type widened to include `'coming-soon'`) that the UI **never read** —
+lock/unlock is computed dynamically from progress + prerequisites (`isLessonUnlocked`), and the only
+reader was one test asserting a static value with no runtime effect. `comingSoon`
+(`lesson.steps.length === 0`) was **always false** now that all six lessons are authored, making
+`getPathStatus`'s "Coming soon" branch unreachable. The field (`types.ts`/`course.ts`), the
+`comingSoon` param/branch (`App.tsx`), and the dead `.coming-soon` CSS were removed; the catalog test
+now asserts the node's title instead. No behavior change; build/lint/174 tests stay green.
 
 ### 6.8 No React error boundary
 
@@ -349,7 +354,8 @@ fine on Node 22.14, so local dev is tolerant, but CI and deploy are version-sens
 - **Refresh docs:** update `README.md` (drop "shells"; reflect six authored lessons + the four
   interactions + KaTeX + CI), `BACKEND_ADAPTERS.md` (mastery is a cumulative ratio, not EWMA), and
   `SECURITY.md` (the Firebase adapter is implemented and runtime-selectable).
-- **Remove or use** the dead `CourseLessonNode.status` field and the unreachable "Coming soon" branch.
+- ~~**Remove or use** the dead `CourseLessonNode.status` field and the unreachable "Coming soon" branch.~~
+  **Done (`1e38f90`)** — removed (field, `comingSoon` branch, dead CSS); catalog test repointed to title.
 - **Add a React error boundary** and wire basic error/performance monitoring.
 
 ---
@@ -401,8 +407,8 @@ fine on Node 22.14, so local dev is tolerant, but CI and deploy are version-sens
 9. Split `App.tsx` into per-screen / per-step-renderer modules (and extract the drag engine).
 10. Add a JSDOM/RTL harness for the interaction components and `MathText`, and run it in CI to cover
     what the pure tests can't.
-11. Remove dead code (`CourseLessonNode.status`, the unreachable "Coming soon" branch) or wire it to
-    real status.
+11. ~~Remove dead code (`CourseLessonNode.status`, the unreachable "Coming soon" branch).~~ **Done
+    (`1e38f90`).**
 12. Keep the pinned Node off the broken 24.17.0 patch and ensure deploys use the keep-alive wrapper.
 
 ---
