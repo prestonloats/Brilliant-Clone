@@ -37,10 +37,6 @@ ratio (not the EWMA the docs claim) with **coarse per-skill attribution**; **MCQ
 in the view rather than the engine; and **documentation has drifted** (the README and
 `BACKEND_ADAPTERS.md` still describe lessons 4–6 as "shells" and mastery as "EWMA").
 
-There is also one concrete functional/accessibility **bug**: the flagship drag-to-place step has
-**no keyboard or tap fallback**, so it can only be completed with a pointer-drag gesture (see §6,
-issue 1).
-
 | Area | Status |
 | --- | --- |
 | Build (`npm run build`) | Passing — app chunk 341 kB (100.6 kB gzip); Firebase **lazy** chunk 566 kB (167 kB gzip); CSS 37.6 kB (8.1 kB gzip) |
