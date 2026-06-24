@@ -12,6 +12,13 @@ export default defineConfig({
         // instead of re-downloading the whole bundle on every release.
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            // Keep Firebase in its own async chunk. The app defaults to the local
+            // browser-only backend and only dynamically imports Firebase when
+            // VITE_BACKEND_PROVIDER=firebase, so folding it into `vendor` would force
+            // every visitor to eagerly download the (large) Firebase SDK they never use.
+            if (/[\\/]node_modules[\\/]@?firebase[\\/]/.test(id)) {
+              return 'firebase'
+            }
             return 'vendor'
           }
         },
