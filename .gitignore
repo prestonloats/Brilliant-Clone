@@ -18,6 +18,27 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local secrets and credentials
+.npmrc
+.pypirc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.secret
+*.secrets
+secret.*
+secrets.*
+password.*
+passwords.*
+credentials.*
+*.credentials.*
+service-account.*
+*.service-account.*
+firebase-service-account.*
+google-application-credentials.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
