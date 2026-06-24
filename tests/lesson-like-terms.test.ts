@@ -115,6 +115,14 @@ test('mastery sequence solves a combine-then-both-sides equation in order', () =
   assert.equal(solved.correct, true)
   assert.equal(solved.feedback, mastery.feedback.correct)
 
+  // Adding 2 before subtracting 2x is equally valid since the two clearing moves commute.
+  const solvedAddFirst = checkSequenceStep(
+    mastery,
+    ['combine-subtract-coefficients', 'add-2-both', 'subtract-2x-both', 'divide-4-both', 'mastery-x-equals-4'],
+    1,
+  )
+  assert.equal(solvedAddFirst.correct, true)
+
   const wrongCombine = checkSequenceStep(
     mastery,
     ['combine-add-coefficients', 'subtract-2x-both', 'add-2-both', 'divide-4-both', 'mastery-x-equals-4'],

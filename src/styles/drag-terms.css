@@ -169,13 +169,6 @@
   min-height: 56px;
 }
 
-.bin-empty {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.8;
-}
-
 .term-bin-place {
   background: var(--surface-strong);
   color: var(--accent-strong);
@@ -186,12 +179,6 @@
 
 .term-bin-place:disabled {
   opacity: 0.5;
-}
-
-.drag-terms-summary {
-  color: var(--text-h);
-  font-weight: 700;
-  margin: 0 0 4px;
 }
 
 @keyframes lift-tile {

@@ -24,6 +24,12 @@
   width: 100%;
 }
 
+/* Static, read-only line graph shown alongside a "which equation matches this graph" question. */
+.plot-grid.line-graph {
+  margin: 6px auto 18px;
+  max-width: 340px;
+}
+
 .plot-grid:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;

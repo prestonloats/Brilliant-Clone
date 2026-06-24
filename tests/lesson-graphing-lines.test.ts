@@ -116,3 +116,41 @@ test('graphing-lines keeps new interactive content before a concept summary and 
   assert.ok(ids.indexOf('match-slope-intercept-line') < ids.indexOf('build-slope-line'))
   assert.ok(ids.indexOf('build-slope-line') < ids.indexOf('mastery-equation-from-graph'))
 })
+
+test('graphing-lines explains how to graph a line before the interactive steps', () => {
+  const ids = graphingLinesLesson.steps.map((step) => step.id)
+  assert.ok(ids.includes('concept-how-to-graph'))
+  assert.ok(ids.indexOf('concept-how-to-graph') < ids.indexOf('match-slope-intercept-line'))
+
+  const howTo = findStep('concept-how-to-graph', 'concept')
+  assert.match(howTo.body, /rise over run/i)
+  assert.match(howTo.body, /y-axis/i)
+})
+
+test('graphing-lines table question uses real tables and explains tables first', () => {
+  const ids = graphingLinesLesson.steps.map((step) => step.id)
+  assert.ok(ids.includes('concept-tables'))
+  assert.ok(ids.indexOf('concept-tables') < ids.indexOf('choose-line-table'))
+
+  const tablesConcept = findStep('concept-tables', 'concept')
+  assert.ok(tablesConcept.tables && tablesConcept.tables.length > 0, 'the tables concept should show example tables')
+
+  const tableChoice = findStep('choose-line-table', 'operation-choice')
+  assert.ok(
+    tableChoice.choices.every((choice) => choice.table && choice.table.x.length === choice.table.y.length),
+    'every table choice should carry equal-length x and y rows',
+  )
+  const correct = tableChoice.choices.find((choice) => choice.id === tableChoice.correctId)
+  assert.deepEqual(correct?.table, { x: [0, 1, 2], y: [1, 3, 5] })
+})
+
+test('graphing-lines shows a line graph on the equation-from-graph question', () => {
+  const fromGraph = findStep('mastery-equation-from-graph', 'operation-choice')
+  assert.ok(fromGraph.graph, 'the question should include a graph to read')
+  assert.equal(fromGraph.graph?.slope, -2)
+  assert.equal(fromGraph.graph?.intercept, 5)
+  assert.deepEqual(fromGraph.graph?.points, [
+    { x: 0, y: 5 },
+    { x: 2, y: 1 },
+  ])
+})

@@ -167,6 +167,8 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
         },
       ],
       correctOrder: ['subtract-two-x-both', 'subtract-seven-both', 'divide-three-both', 'x-equals-four'],
+      // Subtracting 2x and subtracting 7 commute, so clearing the constant first is equally valid.
+      acceptableOrders: [['subtract-seven-both', 'subtract-two-x-both', 'divide-three-both', 'x-equals-four']],
       feedback: {
         correct: 'Correct. Gather x-terms, clear constants, divide, and x = 4.',
         incorrect: 'First get x onto one side, then solve the one-variable equation that remains.',
@@ -279,6 +281,10 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
         },
       ],
       correctOrder: ['combine-subtract-coefficients', 'subtract-2x-both', 'add-2-both', 'divide-4-both', 'mastery-x-equals-4'],
+      // After combining, subtracting 2x and adding 2 commute, so clearing the constant first is equally valid.
+      acceptableOrders: [
+        ['combine-subtract-coefficients', 'add-2-both', 'subtract-2x-both', 'divide-4-both', 'mastery-x-equals-4'],
+      ],
       feedback: {
         correct: 'Correct. Combine 10x - 4x = 6x, gather the x-terms with -2x, clear -2, divide by 4, and x = 4.',
         incorrect: 'Combine the like terms first, then move the x-terms to one side before isolating x.',

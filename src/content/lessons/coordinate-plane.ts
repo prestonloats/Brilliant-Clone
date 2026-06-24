@@ -43,6 +43,8 @@ export const coordinatePlaneLesson: Lesson = {
         },
       ],
       correctOrder: ['move-right-three', 'move-down-two', 'arrive-three-negative-two'],
+      // The horizontal and vertical moves commute, so moving down first then right is equally valid.
+      acceptableOrders: [['move-down-two', 'move-right-three', 'arrive-three-negative-two']],
       feedback: {
         correct: 'Correct. Positive x goes right, negative y goes down, so the point is (3, -2).',
         incorrect: 'Read the ordered pair as x first, then y.',

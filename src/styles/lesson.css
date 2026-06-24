@@ -185,7 +185,9 @@
   border: 1px solid var(--border);
   border-radius: 22px;
   color: var(--text-h);
-  font-size: clamp(26px, 7vw, 42px);
+  /* Sized so long "a -> b" equations fit the card without horizontal scrolling (KaTeX
+     renders ~1.2x larger than this base size on top). */
+  font-size: clamp(18px, 4vw, 30px);
   font-weight: 800;
   margin: 18px 0;
   padding: 22px;
@@ -209,6 +211,103 @@
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+/* Real input-output table rendered inside a "which table matches" choice. */
+.choice-table {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border-spacing: 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.choice-table th,
+.choice-table td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  font-size: 16px;
+  font-weight: 800;
+  min-width: 40px;
+  padding: 8px 14px;
+  text-align: center;
+}
+
+/* Drop the outer-edge cell borders so the rounded corners stay clean. */
+.choice-table td:last-child,
+.choice-table th:last-child {
+  border-right: none;
+}
+
+.choice-table tr:last-child th,
+.choice-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* The x / y row labels read as a tinted header column. */
+.choice-table th {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-style: italic;
+}
+
+/* Example tables shown inside a concept card (the "how tables work" lesson). */
+.concept-tables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
+  margin: 6px 0 18px;
+}
+
+.value-table {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  margin: 0;
+}
+
+.value-table-caption {
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Center the table (and its caption) inside a "which table matches" choice button, which
+   otherwise left-aligns its content. */
+.operation-grid button.has-table {
+  justify-content: center;
+  text-align: center;
+}
+
+.operation-grid button.has-table span:first-child {
+  justify-items: center;
+}
+
+/* In-lesson Back/Next navigation for reviewing already-completed steps. */
+.lesson-nav {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.lesson-nav-button {
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 6px 14px;
+}
+
+.lesson-nav-button:disabled {
+  opacity: 0.4;
 }
 
 .sequence-board {

@@ -211,16 +211,6 @@ export function DragTermsStepView({
     onComplete(result.correct, result.feedback, { advance: false })
   }
 
-  const binsSummary = step.bins
-    .map((bin) => {
-      const labels = step.tiles.filter((tile) => placements[tile.id] === bin.id).map((tile) => tile.label)
-      return `${bin.label}: ${labels.length ? labels.join(', ') : 'empty'}`
-    })
-    .join('. ')
-  const traySummary =
-    trayTiles.length === 0 ? 'All tiles sorted.' : `Unsorted: ${trayTiles.map((tile) => tile.label).join(', ')}.`
-  const summary = `${binsSummary}. ${traySummary}`
-
   return (
     <article className="lesson-card card drag-terms-card">
       <p className="eyebrow">Sort it</p>
@@ -238,7 +228,6 @@ export function DragTermsStepView({
         <div className="term-tray" data-term-zone={TERM_TRAY_ZONE} aria-label={`Term tile tray, ${trayTiles.length} unsorted`}>
           <div className="term-tray-head">
             <span className="tray-title">Term tiles</span>
-            <span className="tray-count">{trayTiles.length} left</span>
           </div>
           <div className="term-tile-row">
             {trayTiles.length === 0 && <span className="tray-empty">All tiles sorted</span>}
@@ -257,9 +246,7 @@ export function DragTermsStepView({
               </button>
             ))}
           </div>
-          <p className="tray-hint">
-            Drag a tile into a bin, or tap a tile then a bin&rsquo;s &ldquo;Place here&rdquo;. Tap a sorted tile to send it back.
-          </p>
+          <p className="tray-hint">Drag a tile into a bin.</p>
         </div>
 
         <div className="term-bins">
@@ -281,11 +268,6 @@ export function DragTermsStepView({
                   </span>
                 </div>
                 <div className="term-bin-tiles">
-                  {tilesInBin.length === 0 && (
-                    <span className="bin-empty" aria-hidden="true">
-                      Drop here
-                    </span>
-                  )}
                   {tilesInBin.map((tile) => (
                     <button
                       key={tile.id}
@@ -300,23 +282,21 @@ export function DragTermsStepView({
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  className="term-bin-place"
-                  disabled={correct || !selectedTileId}
-                  onClick={() => handleBinActivate(bin.id)}
-                >
-                  {selectedTile ? `Place ${selectedTile.label} here` : 'Place here'}
-                </button>
+                {selectedTileId && (
+                  <button
+                    type="button"
+                    className="term-bin-place"
+                    disabled={correct}
+                    onClick={() => handleBinActivate(bin.id)}
+                  >
+                    {selectedTile ? `Place ${selectedTile.label} here` : 'Place here'}
+                  </button>
+                )}
               </div>
             )
           })}
         </div>
       </div>
-
-      <p className="drag-terms-summary" aria-live="polite">
-        {summary}
-      </p>
 
       {dragging?.moved && (
         <DragPreview

@@ -174,13 +174,18 @@ export const checkSequenceStep = (
   selectedIds: string[],
   attemptNumber = 1,
 ): CheckResult => {
-  const complete = selectedIds.length === step.correctOrder.length
-  const ordered = complete && selectedIds.every((id, index) => id === step.correctOrder[index])
+  // Some steps have moves that commute (e.g. subtracting the x-term and the constant in either
+  // order), so correctOrder plus any authored acceptableOrders all count as solved.
+  const acceptedOrders = [step.correctOrder, ...(step.acceptableOrders ?? [])]
+  const ordered = acceptedOrders.some(
+    (order) => selectedIds.length === order.length && selectedIds.every((id, index) => id === order[index]),
+  )
 
   if (ordered) {
     return { correct: true, feedback: step.feedback.correct }
   }
 
+  const complete = selectedIds.length === step.correctOrder.length
   const misplacedTileId = selectedIds.find((id, index) => id !== step.correctOrder[index])
   const hint = !complete
     ? step.feedback.incomplete

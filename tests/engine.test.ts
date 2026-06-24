@@ -1215,6 +1215,13 @@ test('like-terms lesson combines terms before variables-on-both-sides solving', 
     1,
   )
   assert.equal(solved.correct, true)
+  // Clearing the constant before the x-term is equally valid since the two moves commute.
+  const solvedSevenFirst = checkSequenceStep(
+    solveOrder,
+    ['subtract-seven-both', 'subtract-two-x-both', 'divide-three-both', 'x-equals-four'],
+    1,
+  )
+  assert.equal(solvedSevenFirst.correct, true)
   assert.equal(
     checkOperationChoiceStep(mistakenMove, 'variables-cannot-move', 1).feedback,
     'Variable terms can move if you apply the inverse to both sides. The issue is choosing the wrong inverse move.',
@@ -1357,6 +1364,9 @@ test('coordinate-plane lesson checks ordered-pair direction and quadrant misconc
 
   const solvedSequence = checkSequenceStep(plotOrder, ['move-right-three', 'move-down-two', 'arrive-three-negative-two'], 1)
   assert.equal(solvedSequence.correct, true)
+  // Moving down first then right reaches the same point, so it is accepted too.
+  const solvedDownFirst = checkSequenceStep(plotOrder, ['move-down-two', 'move-right-three', 'arrive-three-negative-two'], 1)
+  assert.equal(solvedDownFirst.correct, true)
 
   // The point recognition MCQ is now an interactive plot: placing (-4, 2) is correct, while a
   // reversed pair earns the authored "swapped" hint.

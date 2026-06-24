@@ -35,6 +35,8 @@ export type ConceptStep = {
   title: string
   body: string
   visual?: 'balanced-scale' | 'unknown-box'
+  // Optional example input-output tables shown to illustrate the concept (e.g. the tables lesson).
+  tables?: { x: number[]; y: number[]; caption?: string }[]
 }
 
 export type McqStep = {
@@ -69,11 +71,21 @@ export type OperationChoiceStep = {
   type: 'operation-choice'
   prompt: string
   equation?: string
+  // Optional static line graph shown with the question (e.g. "which equation matches this graph").
+  graph?: {
+    range: { min: number; max: number }
+    slope: number
+    intercept: number
+    points?: PlotPoint[]
+  }
   choices: {
     id: string
     label: string
     detail?: string
     feedback: string
+    // Optional input-output table rendered instead of the text label (e.g. "which table
+    // matches y = 2x + 1"). `label` stays as the accessible name for screen readers.
+    table?: { x: number[]; y: number[] }
   }[]
   correctId: string
   feedback: Feedback
@@ -89,6 +101,9 @@ export type SequenceStep = {
     label: string
   }[]
   correctOrder: string[]
+  // Additional full orderings that also count as correct (beyond correctOrder), for steps
+  // whose moves commute — e.g. subtracting the x-term and the constant in either order.
+  acceptableOrders?: string[][]
   feedback: Feedback & {
     incomplete: string
     hintsByTile?: Record<string, string>

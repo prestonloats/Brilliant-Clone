@@ -12,13 +12,19 @@ export const graphingLinesLesson: Lesson = {
       id: 'concept-slope-intercept',
       type: 'concept',
       title: 'Slope and intercept shape a line',
-      body: 'In y = mx + b, b is where the line crosses the y-axis. The slope m tells the line how to move from one point to the next.',
+      body: 'Every straight line can be written as y = mx + b. The intercept b is the y-value where the line crosses the y-axis (the point where x = 0). The slope m is the rise over run: how far the line goes up (or down) for each 1 unit it moves to the right. A positive slope climbs to the right, and a negative slope falls.',
+    },
+    {
+      id: 'concept-how-to-graph',
+      type: 'concept',
+      title: 'How to graph a line',
+      body: 'To graph y = mx + b, first plot the intercept b on the y-axis. From that point, use the slope as rise over run: move right by the run (1) and up by the rise (m) to reach a second point. Then draw a straight line through the two points. Example: for y = 2x + 1, start at (0, 1), go right 1 and up 2 to reach (1, 3), and connect them.',
     },
     {
       id: 'match-slope-intercept-line',
       type: 'slider',
       prompt:
-        'A line crosses the y-axis at 2 and rises 3 for every 1 step right. Drag the m and b sliders until the live line matches it.',
+        'A line crosses the y-axis at 2 and rises 3 for every 1 step right. Drag the m (slope) and b (y-intercept) sliders until the live line matches it.',
       slope: { min: -5, max: 5 },
       intercept: { min: -5, max: 5 },
       target: { slope: 3, intercept: 2 },
@@ -41,7 +47,7 @@ export const graphingLinesLesson: Lesson = {
       id: 'build-slope-line',
       type: 'slider',
       prompt:
-        'Build the line with no vertical shift that rises 2 units for every 1 unit to the right. Drag m and b until the rise-over-run guide shows a rise of 2 over a run of 1.',
+        'Build a line that passes through the origin (0, 0) and rises 2 units for every 1 unit to the right. Drag the m (slope) and b (y-intercept) sliders until the line rises 2 over a run of 1 through the origin.',
       slope: { min: -4, max: 4 },
       intercept: { min: -5, max: 5 },
       target: { slope: 2, intercept: 0 },
@@ -63,7 +69,7 @@ export const graphingLinesLesson: Lesson = {
     {
       id: 'order-plot-line',
       type: 'sequence',
-      prompt: 'Use y = 2x - 1 to create two points for the line.',
+      prompt: 'Plot y = 2x - 1: start at the y-intercept, then use the slope to step to a second point. Tap the steps in order.',
       equation: 'y = 2x - 1',
       tiles: [
         {
@@ -117,6 +123,13 @@ export const graphingLinesLesson: Lesson = {
       },
     },
     {
+      id: 'concept-tables',
+      type: 'concept',
+      title: 'A table lists points on the line',
+      body: 'A table pairs each x-value with the y-value the equation produces. Read it in columns: an x in the top row and the y right below it make one point (x, y) on the line. To match a table to y = mx + b, plug each x into the equation and check the y agrees. The table below shows y = 3x - 1: at x = 0 you get y = -1, at x = 1 you get y = 2, and at x = 2 you get y = 5.',
+      tables: [{ x: [0, 1, 2], y: [-1, 2, 5], caption: 'y = 3x - 1' }],
+    },
+    {
       id: 'choose-line-table',
       type: 'operation-choice',
       prompt: 'Which table belongs to y = 2x + 1?',
@@ -126,20 +139,20 @@ export const graphingLinesLesson: Lesson = {
         {
           id: 'table-two-x-plus-one',
           label: 'x: 0, 1, 2 -> y: 1, 3, 5',
-          detail: 'Starts at 1 and adds 2.',
           feedback: 'Correct. Each y-value is 2x + 1.',
+          table: { x: [0, 1, 2], y: [1, 3, 5] },
         },
         {
           id: 'table-one-x-plus-two',
           label: 'x: 0, 1, 2 -> y: 2, 3, 4',
-          detail: 'Starts at 2 and adds 1.',
           feedback: 'This table matches y = x + 2. Its slope and intercept are swapped.',
+          table: { x: [0, 1, 2], y: [2, 3, 4] },
         },
         {
           id: 'table-two-x-minus-one',
           label: 'x: 0, 1, 2 -> y: -1, 1, 3',
-          detail: 'Starts at -1 and adds 2.',
           feedback: 'The slope is right, but the intercept should be +1, not -1.',
+          table: { x: [0, 1, 2], y: [-1, 1, 3] },
         },
       ],
       feedback: {
@@ -152,7 +165,15 @@ export const graphingLinesLesson: Lesson = {
       id: 'mastery-equation-from-graph',
       type: 'operation-choice',
       prompt: 'A line crosses the y-axis at (0, 5) and passes through (2, 1). Which equation matches its graph?',
-      equation: 'through (0, 5) and (2, 1)',
+      graph: {
+        range: { min: -1, max: 6 },
+        slope: -2,
+        intercept: 5,
+        points: [
+          { x: 0, y: 5 },
+          { x: 2, y: 1 },
+        ],
+      },
       correctId: 'y-equals-negative-two-x-plus-five',
       choices: [
         {
