@@ -180,6 +180,32 @@ export const checkOperationChoiceStep = (
   })
 }
 
+// Pure checker for the multiple-choice (predict) step. Like operation-choice, the chosen
+// option's own authored misconception (`option.feedback`) stays as the main feedback on
+// every attempt; the generic `feedback.incorrect` layers into the reveal slot at attempt 2
+// and the exact `feedback.reveal` takes over at attempt 3. Keeping this here (instead of
+// inline in the view) makes mcq behave identically to the other choice step and gives it
+// unit coverage. `feedback` is optional on McqStep, so each field falls back safely.
+export const checkMcqStep = (
+  step: Extract<LessonStep, { type: 'mcq' }>,
+  optionId: string,
+  attemptNumber = 1,
+): CheckResult => {
+  const option = step.options.find((candidate) => candidate.id === optionId)
+
+  if (optionId === step.correctId) {
+    return { correct: true, feedback: step.feedback?.correct ?? option?.feedback ?? 'Correct.' }
+  }
+
+  return buildWrongResult({
+    attemptNumber,
+    hint: option?.feedback ?? step.feedback?.incorrect ?? '',
+    explanation: step.feedback?.incorrect ?? '',
+    reveal: step.feedback?.reveal,
+    keepHint: true,
+  })
+}
+
 export const checkSequenceStep = (
   step: Extract<LessonStep, { type: 'sequence' }>,
   selectedIds: string[],

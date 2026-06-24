@@ -19,6 +19,7 @@ import {
   checkBalanceStep,
   checkDragTermsStep,
   checkInputStep,
+  checkMcqStep,
   checkOperationChoiceStep,
   checkPlotStep,
   checkSequenceStep,
@@ -96,6 +97,25 @@ const syntheticOperationChoiceStep: Extract<LessonStep, { type: 'operation-choic
     correct: 'Right. Dividing both sides by 3 isolates x.',
     incorrect: 'Undo multiplication with division, and do it to both sides.',
     reveal: 'Choose "/3 on both sides" because 3x / 3 = x.',
+  },
+}
+
+// Self-contained mcq step so the choice-escalation tests don't depend on lesson data the
+// content wave is actively editing. Mirrors the operation-choice fixture in shape.
+const syntheticMcqStep: Extract<LessonStep, { type: 'mcq' }> = {
+  id: 'synthetic-mcq',
+  type: 'mcq',
+  prompt: 'Add 2 to the left pan of a level 3 = 3 scale. Which side is heavier?',
+  options: [
+    { id: 'left', label: 'The left pan drops', feedback: 'Right. 3 + 2 = 5 is heavier than 3.' },
+    { id: 'right', label: 'The right pan drops', feedback: 'The right pan is still 3, but the left grew to 5.' },
+    { id: 'level', label: 'It stays level', feedback: 'Adding to only one side breaks the balance.' },
+  ],
+  correctId: 'left',
+  feedback: {
+    correct: 'Right. 3 + 2 = 5 is heavier than 3.',
+    incorrect: 'Compare the two totals after adding 2 to the left.',
+    reveal: 'The left pan totals 3 + 2 = 5, so it drops.',
   },
 }
 
@@ -1042,6 +1062,86 @@ test('operation-choice surfaces each newly selected wrong option misconception o
   const secondMiss = checkOperationChoiceStep(step, secondWrong.id, 2)
   assert.equal(secondMiss.feedback, secondWrong.feedback)
   assert.notEqual(secondMiss.feedback, step.feedback.incorrect)
+})
+
+test('mcq keeps the chosen option misconception while layering explanation then reveal', () => {
+  const step = syntheticMcqStep
+  const wrong = step.options.find((option) => option.id === 'right')
+  assert.ok(wrong)
+
+  const firstMiss = checkMcqStep(step, wrong.id, 1)
+  assert.equal(firstMiss.correct, false)
+  assert.equal(firstMiss.feedback, wrong.feedback)
+  assert.equal(firstMiss.reveal, undefined)
+
+  // Attempt 2 still leads with the option's own misconception and layers the generic
+  // explanation into the reveal slot instead of overwriting the misconception.
+  const secondMiss = checkMcqStep(step, wrong.id, 2)
+  assert.equal(secondMiss.feedback, wrong.feedback)
+  assert.equal(secondMiss.reveal, step.feedback?.incorrect)
+
+  // Attempt 3 keeps the misconception and swaps the reveal slot to the exact reveal.
+  const thirdMiss = checkMcqStep(step, wrong.id, 3)
+  assert.equal(thirdMiss.feedback, wrong.feedback)
+  assert.equal(thirdMiss.reveal, step.feedback?.reveal)
+
+  const solved = checkMcqStep(step, step.correctId, 2)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, step.feedback?.correct)
+})
+
+test('mcq surfaces each newly selected wrong option misconception on later attempts', () => {
+  const step = syntheticMcqStep
+  const wrongOptions = step.options.filter(
+    (option) => option.id !== step.correctId && option.feedback !== step.feedback?.incorrect,
+  )
+  assert.ok(wrongOptions.length >= 2)
+  const [firstWrong, secondWrong] = wrongOptions
+
+  assert.equal(checkMcqStep(step, firstWrong.id, 1).feedback, firstWrong.feedback)
+
+  // Selecting a DIFFERENT wrong option on attempt 2 shows that option's own misconception,
+  // not the generic feedback.incorrect.
+  const secondMiss = checkMcqStep(step, secondWrong.id, 2)
+  assert.equal(secondMiss.feedback, secondWrong.feedback)
+  assert.notEqual(secondMiss.feedback, step.feedback?.incorrect)
+})
+
+test('mcq checker drives the balancing-equations predict step from authored data', () => {
+  const step = lessonStep('predict-add-left', 'mcq')
+
+  const solved = checkMcqStep(step, step.correctId, 1)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, step.feedback?.correct)
+
+  const wrong = step.options.find((option) => option.id !== step.correctId)
+  assert.ok(wrong)
+  assert.equal(checkMcqStep(step, wrong.id, 1).feedback, wrong.feedback)
+  assert.equal(checkMcqStep(step, wrong.id, 3).reveal, step.feedback?.reveal)
+})
+
+test('mcq checker falls back to option feedback when the step omits a feedback block', () => {
+  const step: Extract<LessonStep, { type: 'mcq' }> = {
+    id: 'mcq-no-feedback',
+    type: 'mcq',
+    prompt: 'Pick the heavier pan.',
+    options: [
+      { id: 'left', label: 'Left', feedback: 'Left is heavier.' },
+      { id: 'right', label: 'Right', feedback: 'Right stays the same, so it is lighter.' },
+    ],
+    correctId: 'left',
+  }
+
+  const solved = checkMcqStep(step, 'left', 1)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, 'Left is heavier.')
+
+  // With no step-level reveal authored, even the third miss keeps the option misconception
+  // and never invents a reveal.
+  const missed = checkMcqStep(step, 'right', 3)
+  assert.equal(missed.correct, false)
+  assert.equal(missed.feedback, 'Right stays the same, so it is lighter.')
+  assert.equal(missed.reveal, undefined)
 })
 
 test('sequence puzzle checks order and gives tile-specific misconceptions', () => {

@@ -11,6 +11,7 @@ import {
   checkDragTermsStep,
   checkInputStep,
   checkManipulativeStep,
+  checkMcqStep,
   checkOperationChoiceStep,
   checkPlotStep,
   checkSequenceStep,
@@ -1369,32 +1370,22 @@ function MultipleChoiceStep({
               disabled={wasCorrect}
               onClick={() => {
                 const nextAttempt = attempts + 1
-                const correct = option.id === step.correctId
-                // A newly selected wrong option always shows ITS OWN authored misconception.
-                // The generic explanation layers into the reveal slot at attempt 2, and the
-                // exact reveal takes over at attempt 3 (mirrors the engine's choice-step
-                // escalation in buildWrongResult so mcq and operation-choice behave alike).
-                const feedback = correct ? step.feedback?.correct ?? option.feedback : option.feedback
-                const explanation = step.feedback?.incorrect
-                const revealText = step.feedback?.reveal
-                const layeredReveal = correct
-                  ? ''
-                  : nextAttempt >= 3 && revealText
-                    ? revealText
-                    : nextAttempt >= 2 && explanation && explanation !== option.feedback
-                      ? explanation
-                      : ''
+                // Escalation (the option's own misconception -> generic explanation ->
+                // exact reveal) lives in the engine's checkMcqStep so mcq behaves exactly
+                // like operation-choice and the logic can't drift between the two. The view
+                // keeps only the predict-specific retry copy below.
+                const result = checkMcqStep(step, option.id, nextAttempt)
 
                 setSelectedId(option.id)
                 setAttempts(nextAttempt)
-                setSelectedFeedback(feedback)
-                setReveal(layeredReveal)
+                setSelectedFeedback(result.feedback)
+                setReveal(result.reveal ?? '')
                 setRetryGuidance(
-                  !correct && nextAttempt >= 3 && revealText
+                  !result.correct && nextAttempt >= 3 && step.feedback?.reveal
                     ? 'Use the reveal, then choose the prediction that matches the totals.'
                     : 'Compare the two totals, then choose another option.',
                 )
-                onComplete(correct, feedback, { advance: false })
+                onComplete(result.correct, result.feedback, { advance: false })
               }}
             >
               {option.label}
