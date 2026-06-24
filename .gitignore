@@ -17,9 +17,18 @@ dist-ssr
 .env
 .env.*
 !.env.example
+*.env
+*.env.*
+!*.env.example
 .envrc
 
 # Local secrets and credentials
+*.secret
+*.secrets
+*.token
+*.tokens
+*.credential
+*.credentials
 *.key
 *.pem
 *.p8
@@ -30,6 +39,24 @@ id_rsa
 id_dsa
 id_ecdsa
 id_ed25519
+*apikey*.env
+*apikey*.txt
+*apikey*.json
+*apikey*.csv
+*apikey*.yaml
+*apikey*.yml
+*api-key*.env
+*api-key*.txt
+*api-key*.json
+*api-key*.csv
+*api-key*.yaml
+*api-key*.yml
+*api_key*.env
+*api_key*.txt
+*api_key*.json
+*api_key*.csv
+*api_key*.yaml
+*api_key*.yml
 *password*.env
 *password*.txt
 *password*.json
