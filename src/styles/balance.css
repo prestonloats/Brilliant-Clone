@@ -1,0 +1,525 @@
+.mini-scale {
+  align-items: center;
+  background: var(--surface-strong);
+  border-radius: 24px;
+  display: grid;
+  font-size: clamp(24px, 7vw, 42px);
+  font-weight: 800;
+  gap: 14px;
+  grid-template-columns: 1fr auto 1fr;
+  margin: 24px 0;
+  padding: 24px;
+  text-align: center;
+}
+
+.scale-stage {
+  background: linear-gradient(180deg, #eef6ff, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  color: var(--text-h);
+  margin: 18px 0;
+  overflow: hidden;
+  padding: 14px;
+  position: relative;
+}
+
+.equation-row {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 22px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  justify-content: stretch;
+  margin: 0 auto 10px;
+  max-width: 620px;
+  padding: 10px;
+  width: 100%;
+}
+
+.equation-side {
+  background: white;
+  border-radius: 16px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  text-align: center;
+}
+
+.equation-side small,
+.equation-side em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.equation-side strong {
+  font-size: clamp(19px, 4.5vw, 28px);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.balance-symbol {
+  align-self: center;
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--text-h);
+  display: grid;
+  font-size: 22px;
+  font-weight: 800;
+  height: 42px;
+  place-items: center;
+  width: 42px;
+}
+
+.balance-symbol.left-heavy,
+.balance-symbol.right-heavy {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.balance-cue {
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+  text-align: center;
+  width: fit-content;
+}
+
+.balance-cue.level {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.balance-cue.left-heavy,
+.balance-cue.right-heavy {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.scale-svg-wrap svg {
+  color: #1f2937;
+  display: block;
+  height: auto;
+  margin: 0 auto;
+  max-height: 250px;
+  max-width: 100%;
+}
+
+.scale-svg-wrap g {
+  transition: transform 440ms cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+
+.physical-scale-stage {
+  overflow: visible;
+  padding: clamp(16px, 3vw, 26px);
+}
+
+.physical-cue {
+  margin-bottom: 0;
+}
+
+.physical-scale {
+  margin: 0 auto;
+  max-width: 820px;
+  min-height: clamp(330px, 49vw, 430px);
+  position: relative;
+}
+
+.physical-fulcrum {
+  left: 50%;
+  bottom: 24px;
+  position: absolute;
+  top: clamp(88px, calc(9vw + 32px), 108px);
+  transform: translateX(-50%);
+  width: 150px;
+}
+
+.physical-fulcrum::before {
+  background: linear-gradient(180deg, #334155, #1f2937);
+  border-radius: 999px;
+  content: '';
+  bottom: 74px;
+  left: 50%;
+  opacity: 0.78;
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%);
+  width: 14px;
+}
+
+.physical-fulcrum::after {
+  background: linear-gradient(180deg, rgba(51, 65, 85, 0.92), rgba(15, 23, 42, 0.7));
+  border-radius: 20px 20px 10px 10px;
+  bottom: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  content: '';
+  height: 100px;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 150px;
+}
+
+.physical-beam {
+  height: min(330px, 74vw);
+  left: 50%;
+  max-width: 790px;
+  position: absolute;
+  top: clamp(56px, 9vw, 76px);
+  transform-origin: center 32px;
+  transition: transform 440ms cubic-bezier(0.2, 0.9, 0.2, 1.2);
+  translate: -50% 0;
+  width: min(94%, 790px);
+  z-index: 1;
+}
+
+.physical-beam-line {
+  background: linear-gradient(90deg, #334155, #111827);
+  border-radius: 999px;
+  box-shadow: rgba(15, 23, 42, 0.16) 0 14px 24px;
+  display: block;
+  height: 14px;
+  left: 8%;
+  position: absolute;
+  right: 8%;
+  top: 25px;
+}
+
+.physical-pan {
+  display: grid;
+  grid-template-rows: 70px 1fr;
+  min-height: 210px;
+  position: absolute;
+  top: 36px;
+  transition:
+    filter 180ms ease,
+    transform 180ms ease;
+  width: clamp(155px, 31vw, 245px);
+}
+
+.physical-pan.left {
+  left: 0;
+}
+
+.physical-pan.right {
+  right: 0;
+}
+
+.physical-pan-cables {
+  display: block;
+  position: relative;
+}
+
+.physical-pan-cables::before,
+.physical-pan-cables::after {
+  background: rgba(31, 41, 55, 0.68);
+  border-radius: 999px;
+  content: '';
+  height: 76px;
+  position: absolute;
+  top: -6px;
+  width: 4px;
+}
+
+.physical-pan-cables::before {
+  left: 30%;
+  transform: rotate(18deg);
+  transform-origin: top center;
+}
+
+.physical-pan-cables::after {
+  right: 30%;
+  transform: rotate(-18deg);
+  transform-origin: top center;
+}
+
+.physical-pan-surface {
+  align-items: end;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(219, 234, 254, 0.86)),
+    #dbeafe;
+  border: 3px solid rgba(37, 99, 235, 0.22);
+  border-radius: 28px 28px 52px 52px;
+  box-shadow:
+    inset 0 -12px 22px rgba(37, 99, 235, 0.08),
+    rgba(15, 23, 42, 0.14) 0 18px 28px;
+  display: grid;
+  gap: 10px;
+  min-height: 138px;
+  padding: 12px;
+}
+
+.physical-pan.drop-target {
+  filter: drop-shadow(0 18px 24px rgba(37, 99, 235, 0.2));
+  transform: translateY(-4px) scale(1.02);
+}
+
+.physical-pan.drop-target .physical-pan-surface {
+  background: rgba(219, 234, 254, 0.98);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 5px rgba(37, 99, 235, 0.12),
+    rgba(37, 99, 235, 0.2) 0 22px 32px;
+}
+
+.physical-pan-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.physical-tile-row {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: 8px;
+  justify-content: center;
+  min-height: 78px;
+}
+
+.physical-tile-row .tile {
+  animation: tile-drop 360ms cubic-bezier(0.18, 0.9, 0.24, 1.28);
+  min-height: clamp(58px, 9vw, 70px);
+  min-width: clamp(58px, 9vw, 70px);
+}
+
+.item-bank.physical-bank {
+  align-items: center;
+  background: linear-gradient(180deg, #fff7ed, #fffbeb);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.item-bank.physical-bank p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.physical-bank .bank-item {
+  justify-content: center;
+}
+
+.physical-bank .bank-tile {
+  font-size: clamp(28px, 7vw, 42px);
+  min-height: 72px;
+  min-width: 72px;
+}
+
+.physical-change-note {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 620px;
+  text-align: center;
+}
+
+.level-scale g {
+  animation: scale-settle 520ms ease both;
+}
+
+.tilted-scale g {
+  filter: drop-shadow(0 18px 12px rgba(15, 23, 42, 0.1));
+}
+
+.pan-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.pan {
+  background: rgba(255, 255, 255, 0.78);
+  border: 2px dashed rgba(37, 99, 235, 0.24);
+  border-radius: 18px;
+  min-height: 92px;
+  padding: 12px;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.pan.drop-target {
+  background: rgba(219, 234, 254, 0.96);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 4px rgba(37, 99, 235, 0.1),
+    rgba(37, 99, 235, 0.18) 0 18px 32px;
+  transform: translateY(-2px) scale(1.015);
+}
+
+.pan-bounce {
+  animation: pan-bounce 420ms cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+
+.pan-heading,
+.item-bank p {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.pan-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pan-heading strong,
+.pan-heading small {
+  font: inherit;
+}
+
+.tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tile {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+  border: 2px solid rgba(120, 53, 15, 0.58);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.56),
+    rgba(146, 64, 14, 0.18) 0 8px 16px;
+  color: #111827;
+  display: inline-grid;
+  font-size: clamp(20px, 4.5vw, 26px);
+  font-weight: 800;
+  line-height: 1;
+  min-height: 52px;
+  min-width: 52px;
+  padding: 8px 12px;
+  place-items: center;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.58);
+  touch-action: none;
+  user-select: none;
+}
+
+.tile-row .tile {
+  animation: tile-drop 360ms cubic-bezier(0.18, 0.9, 0.24, 1.28);
+}
+
+button.tile {
+  padding: 10px 18px;
+}
+
+.bank-tile {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.56),
+    rgba(245, 158, 11, 0.28) 0 10px 20px;
+  transition:
+    opacity 120ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.bank-tile:hover {
+  box-shadow: rgba(245, 158, 11, 0.38) 0 16px 28px;
+  transform: translateY(-2px) rotate(-1deg);
+}
+
+.dragging-source {
+  opacity: 0.32;
+}
+
+.bank-item {
+  flex-wrap: wrap;
+}
+
+.bank-item button:not(.tile) {
+  flex: 1 1 160px;
+}
+
+.bank-item .tile {
+  flex: 0 0 auto;
+}
+
+.drag-preview {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.56),
+    rgba(15, 23, 42, 0.28) 0 22px 40px;
+  pointer-events: none;
+  position: fixed;
+  z-index: 100;
+  animation: lift-tile 140ms ease both;
+  will-change: left, top;
+}
+
+.tile.unknown {
+  background: linear-gradient(180deg, #93c5fd 0%, #60a5fa 100%);
+  border-color: rgba(30, 64, 175, 0.58);
+  color: #0f172a;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.54),
+    rgba(37, 99, 235, 0.22) 0 8px 16px;
+}
+
+.item-bank {
+  background: var(--surface-strong);
+  border-radius: 20px;
+  margin: 18px 0;
+  padding: 14px;
+  transition:
+    box-shadow 160ms ease,
+    outline-color 160ms ease;
+}
+
+/* The tray doubles as a drop zone: dragging a weight over it highlights the tray so the
+   learner can drop a misplaced block back here. Uses outline (not border) to avoid layout
+   shift, so it works for both the standard and physical layouts. */
+.item-bank.drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 4px rgba(37, 99, 235, 0.12),
+    rgba(37, 99, 235, 0.18) 0 16px 30px;
+}
+
+.tray-empty {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+/* Unlocked weights sitting on a pan can be picked back up and re-dragged. */
+.movable-tile {
+  cursor: grab;
+}
+
+.movable-tile:active,
+.movable-tile.dragging-source {
+  cursor: grabbing;
+}
+
+.change-note {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 18px;
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 12px 0 0;
+  padding: 12px 14px;
+}
+

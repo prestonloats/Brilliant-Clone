@@ -14,7 +14,9 @@
   "include": [
     "src/domain.ts",
     "src/engine.ts",
+    "src/engine/**/*.ts",
     "src/backend.ts",
+    "src/backend/**/*.ts",
     "src/authValidation.ts",
     "src/firebaseConfigCore.ts",
     "src/firebaseBackendCore.ts",

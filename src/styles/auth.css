@@ -1,0 +1,24 @@
+.form-stack,
+.path-list,
+.mastery-grid {
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  color: var(--text-h);
+  display: grid;
+  font-weight: 700;
+  gap: 8px;
+  text-align: left;
+}
+
+input {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text-h);
+  min-height: 48px;
+  padding: 8px 14px;
+}
+

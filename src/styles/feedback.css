@@ -1,0 +1,100 @@
+.feedback {
+  border-radius: 18px;
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 14px;
+}
+
+/* Success gets a gentle pop, errors get a small shake so the two outcomes feel distinct
+   even before the copy is read. Both are transform/opacity only for GPU-friendliness. */
+.feedback.good {
+  background: #dcfce7;
+  border: 1px solid rgba(20, 83, 45, 0.22);
+  color: #14532d;
+  animation: feedback-pop 360ms cubic-bezier(0.2, 0.8, 0.2, 1.25) both;
+}
+
+.feedback.bad {
+  background: #fee2e2;
+  border: 1px solid rgba(127, 29, 29, 0.22);
+  color: #7f1d1d;
+  animation: feedback-shake 440ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes feedback-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  60% {
+    transform: scale(1.02) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes feedback-shake {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  12% {
+    opacity: 1;
+  }
+  25% {
+    transform: translateX(-7px);
+  }
+  45% {
+    transform: translateX(6px);
+  }
+  65% {
+    transform: translateX(-3px);
+  }
+  85% {
+    transform: translateX(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.feedback small {
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.feedback strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.retry-prompt {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  color: var(--text-h);
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 12px 14px;
+}
+
+.retry-prompt button {
+  background: white;
+  color: var(--accent-strong);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.continue-step {
+  margin-top: 12px;
+}
+

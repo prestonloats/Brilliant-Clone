@@ -1,0 +1,529 @@
+.path-overview {
+  gap: 12px;
+  margin: 22px 0 0;
+}
+
+.overview-stat {
+  background: var(--surface-strong);
+  border-radius: 22px;
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  text-align: left;
+}
+
+.overview-stat span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.overview-stat strong {
+  color: var(--text-h);
+  font-size: clamp(18px, 3vw, 24px);
+  line-height: 1.15;
+}
+
+.overview-stat small {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.continue-panel {
+  background: var(--surface-strong);
+  border-radius: 22px;
+  gap: 14px;
+  justify-content: space-between;
+  margin: 12px 0 22px;
+  padding: 16px;
+}
+
+.continue-panel div {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.continue-actions {
+  justify-items: end;
+}
+
+.continue-panel span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.continue-panel small,
+.score-line {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.continue-panel strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.review-note {
+  color: #9a3412;
+  font-size: 14px;
+  font-weight: 700;
+  margin: -8px 0 16px;
+}
+
+.continue-panel .primary-action {
+  max-width: 190px;
+}
+
+.secondary-inline {
+  background: white;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.progress-block {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  justify-content: space-between;
+}
+
+.progress-track {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.progress-track span {
+  background: linear-gradient(90deg, var(--accent), #22c55e);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: width;
+}
+
+.path-node {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto 1fr auto;
+  padding: 18px;
+  text-align: left;
+}
+
+.path-node.completed {
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.path-node.review {
+  border-color: rgba(154, 52, 18, 0.34);
+}
+
+.path-node.review .node-number {
+  background: #f97316;
+}
+
+.path-node.review .status-pill {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.path-node h2,
+.mastery-card h2 {
+  font-size: clamp(17px, 2vw, 19px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  margin: 0 0 6px;
+}
+
+.path-node p,
+.mastery-card p {
+  color: var(--text);
+  margin: 0;
+}
+
+.path-node .score-line {
+  margin-top: 8px;
+}
+
+.path-actions {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.path-actions button {
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.node-number,
+.status-pill {
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.node-number {
+  background: var(--accent);
+  color: white;
+  display: grid;
+  height: 42px;
+  place-items: center;
+  width: 42px;
+}
+
+.status-pill {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.coming-soon,
+.locked {
+  opacity: 0.72;
+}
+
+.path-graph-section {
+  display: grid;
+  gap: 14px;
+}
+
+.path-graph-head {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.path-graph-head h2 {
+  font-size: clamp(20px, 3vw, 26px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.path-graph-sub {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 640px;
+}
+
+.path-graph {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0 auto;
+  max-width: 620px;
+  padding: 0;
+  width: 100%;
+}
+
+.path-stage {
+  display: grid;
+  gap: 0;
+}
+
+.stage-nodes {
+  display: grid;
+  gap: 14px;
+}
+
+.path-stage.is-branch .stage-nodes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stage-connector {
+  align-items: center;
+  display: grid;
+  height: 44px;
+  justify-items: center;
+  position: relative;
+}
+
+.connector-line {
+  background: linear-gradient(180deg, var(--accent), rgba(37, 99, 235, 0.28));
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+  width: 3px;
+  transform-origin: top center;
+  animation: connector-grow 520ms ease both;
+  animation-delay: 200ms;
+}
+
+@keyframes connector-grow {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.connector-art {
+  display: block;
+  height: 44px;
+  width: 100%;
+}
+
+.connector-art path {
+  fill: none;
+  opacity: 0.55;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: connector-draw 760ms ease forwards;
+  animation-delay: 240ms;
+}
+
+/* Paths carry pathLength="1", so a single dashoffset value draws the whole branch. */
+@keyframes connector-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.connector-label {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  left: 50%;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+  position: absolute;
+  text-transform: uppercase;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.graph-node {
+  align-content: start;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  padding: 16px;
+  position: relative;
+  animation: node-rise 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes node-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Stagger node entrances stage by stage as the path builds downward. Branch stages hold
+   two nodes side by side, so the second node in a row gets a small extra offset. */
+.path-stage:nth-of-type(1) .graph-node {
+  animation-delay: 60ms;
+}
+.path-stage:nth-of-type(2) .graph-node {
+  animation-delay: 150ms;
+}
+.path-stage:nth-of-type(3) .graph-node {
+  animation-delay: 240ms;
+}
+.path-stage:nth-of-type(4) .graph-node {
+  animation-delay: 330ms;
+}
+.path-stage:nth-of-type(5) .graph-node {
+  animation-delay: 420ms;
+}
+.path-stage:nth-of-type(6) .graph-node {
+  animation-delay: 510ms;
+}
+.stage-nodes .graph-node:nth-child(2) {
+  animation-delay: 600ms;
+}
+
+.graph-node.is-recommended {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+/* A soft "breathing" ring draws the eye to the recommended lesson. The ring rests fully
+   visible (so reduced-motion users still get the highlight) and only the pulse animates. */
+.graph-node.is-recommended::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.55);
+  opacity: 0.85;
+  pointer-events: none;
+  animation: node-breathe 2600ms ease-in-out infinite;
+}
+
+@keyframes node-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 4px rgba(37, 99, 235, 0.22),
+      0 12px 26px rgba(37, 99, 235, 0.18);
+  }
+}
+
+/* The recommended lesson's main action becomes a filled accent CTA so the next step reads
+   as primary, while its sibling (Retake, when present) stays a quiet secondary. */
+.graph-node.is-recommended .graph-node-actions button:first-child {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+}
+
+.graph-node.is-recommended .graph-node-actions button:first-child:hover {
+  background: var(--accent-strong);
+}
+
+/* A completed lesson's number badge gives a small celebratory pop as it enters. */
+.graph-node.completed .node-number {
+  animation: node-complete-pop 560ms cubic-bezier(0.2, 0.8, 0.2, 1.35) both;
+  animation-delay: 240ms;
+}
+
+@keyframes node-complete-pop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.graph-node-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.graph-node-titles {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.graph-node-titles h3 {
+  font-size: clamp(16px, 2vw, 19px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.graph-node .status-pill {
+  width: fit-content;
+}
+
+.graph-node-desc {
+  color: var(--text);
+  margin: 0;
+}
+
+.node-deps {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.node-deps-branch {
+  color: var(--accent-strong);
+}
+
+.dep-tag {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--text-h);
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  text-transform: uppercase;
+}
+
+.node-deps-branch .dep-tag {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.graph-node-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.graph-node-actions button {
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 8px 16px;
+}
+
+.locked-hint {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+

@@ -1,0 +1,279 @@
+.lesson-shell {
+  max-width: 820px;
+}
+
+.lesson-shell.physical-lesson-shell {
+  max-width: 980px;
+}
+
+.back-button {
+  justify-self: start;
+}
+
+.lesson-card {
+  text-align: left;
+  animation: card-enter 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.physical-balance-card {
+  max-width: 900px;
+}
+
+.lesson-card h1 {
+  font-size: clamp(28px, 5.5vw, 42px);
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  margin-bottom: 16px;
+}
+
+/* "Build it" (manipulative) and "Drag it" (slider) steps carry long, multi-sentence
+   instructions in their prompt heading, so scale them down a step and loosen the
+   line-height. Stays clearly above the goal-note text and readable at 375px. */
+.lesson-card h1.build-prompt {
+  font-size: clamp(20px, 4vw, 28px);
+  line-height: 1.25;
+}
+
+.option-grid,
+.operation-grid {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.option-grid button,
+.operation-grid button {
+  background: var(--surface-strong);
+  color: var(--text-h);
+  display: flex;
+  font-size: 15px;
+  gap: 10px;
+  justify-content: space-between;
+  font-weight: 700;
+  text-align: left;
+}
+
+.option-grid .selected-option,
+.operation-grid .selected-option {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+.option-state {
+  align-self: center;
+  background: var(--accent);
+  color: white;
+  flex: 0 0 auto;
+}
+
+.prediction-visual {
+  align-items: center;
+  background: linear-gradient(180deg, #eff6ff, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr auto 1fr;
+  margin: 18px 0;
+  padding: 14px;
+}
+
+.prediction-operation {
+  background: white;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.predict-scale-card {
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  text-align: center;
+}
+
+.predict-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.predict-mini-scale {
+  display: grid;
+  min-height: 76px;
+  place-items: center;
+  position: relative;
+}
+
+.predict-mini-scale i {
+  background: #1f2937;
+  border-radius: 999px 999px 0 0;
+  bottom: 8px;
+  display: block;
+  height: 42px;
+  opacity: 0.24;
+  position: absolute;
+  width: 8px;
+}
+
+.predict-beam {
+  align-items: center;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: 1fr 1fr;
+  position: relative;
+  transform-origin: center;
+  transition: transform 240ms ease;
+  width: min(100%, 210px);
+  z-index: 1;
+}
+
+.predict-beam::before {
+  background: #1f2937;
+  border-radius: 999px;
+  content: '';
+  height: 7px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: -1;
+}
+
+.predict-scale-card.left-heavy .predict-beam {
+  transform: rotate(-8deg);
+}
+
+.predict-beam span {
+  background: #fbbf24;
+  border: 2px solid rgba(120, 53, 15, 0.52);
+  border-radius: 14px;
+  color: #111827;
+  font-size: clamp(15px, 3.5vw, 20px);
+  font-weight: 800;
+  padding: 8px;
+}
+
+.predict-scale-card strong {
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.puzzle-equation {
+  background: linear-gradient(180deg, #eff6ff, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  color: var(--text-h);
+  font-size: clamp(26px, 7vw, 42px);
+  font-weight: 800;
+  margin: 18px 0;
+  padding: 22px;
+  text-align: center;
+}
+
+.puzzle-grid button span:first-child,
+.sequence-bank button {
+  display: grid;
+  gap: 4px;
+}
+
+.puzzle-grid button strong,
+.sequence-bank button strong {
+  font: inherit;
+}
+
+.puzzle-grid button small,
+.sequence-bank button small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sequence-board {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.sequence-slots,
+.sequence-bank {
+  display: grid;
+  gap: 10px;
+}
+
+.sequence-slots {
+  background: linear-gradient(180deg, #eef6ff, #f8fafc);
+  border: 1px dashed rgba(37, 99, 235, 0.38);
+  border-radius: 22px;
+  min-height: 86px;
+  padding: 14px;
+}
+
+.sequence-slots button,
+.sequence-bank button {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  color: var(--text-h);
+  display: flex;
+  font-weight: 800;
+  gap: 10px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.sequence-bank {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sequence-bank button {
+  align-items: start;
+}
+
+.sequence-number {
+  background: var(--accent);
+  border-radius: 999px;
+  color: white;
+  display: inline-grid;
+  flex: 0 0 auto;
+  font-size: 13px;
+  height: 28px;
+  place-items: center;
+  width: 28px;
+}
+
+.empty-slot {
+  align-self: center;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 18px;
+  text-align: center;
+}
+
+.answer-field {
+  margin-bottom: 14px;
+}
+

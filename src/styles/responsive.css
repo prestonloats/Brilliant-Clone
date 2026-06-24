@@ -1,0 +1,183 @@
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 12px;
+  }
+
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topbar nav {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .continue-panel,
+  .path-overview,
+  .path-node {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .path-actions {
+    align-items: start;
+    justify-items: start;
+  }
+
+  .continue-panel {
+    flex-direction: column;
+  }
+
+  .path-overview {
+    flex-direction: column;
+  }
+
+  .continue-panel .primary-action {
+    max-width: none;
+  }
+
+  .continue-actions {
+    justify-items: stretch;
+  }
+
+  .retry-prompt {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .prediction-visual,
+  .equation-row,
+  .pan-grid,
+  .operation-grid,
+  .sequence-bank,
+  .mastery-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-symbol {
+    justify-self: center;
+  }
+
+  .prediction-operation {
+    white-space: normal;
+  }
+
+  .physical-scale-stage {
+    padding: 14px;
+  }
+
+  .physical-scale {
+    min-height: 360px;
+    overflow: hidden;
+  }
+
+  .physical-beam {
+    height: 300px;
+    top: 66px;
+    width: min(100%, 620px);
+  }
+
+  .physical-beam-line {
+    left: 3%;
+    right: 3%;
+  }
+
+  .physical-pan {
+    grid-template-rows: 58px 1fr;
+    min-height: 182px;
+    width: min(42vw, 170px);
+  }
+
+  .physical-pan-surface {
+    border-radius: 22px 22px 40px 40px;
+    min-height: 124px;
+    padding: 9px;
+  }
+
+  .physical-tile-row .tile {
+    font-size: clamp(18px, 6vw, 24px);
+    min-height: 50px;
+    min-width: 50px;
+    padding: 7px 10px;
+  }
+
+  .status-pill {
+    width: fit-content;
+  }
+
+  .path-stage.is-branch .stage-nodes {
+    grid-template-columns: 1fr;
+  }
+
+  .connector-split .connector-art,
+  .connector-merge .connector-art {
+    display: none;
+  }
+
+  .connector-split,
+  .connector-merge {
+    height: 30px;
+  }
+
+  .connector-split::after,
+  .connector-merge::after {
+    background: linear-gradient(180deg, var(--accent), rgba(37, 99, 235, 0.3));
+    border-radius: 999px;
+    content: '';
+    height: 100%;
+    width: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .pan.drop-target,
+  .physical-pan.drop-target {
+    transform: none;
+  }
+
+  .level-scale g,
+  .tile-row .tile,
+  .physical-tile-row .tile,
+  .pan-bounce,
+  .drag-preview,
+  .feedback {
+    animation: none !important;
+  }
+
+  /* Force every entrance animation that starts hidden to its final visible resting state so
+     nothing is left invisible when motion is disabled. */
+  .lesson-card,
+  .graph-node,
+  .graph-node.completed .node-number,
+  .graph-node.is-recommended::after,
+  .complete-card > *,
+  .object-chip.placed,
+  .term-tile.placed,
+  .connector-line,
+  .feedback,
+  .feedback.good,
+  .feedback.bad {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* The connector paths hide themselves via a dash offset in their base rule, so disabling
+     the draw animation alone would leave them blank. Snap them fully drawn instead. */
+  .connector-art path {
+    stroke-dashoffset: 0 !important;
+  }
+
+  /* Skip the celebratory confetti entirely under reduced motion. */
+  .score-celebrate {
+    display: none !important;
+  }
+}

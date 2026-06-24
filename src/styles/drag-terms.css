@@ -1,0 +1,252 @@
+/* Labeled term-tile sorting (dragTerms step). */
+.drag-terms-card {
+  text-align: left;
+}
+
+.drag-terms-equation {
+  background: var(--surface-strong);
+  border-radius: 14px;
+  color: var(--accent-strong);
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  margin: 0 0 12px;
+  padding: 10px 16px;
+  text-align: center;
+}
+
+.drag-terms-goal {
+  color: var(--muted);
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.drag-terms-stage {
+  display: grid;
+  gap: 14px;
+  margin: 8px 0 12px;
+}
+
+.term-tray {
+  background: linear-gradient(180deg, #fff7ed, #fffbeb);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 22px;
+  padding: 14px;
+}
+
+.term-tray-head {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.term-tile-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 56px;
+}
+
+.term-tile {
+  align-items: center;
+  background: linear-gradient(180deg, #bfdbfe 0%, #60a5fa 100%);
+  border: 2px solid rgba(30, 64, 175, 0.55);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    rgba(37, 99, 235, 0.18) 0 8px 16px;
+  color: #0f172a;
+  cursor: grab;
+  display: inline-flex;
+  font-size: clamp(17px, 3.6vw, 21px);
+  font-weight: 800;
+  justify-content: center;
+  line-height: 1;
+  min-height: 48px;
+  min-width: 52px;
+  padding: 8px 14px;
+  touch-action: none;
+  user-select: none;
+}
+
+.term-tile:focus-visible {
+  outline: 3px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.term-tile.is-selected {
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 100%);
+  border-color: rgba(120, 53, 15, 0.6);
+  box-shadow:
+    0 0 0 3px rgba(245, 158, 11, 0.32),
+    rgba(146, 64, 14, 0.2) 0 8px 16px;
+}
+
+.term-tile.placed {
+  animation: chip-pop 320ms cubic-bezier(0.2, 0.8, 0.2, 1.4) both;
+}
+
+.term-tile:disabled {
+  cursor: default;
+}
+
+.term-bins {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.term-bin {
+  background: rgba(255, 255, 255, 0.8);
+  border: 2px dashed rgba(37, 99, 235, 0.32);
+  border-radius: 18px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.term-bin.drop-target {
+  background: rgba(219, 234, 254, 0.96);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  transform: translateY(-2px);
+}
+
+.term-bin.bin-bounce {
+  animation: pan-bounce 420ms cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+
+.term-bin.is-correct {
+  background: rgba(220, 252, 231, 0.85);
+  border-color: rgba(22, 163, 74, 0.55);
+  border-style: solid;
+  animation: zone-correct 620ms ease;
+}
+
+.term-bin-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  justify-content: space-between;
+}
+
+.bin-label {
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.bin-detail {
+  color: var(--muted);
+  flex-basis: 100%;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bin-count {
+  color: var(--accent-strong);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  margin-left: auto;
+}
+
+.term-bin-tiles {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 56px;
+}
+
+.bin-empty {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.term-bin-place {
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+  font-weight: 800;
+  min-height: 44px;
+  padding: 6px 14px;
+}
+
+.term-bin-place:disabled {
+  opacity: 0.5;
+}
+
+.drag-terms-summary {
+  color: var(--text-h);
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+@keyframes lift-tile {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tile-drop {
+  0% {
+    opacity: 0.68;
+    transform: translateY(-16px) scale(0.9);
+  }
+  70% {
+    transform: translateY(3px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pan-bounce {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes scale-settle {
+  0% {
+    transform: rotate(-1.5deg);
+  }
+  45% {
+    transform: rotate(1deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

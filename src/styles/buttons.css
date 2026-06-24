@@ -1,0 +1,140 @@
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.36);
+  outline-offset: 3px;
+}
+
+/* Filled accent buttons sit on a saturated blue, so the translucent default ring nearly
+   disappears. Give them a white inset edge plus a solid dark-navy ring for strong contrast
+   against both the button and the page behind it. */
+.primary-action:focus-visible,
+.auth-tabs .active:focus-visible,
+.graph-node.is-recommended .graph-node-actions button:first-child:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: -5px;
+  box-shadow:
+    0 0 0 3px var(--accent-strong),
+    0 0 0 6px rgba(37, 99, 235, 0.4);
+}
+
+.primary-action,
+.secondary-action,
+.operation-grid button,
+.option-grid button {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.primary-action:hover,
+.secondary-action:hover,
+.operation-grid button:hover,
+.option-grid button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-action {
+  background: var(--accent);
+  color: white;
+  font-weight: 800;
+  width: 100%;
+}
+
+.secondary-action {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.topbar button,
+.auth-tabs button,
+.bank-item button:not(.tile) {
+  background: var(--surface);
+  color: var(--text-h);
+}
+
+.topbar nav .nav-active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1.5px rgba(37, 99, 235, 0.4);
+}
+
+.auth-tabs {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  margin-bottom: 18px;
+  padding: 5px;
+}
+
+.auth-tabs button {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  justify-content: center;
+}
+
+.auth-tabs .active {
+  background: var(--text-h);
+  color: var(--bg);
+}
+
+.tab-state,
+.option-state {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.tab-state {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.auth-switch {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 16px;
+  text-align: center;
+}
+
+.link-button {
+  background: none;
+  color: var(--accent-strong);
+  font-weight: 700;
+  min-height: auto;
+  padding: 0 2px;
+  text-decoration: underline;
+}
+
+.fine-print code {
+  background: var(--surface-strong);
+  border-radius: 6px;
+  font-size: 0.92em;
+  padding: 1px 6px;
+}
+
