@@ -31,6 +31,11 @@ export function MathText({ children, display = false, className, ariaLabel }: Ma
         throwOnError: false,
         displayMode: display,
         output: 'html',
+        // Defense-in-depth: keep KaTeX's safe default explicit so commands that can
+        // emit active markup (\href, \url, \includegraphics, \htmlData, ...) are never
+        // honored, even if a future KaTeX default changes or authored/user-derived
+        // notation ever reaches this renderer.
+        trust: false,
       })
     } catch {
       target.textContent = children
