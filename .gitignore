@@ -16,10 +16,10 @@ dist-ssr
 # Environment files
 .env
 .env.*
-!.env.example
 *.env
 *.env.*
 .envrc
+!.env.example
 
 # Secret-bearing local files
 *.key
