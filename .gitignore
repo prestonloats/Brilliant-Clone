@@ -17,6 +17,39 @@ dist-ssr
 .env
 .env.*
 !.env.example
+*.env
+*.env.*
+.envrc
+
+# Secret-bearing local files
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.ppk
+id_dsa
+id_ecdsa
+id_ed25519
+id_rsa
+passwords.*
+*.password
+*.password.*
+secrets.*
+*.secret
+*.secret.*
+tokens.*
+*.token
+*.token.*
+credentials.*
+*.credential
+*.credential.*
+*apikey*
+*api-key*
+*api_key*
+service-account*.json
+*service-account*.json
+firebase-adminsdk*.json
 
 # Editor directories and files
 .vscode/*
