@@ -32,6 +32,10 @@ are deferred. The **second** notable gap is documentation drift: lessons 4–6 a
 unbuilt "shells" but are in fact fully authored, and the docs describe an "EWMA" mastery model that
 the code does not implement.
 
+There is also one concrete functional/accessibility **bug**: the flagship drag-to-place step has
+**no keyboard or tap fallback**, so it can only be completed with a pointer-drag gesture (see §6,
+issue 1).
+
 | Area | Status |
 | --- | --- |
 | Build (`npm run build`) | Passing — `tsc -b && vite build`; JS 279.73 kB (84.20 kB gzip), CSS 20.48 kB (5.15 kB gzip) |
@@ -149,7 +153,7 @@ A condensed map of PRD requirements to current reality. ✅ done · 🟡 partial
 | R28 | Surface review on repeated misses | ✅ | `review-suggested`/recommendation at mastery `< 0.65` (`MASTERY_READY_THRESHOLD`). |
 | R29 | Per-attempt signals (id, correct, attempts, time) | ✅ | `AttemptEvent` recorded with `msToAnswer`. |
 | N1/N3/N4 | Fast first interaction; 60 FPS; prefetched steps | 🟡 | Bundle is small (no code-splitting yet); content is bundled so steps advance instantly; 60 FPS of the balance drag is unmeasured. |
-| N7/N8 | Mobile/touch, large targets, reduced-motion, non-color feedback | ✅ | Pointer events, tap fallbacks for drag, `prefers-reduced-motion` reset, text (not color-only) feedback. |
+| N7/N8 | Mobile/touch, large targets, reduced-motion, non-color feedback | 🟡 | Pointer drag, `prefers-reduced-motion` reset, and text (not color-only) feedback are present, **but the one drag-to-place step has no keyboard/tap fallback** (see §6, issue 1). |
 | N9/N13 | Public deploy holding up under concurrency | ❌ | Not deployed; client-side checking makes this cheap once hosted. |
 | N11/N12 | Per-user security rules; HTTPS; hashed creds | 🟡 | `firestore.rules` are written and sound, but **not in effect** because Firebase isn't wired; local demo is explicitly not a security boundary. |
 
@@ -157,50 +161,66 @@ A condensed map of PRD requirements to current reality. ✅ done · 🟡 partial
 
 ## 6. Current Issues (concrete, present today)
 
-1. **Documentation drift: lessons 4–6 are described as "shells" but are fully built.**
+1. **Bug (functional + accessibility): the flagship drag step has no keyboard or tap fallback.**
+   The only drag-to-place step in the course — `drag-to-level` in Balancing Equations
+   (`domain.ts` ~line 324: `layout: 'physical-drag'` with a one-item `bank`) — renders its bank tile
+   with `onPointerDown` only (`App.tsx` ~line 1342). The tap-fallback buttons ("Place … on left/right
+   pan", which call `quickDrop`) are gated `{!isPhysicalDrag && …}` (`App.tsx` ~line 1346), so they
+   are **not** rendered for this step. Because a `<button>` activated by keyboard fires a `click`
+   (not a `pointerdown`) event, keyboard-only users — and any user who taps without performing a drag
+   gesture — **cannot complete the step**. This (a) breaks keyboard operability for the product's
+   signature interaction, and (b) directly contradicts `PHASE1_QA_CHECKLIST.md` (~line 70), which
+   asserts "balance tile placement can be completed without pointer dragging by using the Left and
+   Right buttons." As a corollary, the `quickDrop` tap-fallback path is effectively **dead code**:
+   the only step that has a `bank` is the physical-drag step that gates those buttons out, so they
+   never render anywhere. (Touch users can still drag; this is specifically a keyboard / no-drag
+   gap.)
+
+2. **Documentation drift: lessons 4–6 are described as "shells" but are fully built.**
    `README.md` (lines ~3, 29–30, 92) and `PHASE1_QA_CHECKLIST.md` (lines ~53–54, 83) describe Like
    Terms, Coordinate Plane, and Graphing Lines as "lightweight content shells" and list "fill the
    Lesson 4–6 shells" as a *next priority*. In reality all six lessons in `domain.ts` have complete
    interactive step arrays and pass the catalog test. The docs understate the project's actual
    progress and should be updated.
 
-2. **Mastery model mismatch (docs vs. implementation).** `BACKEND_ADAPTERS.md` (line 14) says
+3. **Mastery model mismatch (docs vs. implementation).** `BACKEND_ADAPTERS.md` (line 14) says
    "per-skill EWMA score" and the PRD suggests an EWMA, but `backend.ts` `updateSkillMastery` stores
    a plain cumulative ratio `score = correct / attempts` (line ~387). Consequences: early attempts
    count forever (no recency weighting/decay), so a learner who improves stays penalized, and the
    model can't support the Phase-3 decay/spaced-repetition plan without change.
 
-3. **Skill attribution is coarse.** On each assessed step, `App.tsx` (lines ~147–148) updates
+4. **Skill attribution is coarse.** On each assessed step, `App.tsx` (lines ~147–148) updates
    mastery for **every** `skillId` of the active lesson with the same correct/incorrect signal,
    regardless of which skill the step actually exercises. For multi-skill lessons (e.g. Balancing
    Equations → `equality` + `inverse-operations`; Like Terms → `like-terms` +
    `variables-on-both-sides`) the two skills' scores are always identical, making per-skill mastery
    less meaningful than it appears.
 
-4. **MCQ logic lives in the view and is untested.** Unlike every other step type, there is no
+5. **MCQ logic lives in the view and is untested.** Unlike every other step type, there is no
    `checkMcqStep` in `engine.ts`; the MCQ correctness + escalation logic is duplicated inline in
    `MultipleChoiceStep` in `App.tsx` (lines ~778, 797–814) and has no unit test. This is an
    inconsistency and a small correctness risk (the escalation rules are re-implemented by hand).
 
-5. **Dead `status` field + dead "coming-soon" path.** `CourseLessonNode.status`
+6. **Dead `status` field + dead "coming-soon" path.** `CourseLessonNode.status`
    (`'available' | 'locked' | 'coming-soon'`) in `domain.ts` (line ~161, set per-lesson in
    `algebraCourse`) is never read by the UI; `App.tsx` computes status itself and treats a lesson as
    "coming soon" only when `steps.length === 0` (line ~518), which never happens now. The
    `.coming-soon` styling and the `comingSoon` branch are effectively dead code.
 
-6. **`App.tsx` reads persistence on every render.** Functions like `getProgressByLesson`,
+7. **`App.tsx` reads persistence on every render.** Functions like `getProgressByLesson`,
    `backend.mastery.getUserMastery`, and `backend.attempts.getAttempts` run during render (lines
    ~100–101, 252) and each performs a `localStorage` read + `JSON.parse` + full normalization (and
    `getProgressByLesson` loops over all lessons). Harmless at MVP scale, but wasteful and a smell
    that will matter when the backend becomes async.
 
-7. **Unused runtime dependency footprint.** `firebase` is installed and `firebaseServices.ts`
+8. **Unused runtime dependency footprint.** `firebase` is installed and `firebaseServices.ts`
    exists, but nothing imports it at runtime yet. It's correctly tree-shaken from the bundle, but
    it's worth being explicit that the dependency is presently inert.
 
-8. **No CI and no React-layer tests.** There is no `.github/` workflow, so lint/test/build are not
+9. **No CI and no React-layer tests.** There is no `.github/` workflow, so lint/test/build are not
    enforced on push, and the React UI (`App.tsx`, including the balance drag) has no automated
-   coverage — only the manual QA checklist.
+   coverage — only the manual QA checklist. Note that issue 1 (the missing drag fallback) is exactly
+   the kind of regression an interaction test or enforced QA pass would have caught.
 
 ---
 
@@ -228,6 +248,10 @@ A condensed map of PRD requirements to current reality. ✅ done · 🟡 partial
 
 **Engineering hygiene:**
 
+- **Fix the drag-to-level keyboard/tap fallback** (issue 1): either render the `quickDrop` "Place on
+  left/right pan" buttons for the `physical-drag` step too, or add keyboard activation to the bank
+  tile. This restores keyboard operability for the signature interaction and makes the QA checklist
+  accurate.
 - Add a `checkMcqStep` to `engine.ts` and unit-test it (close the testing gap).
 - Update `README.md`, `PHASE1_QA_CHECKLIST.md`, and `BACKEND_ADAPTERS.md` to reflect that lessons
   4–6 are authored and that mastery is a cumulative ratio (not EWMA).
@@ -247,8 +271,9 @@ A condensed map of PRD requirements to current reality. ✅ done · 🟡 partial
   question about Brilliant itself).
 - **Mobile drag relies on `document.elementFromPoint`.** The balance drag detects the drop pan via
   point hit-testing. This is generally fine with Pointer Events + pointer capture, but is worth
-  explicit testing on real iOS/Android Safari/Chrome and with assistive tech; the keyboard/tap
-  fallback mitigates the worst case.
+  explicit testing on real iOS/Android Safari/Chrome and with assistive tech. Note there is
+  currently **no** working keyboard/tap fallback for this step (issue 1), so pointer behavior is the
+  only path until that is fixed.
 - **Single-file growth.** `App.tsx` (~1.8k lines) and `domain.ts` (~1.7k of mostly inline content)
   are becoming monolithic. As lessons grow, this hurts navigability, review, and reuse.
 - **Content scaling strategy.** All content is bundled in `domain.ts`. The PRD anticipates moving to
@@ -269,21 +294,25 @@ A condensed map of PRD requirements to current reality. ✅ done · 🟡 partial
 2. Deploy to Firebase Hosting and verify rules + a concurrency smoke test.
 
 **P1 — close the product-thesis gap and tighten quality**
-3. Build the real interactive visuals for Coordinate Plane (grid) and Graphing Lines (sliders +
+3. **Fix the drag-to-level keyboard/tap fallback** (issue 1) — restore the `quickDrop` buttons (or
+   add keyboard activation) for the `physical-drag` step so the flagship interaction is operable
+   without a pointer drag. This is a real accessibility defect and the highest-severity bug found.
+4. Build the real interactive visuals for Coordinate Plane (grid) and Graphing Lines (sliders +
    live line); these are the lessons most divergent from the PRD's "touch-the-idea" bar.
-4. Fix the mastery model: switch to EWMA (matching the docs) and attribute attempts to the specific
+5. Fix the mastery model: switch to EWMA (matching the docs) and attribute attempts to the specific
    skill a step exercises, not all of a lesson's skills.
-5. Move MCQ checking into `engine.ts` with tests; this also makes the renderer uniform across step
+6. Move MCQ checking into `engine.ts` with tests; this also makes the renderer uniform across step
    types.
-6. Add CI (lint + test + build) and a React error boundary.
+7. Add CI (lint + test + build) and a React error boundary.
 
 **P2 — maintainability and polish**
-7. Refactor `App.tsx` into per-screen / per-step-renderer modules and split `domain.ts` content from
+8. Refactor `App.tsx` into per-screen / per-step-renderer modules and split `domain.ts` content from
    its type definitions (e.g. a `content/` directory per lesson).
-8. Memoize backend reads in React (load once into state/context) instead of reading storage during
+9. Memoize backend reads in React (load once into state/context) instead of reading storage during
    render.
-9. Remove dead code (`CourseLessonNode.status`, `coming-soon` path) or repurpose it.
-10. Refresh `README.md`, `PHASE1_QA_CHECKLIST.md`, and `BACKEND_ADAPTERS.md` to match the current
+10. Remove dead code (`CourseLessonNode.status`, `coming-soon` path, the unreachable `quickDrop`
+    branch once issue 1 is resolved) or repurpose it.
+11. Refresh `README.md`, `PHASE1_QA_CHECKLIST.md`, and `BACKEND_ADAPTERS.md` to match the current
     six fully-authored lessons and the actual mastery model.
 
 ---
