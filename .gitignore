@@ -16,7 +16,27 @@ dist-ssr
 # Environment files
 .env
 .env.*
+.envrc
 !.env.example
+
+# Local secrets and credentials
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*.pem
+*.key
+*.p8
+*.ppk
+*.p12
+*.pfx
+*.jks
+*.keystore
+*credentials*.json
+*secrets*.json
+*passwords*.txt
+serviceAccount*.json
+firebase-adminsdk*.json
 
 # Editor directories and files
 .vscode/*
