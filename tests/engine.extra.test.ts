@@ -11,11 +11,13 @@ import {
   type LessonProgress,
   type LessonScore,
   type LessonStep,
+  type McqStep,
 } from '../src/domain'
 import {
   applyBalanceOperation,
   calculateLessonScore,
   checkInputStep,
+  checkMcqStep,
   createInitialProgress,
   getBestLessonScore,
   getCourseProgressSummary,
@@ -307,4 +309,72 @@ test('course progress summary recommends continuing an in-progress lesson', () =
   assert.equal(summary.recommendedLessonId, 'balancing-equations')
   assert.equal(summary.recommendedAction, 'continue')
   assert.equal(summary.completedLessons, 0)
+})
+
+// --- checkMcqStep: the engine checker for multiple-choice prediction steps ----------
+
+test('checkMcqStep accepts the correct option with the authored success feedback', () => {
+  const step = findStep(balancingEquationsLesson, 'predict-add-left', 'mcq')
+
+  const result = checkMcqStep(step, 'tips-left', 1)
+  assert.equal(result.correct, true)
+  assert.equal(result.feedback, step.feedback?.correct)
+  assert.equal(result.reveal, undefined)
+})
+
+test('checkMcqStep keeps each wrong option pinned to its own misconception', () => {
+  const step = findStep(balancingEquationsLesson, 'predict-add-left', 'mcq')
+
+  const staysLevel = checkMcqStep(step, 'stays-level', 1)
+  assert.equal(staysLevel.correct, false)
+  assert.equal(staysLevel.feedback, 'Not quite. The totals changed from 3 and 3 to 5 and 3, so the pans cannot stay level.')
+
+  // A different wrong option surfaces a different authored misconception, not a generic message.
+  const tipsRight = checkMcqStep(step, 'tips-right', 1)
+  assert.equal(tipsRight.correct, false)
+  assert.equal(tipsRight.feedback, 'Check the totals. The pan with only 3 is lighter than the pan with 3 + 2.')
+})
+
+test('checkMcqStep escalates a repeated miss from hint to explanation to reveal', () => {
+  const step = findStep(balancingEquationsLesson, 'predict-add-left', 'mcq')
+
+  // Attempt 1: only the chosen option's hint, no reveal yet.
+  const first = checkMcqStep(step, 'stays-level', 1)
+  assert.equal(first.reveal, undefined)
+
+  // Attempt 2: the chosen hint stays, the generic explanation layers into the reveal slot.
+  const second = checkMcqStep(step, 'stays-level', 2)
+  assert.equal(second.feedback, 'Not quite. The totals changed from 3 and 3 to 5 and 3, so the pans cannot stay level.')
+  assert.equal(second.reveal, step.feedback?.incorrect)
+
+  // Attempt 3: the exact reveal takes over while the option hint remains the headline.
+  const third = checkMcqStep(step, 'stays-level', 3)
+  assert.equal(third.feedback, 'Not quite. The totals changed from 3 and 3 to 5 and 3, so the pans cannot stay level.')
+  assert.equal(third.reveal, step.feedback?.reveal)
+})
+
+test('checkMcqStep degrades gracefully when a step omits the optional shared feedback', () => {
+  // `feedback` is optional on mcq steps; the checker must fall back to the option text
+  // and never crash or surface "undefined".
+  const minimalStep: McqStep = {
+    id: 'synthetic-mcq',
+    type: 'mcq',
+    prompt: 'Pick one',
+    correctId: 'right',
+    options: [
+      { id: 'right', label: 'Right', feedback: 'Correct option feedback.' },
+      { id: 'wrong', label: 'Wrong', feedback: 'Wrong option feedback.' },
+    ],
+  }
+
+  const correct = checkMcqStep(minimalStep, 'right', 1)
+  assert.equal(correct.correct, true)
+  assert.equal(correct.feedback, 'Correct option feedback.')
+
+  // Without a shared incorrect/reveal, every attempt keeps the option's own hint and
+  // never produces a layered reveal.
+  const wrongThird = checkMcqStep(minimalStep, 'wrong', 3)
+  assert.equal(wrongThird.correct, false)
+  assert.equal(wrongThird.feedback, 'Wrong option feedback.')
+  assert.equal(wrongThird.reveal, undefined)
 })
