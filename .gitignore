@@ -18,6 +18,37 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local secrets and credentials
+.envrc
+secrets/
+*.secret
+*.secrets
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*password*.env
+*password*.json
+*password*.txt
+*secret*.env
+*secret*.json
+*secret*.txt
+*credential*.json
+*credentials*.json
+*token*.json
+*token*.txt
+*api-key*.json
+*api-key*.txt
+service-account*.json
+*-service-account.json
+serviceAccountKey.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
