@@ -9,6 +9,7 @@ import type {
   UserProfile,
 } from './domain'
 import { lessons } from './domain'
+import { isValidEmail } from './authValidation'
 
 type LocalDatabase = {
   users: Record<string, LocalUser>
@@ -25,33 +26,64 @@ export type SignUpInput = {
   displayName: string
 }
 
+export type MaybePromise<Value> = Value | Promise<Value>
+
 export type AuthRepository = {
-  getCurrentUser(): UserProfile | null
-  signUp(input: SignUpInput): UserProfile
-  signIn(email: string, password?: string): UserProfile
-  signOut(): void
+  getCurrentUser(): MaybePromise<UserProfile | null>
+  signUp(input: SignUpInput): MaybePromise<UserProfile>
+  signIn(email: string, password?: string): MaybePromise<UserProfile>
+  signOut(): MaybePromise<void>
+  resendEmailVerification(): MaybePromise<void>
+  reloadCurrentUser(): MaybePromise<UserProfile | null>
 }
 
 export type ProgressRepository = {
-  getLessonProgress(userId: string, lessonId: LessonId): LessonProgress | null
-  saveLessonProgress(progress: LessonProgress): void
+  getLessonProgress(userId: string, lessonId: LessonId): MaybePromise<LessonProgress | null>
+  saveLessonProgress(progress: LessonProgress): MaybePromise<void>
 }
 
 export type MasteryRepository = {
-  getUserMastery(userId: string): SkillMastery[]
-  updateSkillMastery(userId: string, skillId: SkillId, correct: boolean): SkillMastery
+  getUserMastery(userId: string): MaybePromise<SkillMastery[]>
+  updateSkillMastery(userId: string, skillId: SkillId, correct: boolean): MaybePromise<SkillMastery>
 }
 
 export type AttemptRepository = {
-  recordAttempt(event: AttemptEvent): void
-  getAttempts(userId: string): AttemptEvent[]
+  recordAttempt(event: AttemptEvent): MaybePromise<void>
+  getAttempts(userId: string): MaybePromise<AttemptEvent[]>
 }
 
+export type BackendProvider = 'local' | 'firebase'
+
 export type Backend = {
+  readonly provider: BackendProvider
   auth: AuthRepository
   progress: ProgressRepository
   mastery: MasteryRepository
   attempts: AttemptRepository
+}
+
+type LocalAuthRepository = {
+  getCurrentUser(): UserProfile | null
+  signUp(input: SignUpInput): UserProfile
+  signIn(email: string): UserProfile
+  signOut(): void
+  resendEmailVerification(): void
+  reloadCurrentUser(): UserProfile | null
+}
+
+type LocalProgressRepository = {
+  getLessonProgress(userId: string, lessonId: LessonId): LessonProgress | null
+  saveLessonProgress(progress: LessonProgress): void
+}
+
+type LocalMasteryRepository = {
+  getUserMastery(userId: string): SkillMastery[]
+  updateSkillMastery(userId: string, skillId: SkillId, correct: boolean): SkillMastery
+}
+
+type LocalAttemptRepository = {
+  recordAttempt(event: AttemptEvent): void
+  getAttempts(userId: string): AttemptEvent[]
 }
 
 const STORAGE_KEY = 'balance-local-backend-v1'
@@ -71,8 +103,6 @@ const isString = (value: unknown): value is string => typeof value === 'string'
 
 const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value)
-
-const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 const isLessonId = (value: unknown): value is LessonId =>
   isString(value) && value in lessons
@@ -123,7 +153,7 @@ const normalizeRecord = <Value>(
   }, {})
 }
 
-const normalizeLocalUser = (value: unknown): LocalUser | null => {
+export const normalizeUserProfile = (value: unknown): UserProfile | null => {
   if (!isRecord(value)) return null
 
   if (
@@ -141,9 +171,12 @@ const normalizeLocalUser = (value: unknown): LocalUser | null => {
     email: value.email,
     displayName: value.displayName,
     ...(value.avatarUrl ? { avatarUrl: value.avatarUrl } : {}),
+    ...(typeof value.emailVerified === 'boolean' ? { emailVerified: value.emailVerified } : {}),
     createdAt: value.createdAt,
   }
 }
+
+const normalizeLocalUser = normalizeUserProfile
 
 const normalizeUserRecord = (value: unknown): Record<string, LocalUser> => {
   if (!isRecord(value)) return {}
@@ -175,7 +208,7 @@ const normalizeStepResults = (
   }, {})
 }
 
-const normalizeLessonProgress = (value: unknown): LessonProgress | null => {
+export const normalizeLessonProgress = (value: unknown): LessonProgress | null => {
   if (!isRecord(value)) return null
   if (!isString(value.userId) || !isLessonId(value.lessonId)) return null
   if (
@@ -223,7 +256,7 @@ const normalizeLessonProgressRecord = (value: unknown): Record<string, LessonPro
   }, {})
 }
 
-const isSkillMastery = (value: unknown): value is SkillMastery => {
+export const isSkillMastery = (value: unknown): value is SkillMastery => {
   if (!isRecord(value)) return false
 
   return (
@@ -236,7 +269,7 @@ const isSkillMastery = (value: unknown): value is SkillMastery => {
   )
 }
 
-const isAttemptEvent = (value: unknown): value is AttemptEvent => {
+export const isAttemptEvent = (value: unknown): value is AttemptEvent => {
   if (!isRecord(value)) return false
 
   return (
@@ -262,14 +295,14 @@ const normalizeDatabase = (value: unknown): LocalDatabase => {
   }
 }
 
-const validateSignUpInput = (input: SignUpInput) => {
+export const validateSignUpInput = (input: SignUpInput) => {
   const email = input.email.trim().toLowerCase()
   const displayName = input.displayName.trim()
 
   if (!email) {
     throw new Error('Email is required.')
   }
-  if (!isEmail(email)) {
+  if (!isValidEmail(email)) {
     throw new Error('Enter a valid email address.')
   }
   if (!displayName) {
@@ -288,15 +321,19 @@ const toPublicUser = (user: LocalUser): UserProfile => {
     email: user.email,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
+    // Local demo accounts have no email-ownership step, so they are always treated as
+    // verified. This keeps local mode writes ungated regardless of legacy stored records.
+    emailVerified: true,
     createdAt: user.createdAt,
   }
 }
 
 export class LocalBackend implements Backend {
-  auth: AuthRepository
-  progress: ProgressRepository
-  mastery: MasteryRepository
-  attempts: AttemptRepository
+  readonly provider = 'local'
+  auth: LocalAuthRepository
+  progress: LocalProgressRepository
+  mastery: LocalMasteryRepository
+  attempts: LocalAttemptRepository
 
   constructor() {
     this.auth = {
@@ -343,6 +380,10 @@ export class LocalBackend implements Backend {
         this.clearCurrentUserId()
         this.write(this.read())
       },
+      resendEmailVerification: () => {
+        // Local demo accounts have no email to verify, so this is intentionally a no-op.
+      },
+      reloadCurrentUser: () => this.auth.getCurrentUser(),
     }
 
     this.progress = {
@@ -455,12 +496,16 @@ export class LocalBackend implements Backend {
 
 export const localBackend = new LocalBackend()
 
-export type BackendProvider = 'local' | 'firebase'
+export type CreateBackendOptions = {
+  firebaseBackend?: Backend
+}
 
-export const createBackend = (provider: BackendProvider): Backend => {
+export const createBackend = (provider: BackendProvider, options: CreateBackendOptions = {}): Backend => {
   if (provider === 'firebase') {
+    if (options.firebaseBackend?.provider === 'firebase') return options.firebaseBackend
+
     throw new Error(
-      'Firebase backend mode is not available yet. The app refused to fall back to local mode because VITE_BACKEND_PROVIDER=firebase was requested.',
+      'Firebase backend mode was requested, but the Firebase adapter could not be initialized. The app refused to fall back to local mode.',
     )
   }
 
