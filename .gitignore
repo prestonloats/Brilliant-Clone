@@ -16,7 +16,33 @@ dist-ssr
 # Environment files
 .env
 .env.*
+*.env
+*.env.*
 !.env.example
+!.env.*.example
+!*.env.example
+!*.env.*.example
+
+# Local secrets / credential material
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+serviceAccountKey.json
+service-account*.json
+firebase-service-account*.json
+google-credentials*.json
+credentials.json
+client_secret*.json
+*password*.txt
+*password*.json
+*api-key*.json
+*apikey*.json
 
 # Editor directories and files
 .vscode/*
