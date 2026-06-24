@@ -22,8 +22,10 @@ dist-ssr
 # Local secrets and credential material
 *.key
 *.pem
+*.p8
 *.p12
 *.pfx
+*.ppk
 *.jks
 *.keystore
 *.secret
@@ -38,6 +40,10 @@ credentials.*
 serviceAccount*.json
 service-account*.json
 *firebase-adminsdk*.json
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
 
 # Editor directories and files
 .vscode/*
