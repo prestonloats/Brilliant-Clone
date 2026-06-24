@@ -4,13 +4,10 @@ import { test } from 'node:test'
 import { graphingLinesLesson } from '../src/domain'
 import type { LessonStep, SliderHintWhen } from '../src/domain'
 import { checkInputStep, checkOperationChoiceStep, checkSliderStep } from '../src/engine'
+import { findHintText, findStep as findLessonStep } from './helpers/findStep'
 
-const findStep = <Type extends LessonStep['type']>(id: string, type: Type) => {
-  const step = graphingLinesLesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(step, `expected a step with id "${id}"`)
-  assert.equal(step.type, type)
-  return step as Extract<LessonStep, { type: Type }>
-}
+const findStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
+  findLessonStep(graphingLinesLesson, id, type)
 
 test('graphing-lines match-line slider accepts the described slope and intercept', () => {
   const matchLine = findStep('match-slope-intercept-line', 'slider')
@@ -24,7 +21,7 @@ test('graphing-lines match-line slider accepts the described slope and intercept
 
 test('graphing-lines match-line slider escalates targeted m/b hints to a reveal', () => {
   const matchLine = findStep('match-slope-intercept-line', 'slider')
-  const hintText = (when: SliderHintWhen) => matchLine.feedback.hints?.find((hint) => hint.when === when)?.text
+  const hintText = (when: SliderHintWhen) => findHintText(matchLine, when)
 
   // Each misconfigured line surfaces the misconception-specific hint on the first miss.
   assert.equal(checkSliderStep(matchLine, { slope: -3, intercept: 2 }, 1).feedback, hintText('slope-direction'))
@@ -47,12 +44,12 @@ test('graphing-lines build-slope slider targets a real rise-over-run line', () =
   // Through the origin but flat: the intercept matches, so only the slope hint shows.
   assert.equal(
     checkSliderStep(buildLine, { slope: 0, intercept: 0 }, 1).feedback,
-    buildLine.feedback.hints?.find((hint) => hint.when === 'slope-off')?.text,
+    findHintText(buildLine, 'slope-off'),
   )
   // A line that falls instead of climbs is caught as a wrong slope direction.
   assert.equal(
     checkSliderStep(buildLine, { slope: -2, intercept: 0 }, 1).feedback,
-    buildLine.feedback.hints?.find((hint) => hint.when === 'slope-direction')?.text,
+    findHintText(buildLine, 'slope-direction'),
   )
 })
 

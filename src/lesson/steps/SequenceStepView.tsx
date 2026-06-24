@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { MathText } from '../../MathText'
 import { checkSequenceStep } from '../../engine'
-import type { SequenceStep } from '../../domain'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { SequenceStep, StepResult } from '../../domain'
+import type { CompleteOptions } from '../types'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 export function SequenceStepView({
   step,
@@ -13,16 +13,15 @@ export function SequenceStepView({
   onComplete,
 }: {
   step: SequenceStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult,
+    onComplete,
+  })
   const [selectedIds, setSelectedIds] = useState<string[]>(priorResult?.correct ? step.correctOrder : [])
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
 
   const selectedTiles = selectedIds
     .map((id) => step.tiles.find((tile) => tile.id === id))
@@ -31,9 +30,7 @@ export function SequenceStepView({
 
   const addTile = (tileId: string) => {
     setSelectedIds((current) => [...current, tileId])
-    setFeedback('')
-    setReveal('')
-    setRetryGuidance('')
+    clearStatus()
   }
 
   const removeTile = (tileId: string) => {
@@ -41,28 +38,16 @@ export function SequenceStepView({
       const index = current.lastIndexOf(tileId)
       return index >= 0 ? current.filter((_, itemIndex) => itemIndex !== index) : current
     })
-    setFeedback('')
-    setReveal('')
-    setRetryGuidance('')
+    clearStatus()
   }
 
   const resetSelection = () => {
     setSelectedIds([])
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
+    clearStatus()
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkSequenceStep(step, selectedIds, nextAttempt)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkSequenceStep(step, selectedIds, attempts + 1))
   }
 
   return (
@@ -90,7 +75,6 @@ export function SequenceStepView({
           {availableTiles.map((tile) => (
             <button disabled={correct} key={tile.id} type="button" onClick={() => addTile(tile.id)}>
               <strong>{tile.label}</strong>
-              {tile.detail && <small>{tile.detail}</small>}
             </button>
           ))}
         </div>
@@ -99,19 +83,17 @@ export function SequenceStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check order
       </button>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && (
-        <RetryPrompt
-          message={retryGuidance || 'Adjust the order, or clear it and rebuild the solution.'}
-          actionLabel="Clear order"
-          onAction={resetSelection}
-        />
-      )}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Adjust the order, or clear it and rebuild the solution."
+        retryActionLabel="Clear order"
+        onRetryAction={resetSelection}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

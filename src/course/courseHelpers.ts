@@ -7,6 +7,8 @@ import {
   type ProgressByLesson,
 } from '../engine'
 
+export type LessonCompletionState = 'not-completed' | 'review-suggested' | 'completed' | 'mastered'
+
 export function formatList(items: string[]) {
   if (items.length <= 1) return items[0] ?? ''
   if (items.length === 2) return `${items[0]} and ${items[1]}`
@@ -31,15 +33,19 @@ export function getLessonProgressLabel(lesson: Lesson, progress: LessonProgress 
   return `Step ${progress.currentStepIndex + 1} of ${lesson.steps.length}`
 }
 
+export function getLessonActionLabel({ completed, started }: { completed: boolean; started: boolean }) {
+  if (completed) return 'View summary'
+  if (started) return 'Continue'
+  return 'Start'
+}
+
 export function getPathStatus({
-  comingSoon,
   recommended,
   unlocked,
   lesson,
   lessonProgress,
   mastery,
 }: {
-  comingSoon: boolean
   recommended: boolean
   unlocked: boolean
   lesson: Lesson
@@ -54,7 +60,6 @@ export function getPathStatus({
   if (completionState === 'mastered') return { label: 'Mastered', className: 'completed' }
   if (completionState === 'review-suggested') return { label: 'Review suggested', className: 'review' }
   if (completionState === 'completed') return { label: 'Completed', className: 'completed' }
-  if (comingSoon) return { label: 'Coming soon', className: 'coming-soon' }
   if (recommended) return { label: 'Recommended', className: 'available' }
   if (lessonProgress?.status === 'inProgress') return { label: 'In progress', className: 'available' }
   if (unlocked) return { label: 'Available', className: 'available' }
@@ -68,7 +73,11 @@ export function getReviewSuggestedLessonId(progressByLesson: ProgressByLesson, m
   })
 }
 
-export function getCompletionState(lesson: Lesson, progress: LessonProgress | undefined, mastery: SkillMastery[]) {
+export function getCompletionState(
+  lesson: Lesson,
+  progress: LessonProgress | undefined,
+  mastery: SkillMastery[],
+): LessonCompletionState {
   if (progress?.status !== 'completed') return 'not-completed'
 
   if (getAverageLessonMastery(lesson, mastery) < MASTERY_READY_THRESHOLD) {
@@ -89,7 +98,7 @@ export function getAverageLessonMastery(lesson: Lesson, mastery: SkillMastery[])
   return total / lesson.skillIds.length
 }
 
-export function isCleanCompletion(lesson: Lesson, progress: LessonProgress) {
+function isCleanCompletion(lesson: Lesson, progress: LessonProgress) {
   const assessedStepIds = lesson.steps.filter((step) => step.type !== 'concept').map((step) => step.id)
   if (assessedStepIds.length === 0) return true
 
@@ -108,7 +117,7 @@ export function getLessonScoreText(lesson: Lesson, progress?: LessonProgress) {
 export function getScoreSummaryText(latestScore?: LessonScore, bestScore?: LessonScore) {
   if (!latestScore) return ''
 
-  const latest = `Latest score: ${latestScore.scorePercent}% first try`
+  const latest = `Latest score: ${latestScore.scorePercent}%`
   if (bestScore && bestScore.scorePercent !== latestScore.scorePercent) {
     return `${latest} | Best: ${bestScore.scorePercent}%`
   }

@@ -1,5 +1,5 @@
 import { algebraCourse, lessons, type LessonId, type LessonProgress, type SkillMastery } from '../domain'
-import { buildLessonGraph, type LessonGraphConnector, type ProgressByLesson } from '../engine'
+import { buildLessonGraph, isLessonUnlocked, type LessonGraphConnector, type ProgressByLesson } from '../engine'
 import { CoursePathNode } from './CoursePathNode'
 
 type CoursePathGraphProps = {
@@ -36,7 +36,12 @@ export function CoursePathGraph({
             className={`path-stage connector-stage-${stage.connector} ${stage.nodeIds.length > 1 ? 'is-branch' : ''}`}
             key={stage.rank}
           >
-            {stage.connector !== 'start' && <StageConnector connector={stage.connector} />}
+            {stage.connector !== 'start' && (
+              <StageConnector
+                connector={stage.connector}
+                locked={!stage.nodeIds.some((lessonId) => isLessonUnlocked(lessons[lessonId], progressByLesson))}
+              />
+            )}
             <div className="stage-nodes">
               {stage.nodeIds.map((lessonId) => (
                 <CoursePathNode
@@ -58,10 +63,12 @@ export function CoursePathGraph({
   )
 }
 
-function StageConnector({ connector }: { connector: LessonGraphConnector }) {
+function StageConnector({ connector, locked }: { connector: LessonGraphConnector; locked: boolean }) {
+  const className = `stage-connector connector-${connector}${locked ? ' is-locked' : ''}`
+
   if (connector === 'split') {
     return (
-      <div className="stage-connector connector-split" aria-hidden="true">
+      <div className={className} aria-hidden="true">
         <svg viewBox="0 0 200 46" preserveAspectRatio="none" className="connector-art">
           <path d="M100 0 L100 14 M100 14 L50 46 M100 14 L150 46" />
         </svg>
@@ -71,7 +78,7 @@ function StageConnector({ connector }: { connector: LessonGraphConnector }) {
 
   if (connector === 'merge') {
     return (
-      <div className="stage-connector connector-merge" aria-hidden="true">
+      <div className={className} aria-hidden="true">
         <svg viewBox="0 0 200 46" preserveAspectRatio="none" className="connector-art">
           <path d="M50 0 L100 32 M150 0 L100 32 M100 32 L100 46" />
         </svg>
@@ -80,7 +87,7 @@ function StageConnector({ connector }: { connector: LessonGraphConnector }) {
   }
 
   return (
-    <div className={`stage-connector connector-${connector}`} aria-hidden="true">
+    <div className={className} aria-hidden="true">
       <span className="connector-line" />
     </div>
   )

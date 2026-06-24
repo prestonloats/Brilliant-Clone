@@ -28,17 +28,7 @@ import {
   sideTotal,
   type ProgressByLesson,
 } from '../src/engine'
-
-const findStep = <Type extends LessonStep['type']>(
-  lesson: Lesson,
-  id: string,
-  type: Type,
-): Extract<LessonStep, { type: Type }> => {
-  const step = lesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(step, `expected step ${id} in lesson ${lesson.id}`)
-  assert.equal(step.type, type)
-  return step as Extract<LessonStep, { type: Type }>
-}
+import { findStep } from './helpers/findStep'
 
 const weight = (id: string, value: number): BalanceItem => ({
   id,

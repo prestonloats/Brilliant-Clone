@@ -54,15 +54,20 @@ const selectBestScore = (scores: LessonScore[]) =>
     return score.scorePercent >= best.scorePercent ? score : best
   }, undefined)
 
+// Legacy completions recorded only `status`/`completedAt`, so recompute their score on demand
+// when no explicit latest/best/history score is stored.
+const getLegacyCompletionScore = (lesson: Lesson | undefined, progress: LessonProgress): LessonScore | undefined =>
+  progress.status === 'completed' && lesson && progress.completedAt
+    ? calculateLessonScore(lesson, progress, progress.completedAt)
+    : undefined
+
 export const getLatestLessonScore = (lesson: Lesson, progress?: LessonProgress) => {
   if (!progress) return undefined
 
   return (
     progress.latestScore ??
     getLessonCompletionHistory(progress).at(-1) ??
-    (progress.status === 'completed' && progress.completedAt
-      ? calculateLessonScore(lesson, progress, progress.completedAt)
-      : undefined)
+    getLegacyCompletionScore(lesson, progress)
   )
 }
 
@@ -74,10 +79,7 @@ export const getBestLessonScore = (lesson: Lesson, progress?: LessonProgress) =>
     ...(progress.latestScore ? [progress.latestScore] : []),
     ...(progress.bestScore ? [progress.bestScore] : []),
   ]
-  const legacyScore =
-    progress.status === 'completed' && progress.completedAt
-      ? calculateLessonScore(lesson, progress, progress.completedAt)
-      : undefined
+  const legacyScore = getLegacyCompletionScore(lesson, progress)
 
   return selectBestScore(legacyScore ? [...scores, legacyScore] : scores)
 }
@@ -87,10 +89,7 @@ export const hasCompletedLesson = (progress?: LessonProgress) =>
 
 export const restartLessonProgress = (progress: LessonProgress, lesson?: Lesson): LessonProgress => {
   const now = new Date().toISOString()
-  const legacyScore =
-    progress.status === 'completed' && lesson && progress.completedAt
-      ? calculateLessonScore(lesson, progress, progress.completedAt)
-      : undefined
+  const legacyScore = getLegacyCompletionScore(lesson, progress)
   const completionHistory = getLessonCompletionHistory(progress)
   const preservedHistory = completionHistory.length > 0 ? completionHistory : legacyScore ? [legacyScore] : []
   const latestScore = progress.latestScore ?? preservedHistory.at(-1)

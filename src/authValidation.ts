@@ -16,7 +16,7 @@ export type AuthFormValues = {
   confirmPassword: string
 }
 
-export type AuthFormContext = {
+type AuthFormContext = {
   mode: AuthMode
   // Firebase authenticates with a password. Local demo mode is intentionally passwordless,
   // so password rules are skipped to avoid implying a credential that is never stored.

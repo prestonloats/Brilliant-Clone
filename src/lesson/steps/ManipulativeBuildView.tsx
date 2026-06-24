@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { checkManipulativeStep } from '../../engine'
-import type { ManipulativeStep } from '../../domain'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { ManipulativeStep, StepResult } from '../../domain'
+import type { CompleteOptions } from '../types'
 import { describeManipulativeGoal } from './manipulativeHelpers'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 // The "discover the total" manipulative: instead of a pre-counted tray (which would reveal the
 // answer), the learner adjusts a number-of-groups stepper and a per-group stepper drawn from a
@@ -12,27 +12,25 @@ import { describeManipulativeGoal } from './manipulativeHelpers'
 // (x) being discovered. The pure checkManipulativeStep verifies both controls match the targets.
 export function ManipulativeBuildView({
   step,
-  goal,
   priorResult,
   onAdvance,
   onComplete,
 }: {
   step: ManipulativeStep
-  goal: Extract<ManipulativeStep['goal'], { type: 'build-product' }>
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
+  const goal = step.goal as Extract<ManipulativeStep['goal'], { type: 'build-product' }>
   const maxGroups = goal.maxGroups ?? Math.max(goal.groups + 2, 6)
   const maxPerGroup = goal.maxPerGroup ?? Math.max(goal.perGroup + 2, 6)
 
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult,
+    onComplete,
+  })
   const [numGroups, setNumGroups] = useState(priorResult?.correct ? goal.groups : 1)
   const [perGroup, setPerGroup] = useState(priorResult?.correct ? goal.perGroup : 1)
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
 
   const liveTotal = numGroups * perGroup
   const remaining = Math.max(0, step.total - liveTotal)
@@ -40,13 +38,6 @@ export function ManipulativeBuildView({
   const objectName = step.object.label
   const plural = (count: number) => `${objectName}${count === 1 ? '' : 's'}`
   const poolChips = Math.min(remaining, 12)
-
-  const clearStatus = useCallback(() => {
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
-  }, [])
 
   const adjustGroups = (delta: number) => {
     setNumGroups((current) => {
@@ -76,18 +67,7 @@ export function ManipulativeBuildView({
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkManipulativeStep(
-      step,
-      Array.from({ length: numGroups }, () => perGroup),
-      nextAttempt,
-    )
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkManipulativeStep(step, Array.from({ length: numGroups }, () => perGroup), attempts + 1))
   }
 
   const canAddGroup = !correct && numGroups < maxGroups && (numGroups + 1) * perGroup <= step.total
@@ -212,21 +192,17 @@ export function ManipulativeBuildView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check
       </button>
-      {feedback && (
-        <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />
-      )}
-      {feedback && !correct && (
-        <RetryPrompt
-          message={retryGuidance || 'Adjust the number of groups or how many go in each, then check again.'}
-          actionLabel="Reset"
-          onAction={reset}
-        />
-      )}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Adjust the number of groups or how many go in each, then check again."
+        retryActionLabel="Reset"
+        onRetryAction={reset}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

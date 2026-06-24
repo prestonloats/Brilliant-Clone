@@ -69,27 +69,22 @@ export const graphingLinesLesson: Lesson = {
         {
           id: 'start-at-intercept',
           label: 'Start at (0, -1)',
-          detail: 'The y-intercept is -1.',
         },
         {
           id: 'move-right-one-up-two',
           label: 'Move right 1, up 2',
-          detail: 'Slope 2 means rise 2, run 1.',
         },
         {
           id: 'mark-one-one',
           label: 'Mark (1, 1)',
-          detail: 'The next point on the line.',
         },
         {
           id: 'start-at-zero-two',
           label: 'Start at (0, 2)',
-          detail: 'This treats slope as the intercept.',
         },
         {
           id: 'move-right-two-up-one',
           label: 'Move right 2, up 1',
-          detail: 'This flips rise and run.',
         },
       ],
       correctOrder: ['start-at-intercept', 'move-right-one-up-two', 'mark-one-one'],

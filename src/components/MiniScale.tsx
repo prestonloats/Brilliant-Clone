@@ -1,7 +1,6 @@
 import { MathText } from '../MathText'
-import type { ConceptStep } from '../domain'
 
-export function MiniScale({ visual }: { visual?: ConceptStep['visual'] }) {
+export function MiniScale({ visual }: { visual?: 'balanced-scale' | 'unknown-box' }) {
   const leftSide = visual === 'unknown-box' ? 'x + 2' : '3'
   const rightSide = visual === 'unknown-box' ? '5' : '3'
   return (

@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react'
 import { checkPlotStep } from '../../engine'
-import type { PlotPoint, PlotStep } from '../../domain'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { PlotPoint, PlotStep, StepResult } from '../../domain'
+import type { CompleteOptions } from '../types'
 import { PLOT_AREA, PLOT_PADDING, PLOT_VIEW_BOX, clampToRange } from '../plotGeometry'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 const PLOT_QUADRANT_LABELS: Record<1 | 2 | 3 | 4, string> = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV' }
 
@@ -37,7 +37,7 @@ export function PlotStepView({
   onComplete,
 }: {
   step: PlotStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
@@ -48,14 +48,13 @@ export function PlotStepView({
       ? target.points.map((point) => ({ ...point }))
       : target.quadrants.map((quadrant) => plotRepresentativePoint(quadrant, range))
 
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult,
+    onComplete,
+  })
   const [points, setPoints] = useState<PlotPoint[]>(priorResult?.correct ? makeSolvedPoints() : [])
   const [cursor, setCursor] = useState<PlotPoint>({ x: 0, y: 0 })
   const [showCursor, setShowCursor] = useState(false)
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
   const svgRef = useRef<SVGSVGElement | null>(null)
 
   const span = range.max - range.min || 1
@@ -63,13 +62,6 @@ export function PlotStepView({
   const ticks = Array.from({ length: span + 1 }, (_, index) => range.min + index)
   const toSvgX = (x: number) => PLOT_PADDING + ((x - range.min) / span) * PLOT_AREA
   const toSvgY = (y: number) => PLOT_PADDING + ((range.max - y) / span) * PLOT_AREA
-
-  const clearStatus = () => {
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
-  }
 
   const placePoint = (raw: PlotPoint) => {
     if (correct) return
@@ -166,14 +158,7 @@ export function PlotStepView({
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkPlotStep(step, points, nextAttempt)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkPlotStep(step, points, attempts + 1))
   }
 
   const placedSummary =
@@ -296,15 +281,17 @@ export function PlotStepView({
       <button className="primary-action" type="button" disabled={correct || points.length === 0} onClick={check}>
         Check
       </button>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && (
-        <RetryPrompt message={retryGuidance || 'Adjust your point, or clear it and try again.'} actionLabel="Clear" onAction={clearAll} />
-      )}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Adjust your point, or clear it and try again."
+        retryActionLabel="Clear"
+        onRetryAction={clearAll}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

@@ -1,6 +1,8 @@
 import { algebraCourse, lessons, type LessonId, type LessonProgress, type SkillMastery } from '../domain'
 import { isLessonUnlocked, type LessonGraphNode, type ProgressByLesson } from '../engine'
-import { formatList, getLessonScoreText, getPathStatus } from './courseHelpers'
+import { formatList, getLessonActionLabel, getLessonScoreText, getPathStatus } from './courseHelpers'
+import { getNodeMasteryCelebration } from './masteryCelebration'
+import { MasterySparkles } from './MasterySparkles'
 
 type CoursePathNodeProps = {
   node: LessonGraphNode
@@ -26,9 +28,9 @@ export function CoursePathNode({
   const lessonProgress = progress && node.id === progress.lessonId ? progress : progressByLesson[node.id]
   const unlocked = isLessonUnlocked(lesson, progressByLesson)
   const completed = lessonProgress?.status === 'completed'
-  const comingSoon = lesson.steps.length === 0
   const recommended = node.id === featuredLessonId && !completed && unlocked
-  const status = getPathStatus({ comingSoon, recommended, unlocked, lesson, lessonProgress, mastery })
+  const status = getPathStatus({ recommended, unlocked, lesson, lessonProgress, mastery })
+  const celebration = getNodeMasteryCelebration(lesson, lessonProgress, mastery)
   const scoreText = getLessonScoreText(lesson, lessonProgress)
   const position = algebraCourse.lessonOrder.indexOf(node.id) + 1
 
@@ -42,9 +44,17 @@ export function CoursePathNode({
 
   return (
     <article
-      className={`path-node graph-node ${status.className} ${recommended ? 'is-recommended' : ''}`}
+      className={`path-node graph-node ${status.className} ${recommended ? 'is-recommended' : ''} ${celebration.className}`}
       aria-current={recommended ? 'step' : undefined}
     >
+      {celebration.isMastered && (
+        <>
+          <span className="mastery-badge" aria-hidden="true">
+            {celebration.icon}
+          </span>
+          <MasterySparkles seed={position} count={14} />
+        </>
+      )}
       <div className="graph-node-head">
         <span className="node-number" aria-hidden="true">
           {position}
@@ -70,7 +80,7 @@ export function CoursePathNode({
         {unlocked ? (
           <>
             <button type="button" onClick={() => onLaunchLesson(node.id)}>
-              {completed ? 'View summary' : lessonProgress ? 'Continue' : 'Start'}
+              {getLessonActionLabel({ completed, started: Boolean(lessonProgress) })}
             </button>
             {completed && (
               <button type="button" onClick={() => onRetakeLesson(node.id)}>

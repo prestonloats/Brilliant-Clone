@@ -49,7 +49,12 @@ export const getRecommendedNextLesson = (
     }
   }
 
-  return { lessonId: nextLessonId, kind: 'next', ...nextLessonRecommendations[nextLessonId] }
+  return {
+    lessonId: nextLessonId,
+    kind: 'next',
+    title: lessonCatalog[nextLessonId].title,
+    ...nextLessonRecommendations[nextLessonId],
+  }
 }
 
 // First path lesson whose prerequisites are satisfied and that has not been completed,
@@ -69,29 +74,25 @@ const getNextAvailableLessonId = (
   })
 }
 
-const nextLessonRecommendations: Record<LessonId, { title: string; body: string }> = {
+// Only the body copy lives here; the title is read from the lesson catalog to avoid
+// duplicating (and risking drift from) each lesson's own title.
+const nextLessonRecommendations: Record<LessonId, { body: string }> = {
   'balancing-equations': {
-    title: 'Balancing Equations',
     body: 'Start by making the equals sign feel like a balance.',
   },
   'one-step-equations': {
-    title: 'One-Step Equations',
     body: 'Next, use the same balancing idea with multiplication and division.',
   },
   'two-step-equations': {
-    title: 'Two-Step Equations',
     body: 'Next, decide which operation to undo first when x has two changes.',
   },
   'like-terms-variables-both-sides': {
-    title: 'Like Terms & Variables on Both Sides',
     body: 'Next, gather matching terms and prepare to move variables while preserving equality.',
   },
   'coordinate-plane': {
-    title: 'Coordinate Plane',
     body: 'Next, place algebra on a grid by reading and plotting points.',
   },
   'graphing-lines': {
-    title: 'Graphing Lines',
     body: 'Next, connect slope-intercept equations to the lines they draw.',
   },
 }

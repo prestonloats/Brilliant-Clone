@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { MathText } from '../../MathText'
 import { checkOperationChoiceStep } from '../../engine'
-import type { OperationChoiceStep } from '../../domain'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { OperationChoiceStep, StepResult } from '../../domain'
+import type { CompleteOptions } from '../types'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 export function OperationChoiceStepView({
   step,
@@ -13,27 +13,16 @@ export function OperationChoiceStepView({
   onComplete,
 }: {
   step: OperationChoiceStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
+  const { feedback, correct, attempts, reveal, retryGuidance, submit } = useCheckableStep({ priorResult, onComplete })
   const [selectedId, setSelectedId] = useState('')
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
 
   const choose = (choiceId: string) => {
-    const nextAttempt = attempts + 1
-    const result = checkOperationChoiceStep(step, choiceId, nextAttempt)
     setSelectedId(choiceId)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkOperationChoiceStep(step, choiceId, attempts + 1))
   }
 
   return (
@@ -66,13 +55,15 @@ export function OperationChoiceStepView({
           )
         })}
       </div>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && <RetryPrompt message={retryGuidance || 'Choose another operation tile to try again.'} />}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Choose another operation tile to try again."
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

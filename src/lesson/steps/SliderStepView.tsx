@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { MathText } from '../../MathText'
 import { checkSliderStep } from '../../engine'
-import type { PlotPoint, SliderStep } from '../../domain'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { PlotPoint, SliderStep, StepResult } from '../../domain'
+import type { CompleteOptions } from '../types'
 import { PLOT_AREA, PLOT_PADDING, PLOT_VIEW_BOX, clampToRange } from '../plotGeometry'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 // Formats a slope/intercept pair as a slope-intercept equation, e.g. "y = 3x + 2",
 // "y = -x", "y = 2x", or "y = 5" (a flat line). Used for the live readout and the
@@ -70,19 +70,18 @@ export function SliderStepView({
   onComplete,
 }: {
   step: SliderStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
   const { range } = step
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult,
+    onComplete,
+  })
   const initial = sliderInitialValue(step)
   const [slope, setSlope] = useState(priorResult?.correct ? step.target.slope : initial.slope)
   const [intercept, setIntercept] = useState(priorResult?.correct ? step.target.intercept : initial.intercept)
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
 
   const span = range.max - range.min || 1
   const ticks = Array.from({ length: span + 1 }, (_, index) => range.min + index)
@@ -106,13 +105,6 @@ export function SliderStepView({
     riseEnd >= range.min &&
     riseEnd <= range.max
 
-  const clearStatus = () => {
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
-  }
-
   const updateSlope = (next: number) => {
     if (correct) return
     setSlope(next)
@@ -126,14 +118,7 @@ export function SliderStepView({
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkSliderStep(step, { slope, intercept }, nextAttempt)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkSliderStep(step, { slope, intercept }, attempts + 1))
   }
 
   const reset = () => {
@@ -259,15 +244,17 @@ export function SliderStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check
       </button>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && (
-        <RetryPrompt message={retryGuidance || 'Adjust the m and b sliders, then check again.'} actionLabel="Reset" onAction={reset} />
-      )}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Adjust the m and b sliders, then check again."
+        retryActionLabel="Reset"
+        onRetryAction={reset}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

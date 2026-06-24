@@ -4,50 +4,7 @@ import { beforeEach, test } from 'node:test'
 import { createAttemptEvent, LocalBackend } from '../src/backend'
 import { applyBalanceOperation } from '../src/engine'
 import type { BalanceOperation, BalanceState, LessonProgress } from '../src/domain'
-
-const STORAGE_KEY = 'balance-local-backend-v1'
-const SESSION_KEY = 'balance-local-session-v1'
-
-class MemoryStorage {
-  private values = new Map<string, string>()
-
-  getItem(key: string) {
-    return this.values.get(key) ?? null
-  }
-
-  setItem(key: string, value: string) {
-    this.values.set(key, value)
-  }
-
-  removeItem(key: string) {
-    this.values.delete(key)
-  }
-
-  clear() {
-    this.values.clear()
-  }
-}
-
-let storage: MemoryStorage
-let sessionStorage: MemoryStorage
-
-const installLocalStorage = () => {
-  const nextStorage = new MemoryStorage()
-  const nextSessionStorage = new MemoryStorage()
-
-  Object.defineProperty(globalThis, 'window', {
-    value: { localStorage: nextStorage, sessionStorage: nextSessionStorage },
-    configurable: true,
-    writable: true,
-  })
-
-  sessionStorage = nextSessionStorage
-  return nextStorage
-}
-
-const setActiveUser = (userId: string) => {
-  sessionStorage.setItem(SESSION_KEY, userId)
-}
+import { installLocalStorage, MemoryStorage, setActiveUser, STORAGE_KEY } from './helpers/localStorage'
 
 const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
   userId,
@@ -66,6 +23,8 @@ const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress =>
 })
 
 const uuidSuffix = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+let storage: MemoryStorage
 
 beforeEach(() => {
   storage = installLocalStorage()

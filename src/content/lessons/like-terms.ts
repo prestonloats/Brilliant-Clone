@@ -6,7 +6,6 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
   subtitle: 'Combine terms before solving',
   skillIds: ['like-terms', 'variables-on-both-sides'],
   prerequisites: ['two-step-equations'],
-  nextLessonId: 'coordinate-plane',
   steps: [
     {
       id: 'concept-like-terms',
@@ -52,22 +51,18 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
         {
           id: 'combine-x-terms',
           label: 'Combine 4x and -x',
-          detail: '4x - x = 3x.',
         },
         {
           id: 'rewrite-expression',
           label: 'Rewrite as 3x + 3 + 2y',
-          detail: 'Keep unlike terms separate.',
         },
         {
           id: 'combine-x-y',
           label: 'Combine 3x and 2y',
-          detail: 'This mixes variables.',
         },
         {
           id: 'make-nine-x',
           label: 'Rewrite as 9x',
-          detail: 'This treats every term as an x-term.',
         },
       ],
       correctOrder: ['combine-x-terms', 'rewrite-expression'],
@@ -149,32 +144,26 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
         {
           id: 'subtract-two-x-both',
           label: 'Subtract 2x from both sides',
-          detail: '5x + 7 = 2x + 19 becomes 3x + 7 = 19.',
         },
         {
           id: 'subtract-seven-both',
           label: 'Subtract 7 from both sides',
-          detail: '3x + 7 = 19 becomes 3x = 12.',
         },
         {
           id: 'divide-three-both',
           label: 'Divide both sides by 3',
-          detail: '3x = 12 becomes x = 4.',
         },
         {
           id: 'x-equals-four',
           label: 'x = 4',
-          detail: 'The isolated value.',
         },
         {
           id: 'add-two-x-both',
           label: 'Add 2x to both sides',
-          detail: 'This makes more x-terms instead of fewer.',
         },
         {
           id: 'x-equals-twelve',
           label: 'x = 12',
-          detail: 'This forgets to divide by 3.',
         },
       ],
       correctOrder: ['subtract-two-x-both', 'subtract-seven-both', 'divide-three-both', 'x-equals-four'],
@@ -263,37 +252,30 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
         {
           id: 'combine-subtract-coefficients',
           label: 'Combine 10x and -4x into 6x',
-          detail: '10x - 4x = 6x, so 6x - 2 = 2x + 14.',
         },
         {
           id: 'combine-add-coefficients',
           label: 'Combine 10x and -4x into 14x',
-          detail: 'This adds the coefficients instead of subtracting.',
         },
         {
           id: 'subtract-2x-both',
           label: 'Subtract 2x from both sides',
-          detail: '6x - 2 = 2x + 14 becomes 4x - 2 = 14.',
         },
         {
           id: 'add-2x-both',
           label: 'Add 2x to both sides',
-          detail: 'This makes more x-terms instead of fewer.',
         },
         {
           id: 'add-2-both',
           label: 'Add 2 to both sides',
-          detail: '4x - 2 = 14 becomes 4x = 16.',
         },
         {
           id: 'divide-4-both',
           label: 'Divide both sides by 4',
-          detail: '4x = 16 becomes x = 4.',
         },
         {
           id: 'mastery-x-equals-4',
           label: 'x = 4',
-          detail: 'The isolated value.',
         },
       ],
       correctOrder: ['combine-subtract-coefficients', 'subtract-2x-both', 'add-2-both', 'divide-4-both', 'mastery-x-equals-4'],

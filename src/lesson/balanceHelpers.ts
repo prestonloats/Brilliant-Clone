@@ -54,6 +54,30 @@ export function reconstructSolvedBalanceState(step: BalanceStep): BalanceState |
       })
       if (checkBalanceStep(step, candidate, {}).correct) return candidate
     }
+
+    // Side-agnostic placements: every listed block must end up on a pan, but either pan is
+    // valid, so search all left/right assignments of those blocks for one the checker accepts
+    // as a genuinely level scale. Other (non-required) items keep their current placement.
+    const placedIds = step.goal.requirePlacedItems ?? []
+    if (placedIds.length > 0) {
+      const allItems = [...base.left, ...base.right, ...(base.bank ?? [])]
+      const isPlaced = (item: BalanceItem) => placedIds.includes(item.id)
+      const movable = placedIds
+        .map((id) => allItems.find((item) => item.id === id))
+        .filter((item): item is BalanceItem => Boolean(item))
+      const fixedLeft = base.left.filter((item) => !isPlaced(item))
+      const fixedRight = base.right.filter((item) => !isPlaced(item))
+      const fixedBank = (base.bank ?? []).filter((item) => !isPlaced(item))
+
+      for (let assignment = 0; assignment < 1 << movable.length; assignment += 1) {
+        const candidate: BalanceState = { ...base, left: [...fixedLeft], right: [...fixedRight], bank: fixedBank }
+        movable.forEach((item, index) => {
+          const side: BalanceSide = assignment & (1 << index) ? 'right' : 'left'
+          candidate[side] = [...candidate[side], item]
+        })
+        if (checkBalanceStep(step, candidate, {}).correct) return candidate
+      }
+    }
   }
 
   const bank = base.bank ?? []
@@ -115,7 +139,7 @@ export function getPhysicalBalanceCue(kind: ReturnType<typeof getBalanceCue>['ki
   return 'Right pan is heavier.'
 }
 
-export function describePhysicalBalanceChange(item: BalanceItem, side: BalanceSide, state: BalanceState) {
+function describePhysicalBalanceChange(item: BalanceItem, side: BalanceSide, state: BalanceState) {
   return `${item.label} landed on the ${side} pan. ${getPhysicalBalanceCue(getBalanceCue(sideTotal(state.left), sideTotal(state.right)).kind)}`
 }
 

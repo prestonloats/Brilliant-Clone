@@ -7,8 +7,6 @@ type MathTextProps = {
   children: string
   // Render as a centered display equation (KaTeX displayMode) instead of inline.
   display?: boolean
-  // Extra class on the wrapper, e.g. the surface's existing equation class.
-  className?: string
   // Override the screen-reader label; defaults to a readable form of `children`.
   ariaLabel?: string
 }
@@ -19,7 +17,7 @@ type MathTextProps = {
 // aria-live regions that wrap a MathText — still announce the real meaning. KaTeX runs with
 // throwOnError:false, and any unexpected failure falls back to plain text, so an equation
 // never crashes or vanishes.
-export function MathText({ children, display = false, className, ariaLabel }: MathTextProps) {
+export function MathText({ children, display = false, ariaLabel }: MathTextProps) {
   const renderTargetRef = useRef<HTMLSpanElement>(null)
   const label = ariaLabel ?? equationToAriaLabel(children)
 
@@ -38,7 +36,7 @@ export function MathText({ children, display = false, className, ariaLabel }: Ma
   }, [children, display])
 
   return (
-    <span className={className ? `math-text ${className}` : 'math-text'}>
+    <span className="math-text">
       <span className="sr-only">{label}</span>
       <span aria-hidden="true" ref={renderTargetRef} />
     </span>

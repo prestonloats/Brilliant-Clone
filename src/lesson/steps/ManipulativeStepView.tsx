@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { checkManipulativeStep } from '../../engine'
-import type { ManipulativeStep } from '../../domain'
+import type { ManipulativeStep, StepResult } from '../../domain'
 import { DragPreview } from '../../components/DragPreview'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { CompleteOptions } from '../types'
+import { BOUNCE_RESET_MS } from './constants'
 import { describeManipulativeGoal } from './manipulativeHelpers'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 type ManipulativeDrag = {
   x: number
@@ -31,7 +32,7 @@ export function ManipulativeStepView({
   onComplete,
 }: {
   step: ManipulativeStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
@@ -45,12 +46,11 @@ export function ManipulativeStepView({
       ? Array.from({ length: goal.groups }, () => goal.perGroup)
       : [goal.count]
 
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult,
+    onComplete,
+  })
   const [groups, setGroups] = useState<number[]>(priorResult?.correct ? makeSolvedGroups() : makeEmptyGroups())
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
   const [dragging, setDragging] = useState<ManipulativeDrag | null>(null)
   const [hoverZone, setHoverZone] = useState<number | null>(null)
   const [lastDropZone, setLastDropZone] = useState<number | null>(null)
@@ -62,16 +62,9 @@ export function ManipulativeStepView({
 
   useEffect(() => {
     if (lastDropZone === null) return
-    const timeoutId = window.setTimeout(() => setLastDropZone(null), 420)
+    const timeoutId = window.setTimeout(() => setLastDropZone(null), BOUNCE_RESET_MS)
     return () => window.clearTimeout(timeoutId)
   }, [lastDropZone])
-
-  const clearStatus = useCallback(() => {
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
-  }, [])
 
   const addToZone = useCallback(
     (zoneIndex: number) => {
@@ -79,7 +72,7 @@ export function ManipulativeStepView({
         const placedNow = current.reduce((total, count) => total + count, 0)
         if (placedNow >= step.total) return current
         const next = current.slice()
-        next[zoneIndex] = (next[zoneIndex] ?? 0) + 1
+        next[zoneIndex] = next[zoneIndex] + 1
         return next
       })
       setLastDropZone(null)
@@ -91,7 +84,7 @@ export function ManipulativeStepView({
 
   const removeFromZone = (zoneIndex: number) => {
     setGroups((current) => {
-      if ((current[zoneIndex] ?? 0) <= 0) return current
+      if (current[zoneIndex] <= 0) return current
       const next = current.slice()
       next[zoneIndex] = next[zoneIndex] - 1
       return next
@@ -147,14 +140,7 @@ export function ManipulativeStepView({
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkManipulativeStep(step, groups, nextAttempt)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkManipulativeStep(step, groups, attempts + 1))
   }
 
   return (
@@ -245,19 +231,17 @@ export function ManipulativeStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check
       </button>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && (
-        <RetryPrompt
-          message={retryGuidance || 'Adjust the groups, or reset and try again.'}
-          actionLabel="Reset"
-          onAction={reset}
-        />
-      )}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Adjust the groups, or reset and try again."
+        retryActionLabel="Reset"
+        onRetryAction={reset}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

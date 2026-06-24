@@ -1,10 +1,4 @@
-// Browser-storage backend.
-//
-// The `LocalBackend` implements the full `Backend` contract synchronously on top of
-// `localStorage` (the database) and `sessionStorage` (the active user), with a raw-string read
-// cache so repeated reads skip re-parsing/normalizing. It leans on `./validation` for
-// `emptyDatabase`/`normalizeDatabase`/`validateSignUpInput`. `createId` is exported for the
-// factory's `createAttemptEvent`; it is not part of the public `./backend` barrel.
+// Browser-storage backend implementing the Backend contract over localStorage/sessionStorage.
 
 import type { LessonId, SkillId, SkillMastery, UserProfile } from '../domain'
 import type {
@@ -227,5 +221,3 @@ export class LocalBackend implements Backend {
     return `${userId}:${skillId}`
   }
 }
-
-export const localBackend = new LocalBackend()

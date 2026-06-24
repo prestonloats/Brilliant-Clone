@@ -1,7 +1,3 @@
-.operation-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .next-card {
   background: var(--surface-strong);
   border-radius: 22px;
@@ -178,4 +174,4 @@
   display: block;
   margin-top: 12px;
 }
-
+

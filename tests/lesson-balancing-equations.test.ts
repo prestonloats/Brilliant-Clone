@@ -3,13 +3,10 @@ import { test } from 'node:test'
 
 import { balancingEquationsLesson, type BalanceState, type LessonStep } from '../src/domain'
 import { applyBalanceOperation, checkBalanceStep, checkInputStep, checkSequenceStep, isLevel } from '../src/engine'
+import { findStep } from './helpers/findStep'
 
-const lessonStep = <Type extends LessonStep['type']>(id: string, type: Type) => {
-  const step = balancingEquationsLesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(step, `expected a step with id "${id}"`)
-  assert.equal(step.type, type)
-  return step as Extract<LessonStep, { type: Type }>
-}
+const lessonStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
+  findStep(balancingEquationsLesson, id, type)
 
 // --- Task A: the "make it level" drag interaction ---------------------------------
 
@@ -60,7 +57,7 @@ test('re-dragging is the recovery: a wrong pan stays unsolved, the correct pan s
   assert.ok(isLevel(movedToRightPan))
 })
 
-test('drag-to-level requires every block on its correct pan, rejecting mirrored balances', () => {
+test('drag-to-level accepts either pan as long as the scale balances', () => {
   const step = lessonStep('drag-to-level', 'balance')
   const bank = step.state.bank ?? []
   const three = bank.find((item) => item.id === 'tray-left-3')
@@ -70,16 +67,13 @@ test('drag-to-level requires every block on its correct pan, rejecting mirrored 
 
   assert.equal(step.goal.type, 'level')
   if (step.goal.type === 'level') {
-    // Each tray block is pinned to a specific pan, so the learner has to place all of them.
-    assert.deepEqual(step.goal.requireItemsOnSide, [
-      { itemId: 'tray-left-3', side: 'left' },
-      { itemId: 'tray-left-2', side: 'left' },
-      { itemId: 'tray-right-5', side: 'right' },
-    ])
+    // The goal only requires every block to leave the tray; it no longer pins a side, so the
+    // two mirror arrangements ({3,2} vs {5}) are equally valid.
+    assert.deepEqual(step.goal.requirePlacedItems, ['tray-left-3', 'tray-left-2', 'tray-right-5'])
   }
 
-  // Putting the 5 on the left and 3 + 2 on the right is also level (5 = 5), but it is not the
-  // required placement, so the required-item gate still fails.
+  // Putting the 5 on the left and 3 + 2 on the right is level (5 = 5). It used to be rejected
+  // as "not the required placement"; now it is accepted because both sides weigh the same.
   const mirrored: BalanceState = {
     ...step.state,
     left: [five],
@@ -87,7 +81,22 @@ test('drag-to-level requires every block on its correct pan, rejecting mirrored 
     bank: [],
   }
   assert.ok(isLevel(mirrored))
-  assert.equal(checkBalanceStep(step, mirrored, {}, 1).correct, false)
+  const mirroredResult = checkBalanceStep(step, mirrored, {}, 1)
+  assert.equal(mirroredResult.correct, true)
+  assert.equal(mirroredResult.feedback, step.feedback.correct)
+
+  // The empty start (every block still in the tray, 0 = 0) is still rejected...
+  assert.equal(checkBalanceStep(step, step.state, {}, 1).correct, false)
+
+  // ...and a tilted arrangement (all blocks placed, but not level) is still rejected.
+  const tilted: BalanceState = {
+    ...step.state,
+    left: [three, two, five],
+    right: [],
+    bank: [],
+  }
+  assert.equal(isLevel(tilted), false)
+  assert.equal(checkBalanceStep(step, tilted, {}, 1).correct, false)
 })
 
 test('balance feedback escalates from hint to explanation to reveal', () => {

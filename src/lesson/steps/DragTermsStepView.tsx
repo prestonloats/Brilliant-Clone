@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MathText } from '../../MathText'
 import { checkDragTermsStep } from '../../engine'
-import type { DragTermsStep } from '../../domain'
+import type { DragTermsStep, StepResult } from '../../domain'
 import { DragPreview } from '../../components/DragPreview'
 import { FeedbackPanel } from '../../components/FeedbackPanel'
 import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { CompleteOptions } from '../types'
+import { BOUNCE_RESET_MS } from './constants'
 
 // A reserved zone id for the tile tray, so the same drop detection that places a tile in a bin
 // can also send it back to the tray (bins use their authored, non-underscored ids).
@@ -41,7 +42,7 @@ export function DragTermsStepView({
   onComplete,
 }: {
   step: DragTermsStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
@@ -72,7 +73,7 @@ export function DragTermsStepView({
 
   useEffect(() => {
     if (lastDropZone === null) return
-    const timeoutId = window.setTimeout(() => setLastDropZone(null), 420)
+    const timeoutId = window.setTimeout(() => setLastDropZone(null), BOUNCE_RESET_MS)
     return () => window.clearTimeout(timeoutId)
   }, [lastDropZone])
 

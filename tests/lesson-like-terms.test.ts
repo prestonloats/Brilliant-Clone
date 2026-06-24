@@ -9,20 +9,17 @@ import {
   checkSequenceStep,
   isAssessedLessonStep,
 } from '../src/engine'
+import { findHintText, findStep } from './helpers/findStep'
 
 const lesson = likeTermsVariablesBothSidesLesson
 
-const getStep = <Type extends LessonStep['type']>(id: string, type: Type) => {
-  const step = lesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(step, `expected step ${id} to exist`)
-  assert.equal(step.type, type)
-  return step as Extract<LessonStep, { type: Type }>
-}
+const getStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
+  findStep(lesson, id, type)
 
 const dragTermsHintText = (
   step: Extract<LessonStep, { type: 'dragTerms' }>,
   when: DragTermsHintWhen,
-) => step.feedback.hints?.find((hint) => hint.when === when)?.text
+) => findHintText(step, when)
 
 test('group-like-terms dragTerms accepts the correct grouping and rejects misplaced tiles', () => {
   const group = getStep('group-like-terms-combine', 'dragTerms')

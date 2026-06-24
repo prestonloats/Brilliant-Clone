@@ -1,5 +1,4 @@
 .form-stack,
-.path-list,
 .mastery-grid {
   display: grid;
   gap: 12px;
@@ -21,4 +20,4 @@ input {
   min-height: 48px;
   padding: 8px 14px;
 }
-
+

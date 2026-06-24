@@ -5,17 +5,7 @@
 // isolation. This file re-exports the same public API so every existing import from './backend'
 // keeps working unchanged.
 
-export type {
-  AttemptRepository,
-  AuthRepository,
-  Backend,
-  BackendProvider,
-  CreateBackendOptions,
-  MasteryRepository,
-  MaybePromise,
-  ProgressRepository,
-  SignUpInput,
-} from './backend/types'
+export type { Backend, SignUpInput } from './backend/types'
 
 export {
   isAttemptEvent,
@@ -25,6 +15,6 @@ export {
   validateSignUpInput,
 } from './backend/validation'
 
-export { LocalBackend, localBackend } from './backend/LocalBackend'
+export { LocalBackend } from './backend/LocalBackend'
 
 export { createAttemptEvent, createBackend } from './backend/factory'

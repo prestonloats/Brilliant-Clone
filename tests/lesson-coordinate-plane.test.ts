@@ -4,23 +4,18 @@ import { test } from 'node:test'
 import { coordinatePlaneLesson } from '../src/content/lessons/coordinate-plane'
 import type { LessonStep, PlotHintWhen } from '../src/content/types'
 import { checkInputStep, checkPlotStep } from '../src/engine'
+import { findHintText, findStep } from './helpers/findStep'
 
-// Narrowing helper mirrors engine.test.ts so each assertion works on the exact step type.
-const step = <Type extends LessonStep['type']>(id: string, type: Type) => {
-  const found = coordinatePlaneLesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(found, `expected step ${id} to exist`)
-  assert.equal(found.type, type)
-  return found as Extract<LessonStep, { type: Type }>
-}
+const step = <Type extends LessonStep['type']>(id: string, type: Type) =>
+  findStep(coordinatePlaneLesson, id, type)
 
 const plotHint = (plot: Extract<LessonStep, { type: 'plot' }>, when: PlotHintWhen) =>
-  plot.feedback.hints?.find((hint) => hint.when === when)?.text
+  findHintText(plot, when)
 
 test('coordinate-plane keeps its path metadata and ends on a concept summary', () => {
   assert.equal(coordinatePlaneLesson.id, 'coordinate-plane')
   assert.deepEqual(coordinatePlaneLesson.skillIds, ['coordinate-plane'])
   assert.deepEqual(coordinatePlaneLesson.prerequisites, ['two-step-equations'])
-  assert.equal(coordinatePlaneLesson.nextLessonId, 'graphing-lines')
 
   const finalStep = coordinatePlaneLesson.steps.at(-1)
   assert.equal(finalStep?.type, 'concept')

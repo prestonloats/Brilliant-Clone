@@ -5,18 +5,6 @@
 // domain.ts) lets content files import types without depending on runtime/back-end
 // code, so parallel lesson edits stay isolated.
 
-export type StepType =
-  | 'concept'
-  | 'mcq'
-  | 'input'
-  | 'balance'
-  | 'operation-choice'
-  | 'sequence'
-  | 'manipulative'
-  | 'plot'
-  | 'slider'
-  | 'dragTerms'
-
 export type SkillId =
   | 'equality'
   | 'inverse-operations'
@@ -35,7 +23,7 @@ export type LessonId =
   | 'coordinate-plane'
   | 'graphing-lines'
 
-export type Feedback = {
+type Feedback = {
   correct: string
   incorrect: string
   reveal?: string
@@ -99,7 +87,6 @@ export type SequenceStep = {
   tiles: {
     id: string
     label: string
-    detail?: string
   }[]
   correctOrder: string[]
   feedback: Feedback & {
@@ -125,7 +112,7 @@ export type BalanceState = {
   unknownValue?: number
 }
 
-export type BalanceGoal =
+type BalanceGoal =
   | {
       type: 'level'
       // A single required placement, kept as a shorthand for the simple one-block case.
@@ -134,6 +121,11 @@ export type BalanceGoal =
       // step to count as solved. This forces the learner to build the whole balanced scale
       // from the tray instead of leaving the pans trivially empty (0 = 0).
       requireItemsOnSide?: { itemId: string; side: BalanceSide }[]
+      // Side-agnostic placement: every listed block id must sit on EITHER pan (i.e. not be
+      // left in the tray). Like requireItemsOnSide this rejects the trivially empty 0 = 0
+      // scale, but without pinning any block to a particular side, so mirror-image
+      // arrangements that are equally level both count as solved.
+      requirePlacedItems?: string[]
     }
   | { type: 'isolate'; unknownId: string; value: number }
 
@@ -164,7 +156,7 @@ export type BalanceStep = {
 }
 
 // The object/theme moved around in a manipulative puzzle (e.g., an apple).
-export type ManipulativeObject = {
+type ManipulativeObject = {
   // Singular noun used for accessible labels, e.g. "apple".
   label: string
   // Optional emoji/glyph drawn on each item; falls back to the label's initial.
@@ -181,7 +173,7 @@ export type ManipulativeObject = {
 //   the authored targets, so the displayed total equals x. `maxGroups`/`maxPerGroup`
 //   bound the steppers (the renderer falls back to generous defaults when omitted), and
 //   `total` is the size of the abundant pool the learner draws from.
-export type ManipulativeGoal =
+type ManipulativeGoal =
   | { type: 'equal-groups'; groups: number; perGroup: number }
   | { type: 'collect'; count: number }
   | { type: 'build-product'; groups: number; perGroup: number; maxGroups?: number; maxPerGroup?: number }
@@ -200,8 +192,6 @@ export type ManipulativeHintWhen =
 // A data-driven creative puzzle. Two interaction shapes share this one step type:
 // - equal-groups/collect: drag/tap identical objects from a tray into group zones.
 // - build-product: adjust group and per-group steppers while a live total updates.
-// Everything (theme, counts, goal, feedback) is authored in data, so new puzzles need
-// no shared-renderer changes.
 export type ManipulativeStep = {
   id: string
   type: 'manipulative'
@@ -224,13 +214,13 @@ export type ManipulativeStep = {
 export type PlotPoint = { x: number; y: number }
 
 // The four quadrants, numbered the conventional counterclockwise way starting upper-right.
-export type QuadrantId = 1 | 2 | 3 | 4
+type QuadrantId = 1 | 2 | 3 | 4
 
 // What makes a plotted answer correct. Authors pick one of:
 // - points: place a point at each exact target coordinate (order-independent).
 // - quadrants: place one point inside each listed quadrant (sign pattern only, any
 //   off-axis coordinate counts). A single-element list is "place a point in this quadrant".
-export type PlotTarget =
+type PlotTarget =
   | { kind: 'points'; points: PlotPoint[] }
   | { kind: 'quadrants'; quadrants: QuadrantId[] }
 
@@ -245,9 +235,7 @@ export type PlotHintWhen =
   | 'default'
 
 // A data-driven interactive coordinate-grid task (PRD R15): tap/click or use the keyboard
-// to place points on a labeled grid that runs `range.min`..`range.max` on both axes. The
-// pure `checkPlotStep` validates `target`, escalating authored `hints` -> incorrect ->
-// reveal, so new plotting tasks need no shared-renderer changes.
+// to place points on a labeled grid that runs `range.min`..`range.max` on both axes.
 export type PlotStep = {
   id: string
   type: 'plot'
@@ -265,7 +253,7 @@ export type PlotStep = {
 
 // One draggable range control (a slope `m` or intercept `b` slider). Inclusive bounds
 // with an optional `step` granularity (defaults to 1).
-export type SliderControl = {
+type SliderControl = {
   min: number
   max: number
   step?: number
@@ -280,10 +268,7 @@ export type SliderHintWhen =
   | 'default'
 
 // A data-driven interactive slider task (PRD R16): drag the slope `m` and intercept `b`
-// range controls to redraw a live line y = mx + b until it matches `target`. The pure
-// `checkSliderStep` validates the values against `target` (within optional `tolerance`),
-// escalating authored `hints` -> incorrect -> reveal, so new slider tasks need no
-// shared-renderer changes.
+// range controls to redraw a live line y = mx + b until it matches `target`.
 export type SliderStep = {
   id: string
   type: 'slider'
@@ -308,14 +293,14 @@ export type SliderStep = {
 
 // One labeled algebra term tile the learner sorts (e.g. `3x`, `-2x`, `5`, `4y`). `bin` is the
 // id of the group it belongs in, so membership (the correct answer) lives in the data.
-export type TermTile = {
+type TermTile = {
   id: string
   label: string
   bin: string
 }
 
 // A target group the learner sorts tiles into (e.g. "x-terms", "y-terms", "constants").
-export type TermBin = {
+type TermBin = {
   id: string
   label: string
   // Optional helper text shown under the bin label, e.g. "Same variable part: x".
@@ -329,9 +314,7 @@ export type DragTermsHintWhen =
   | 'default'
 
 // A data-driven labeled term-tile sorting task (PRD R14): drag/tap each labeled term tile into
-// the bin whose variable part it matches (combining like terms made hands-on). The pure
-// `checkDragTermsStep` validates each tile against its authored `bin`, escalating authored
-// `hints` -> incorrect -> reveal, so new sorting tasks need no shared-renderer changes.
+// the bin whose variable part it matches (combining like terms made hands-on).
 export type DragTermsStep = {
   id: string
   type: 'dragTerms'
@@ -366,7 +349,6 @@ export type Lesson = {
   subtitle: string
   skillIds: SkillId[]
   prerequisites: LessonId[]
-  nextLessonId?: LessonId
   steps: LessonStep[]
 }
 
@@ -374,20 +356,16 @@ export type Skill = {
   id: SkillId
   title: string
   description: string
-  prerequisites: SkillId[]
 }
 
 export type CourseLessonNode = {
   id: LessonId
   title: string
   description: string
-  status: 'available' | 'locked' | 'coming-soon'
 }
 
 export type Course = {
-  id: 'algebra-foundations'
   title: string
-  subject: 'algebra'
   description: string
   lessonOrder: LessonId[]
   lessons: CourseLessonNode[]

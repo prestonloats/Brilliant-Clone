@@ -6,7 +6,6 @@ export const balancingEquationsLesson: Lesson = {
   subtitle: 'What the equals sign really means',
   skillIds: ['equality', 'inverse-operations'],
   prerequisites: [],
-  nextLessonId: 'one-step-equations',
   steps: [
     {
       id: 'concept-balance',
@@ -49,7 +48,7 @@ export const balancingEquationsLesson: Lesson = {
       type: 'balance',
       layout: 'physical-drag',
       prompt:
-        'Build the balanced scale yourself. The tray holds a 3, a 2, and a 5. Drag the 3 and the 2 onto the left pan and the 5 onto the right pan so both sides weigh the same. If a block lands on the wrong side, just drag it again.',
+        'Build the balanced scale yourself. The tray holds a 3, a 2, and a 5 — drag them onto the two pans so both sides weigh the same. If a block lands on the wrong pan, just drag it again.',
       state: {
         left: [],
         right: [],
@@ -61,31 +60,27 @@ export const balancingEquationsLesson: Lesson = {
       },
       goal: {
         type: 'level',
-        requireItemsOnSide: [
-          { itemId: 'tray-left-3', side: 'left' },
-          { itemId: 'tray-left-2', side: 'left' },
-          { itemId: 'tray-right-5', side: 'right' },
-        ],
+        requirePlacedItems: ['tray-left-3', 'tray-left-2', 'tray-right-5'],
       },
       feedback: {
-        correct: 'Balanced! The left pan holds 3 + 2 and the right pan holds 5, so both sides weigh 5.',
+        correct: 'Balanced! One pan holds 3 + 2 and the other holds 5, so both sides weigh 5.',
         explanation:
-          'A level scale means both pans total the same amount. Put the 3 and the 2 on the left pan (3 + 2 = 5) and the 5 on the right pan so both sides weigh 5.',
+          'A level scale means both pans total the same amount. Put the 3 and the 2 together (3 + 2 = 5) on one pan and the 5 on the other so both sides weigh 5.',
         hints: [
           {
             when: 'missing-item',
-            text: 'Every block starts in the tray. The 3 and the 2 belong on the left pan; the 5 belongs on the right pan. Drag any block again if it lands on the wrong side.',
+            text: 'Every block starts in the tray. Drag all three onto the pans — the 3 and the 2 together on one pan, the 5 on the other.',
           },
           {
             when: 'not-level',
-            text: 'The scale is still tilted. Both pans must weigh the same — 3 + 2 on the left equals 5 on the right.',
+            text: 'The scale is still tilted. Both pans must weigh the same — 3 + 2 equals 5.',
           },
           {
             when: 'default',
-            text: 'Drag all three blocks out of the tray: the 3 and the 2 onto the left pan, the 5 onto the right pan, so both totals are 5.',
+            text: 'Drag all three blocks out of the tray: the 3 and the 2 onto one pan and the 5 onto the other, so both totals are 5.',
           },
         ],
-        reveal: 'Drag the 3 and the 2 onto the left pan and the 5 onto the right pan so both sides weigh 5.',
+        reveal: 'Put the 3 and the 2 on one pan and the 5 on the other so both sides weigh 5.',
       },
     },
     {
@@ -195,22 +190,18 @@ export const balancingEquationsLesson: Lesson = {
         {
           id: 'subtract-one-both',
           label: 'Subtract 1 from both sides',
-          detail: 'Remove the extra 1 next to y.',
         },
         {
           id: 'y-equals-five',
           label: 'y = 5',
-          detail: 'The remaining right side is 6 - 1.',
         },
         {
           id: 'subtract-one-left',
           label: 'Subtract 1 from the left only',
-          detail: 'This isolates y but tips the scale.',
         },
         {
           id: 'y-equals-six',
           label: 'y = 6',
-          detail: 'This ignores the +1 next to y.',
         },
       ],
       correctOrder: ['subtract-one-both', 'y-equals-five'],
@@ -248,10 +239,10 @@ export const balancingEquationsLesson: Lesson = {
       prompt: 'Mastery check: build the full balance story for x - 6 = 9, from the first move to the final value.',
       equation: 'x - 6 = 9',
       tiles: [
-        { id: 'add-six-both', label: 'Add 6 to both sides', detail: 'Undo the -6 next to x without tipping the scale.' },
-        { id: 'x-equals-fifteen', label: 'x = 15', detail: 'The right side becomes 9 + 6.' },
-        { id: 'add-six-left', label: 'Add 6 to the left only', detail: 'Tempting, but it tips the scale.' },
-        { id: 'x-equals-nine', label: 'x = 9', detail: 'This forgets to undo the -6.' },
+        { id: 'add-six-both', label: 'Add 6 to both sides' },
+        { id: 'x-equals-fifteen', label: 'x = 15' },
+        { id: 'add-six-left', label: 'Add 6 to the left only' },
+        { id: 'x-equals-nine', label: 'x = 9' },
       ],
       correctOrder: ['add-six-both', 'x-equals-fifteen'],
       feedback: {

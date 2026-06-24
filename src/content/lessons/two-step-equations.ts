@@ -6,7 +6,6 @@ export const twoStepEquationsLesson: Lesson = {
   subtitle: 'Undo in the right order',
   skillIds: ['two-step-equations'],
   prerequisites: ['one-step-equations'],
-  nextLessonId: 'like-terms-variables-both-sides',
   steps: [
     {
       id: 'concept-reverse-order',
@@ -62,32 +61,22 @@ export const twoStepEquationsLesson: Lesson = {
         {
           id: 'add-five-both',
           label: 'Add 5 to both sides',
-          detail: '4x - 5 = 19 becomes 4x = 24.',
         },
         {
           id: 'divide-four-both',
           label: 'Divide both sides by 4',
-          detail: '4x = 24 becomes x = 6.',
         },
         {
           id: 'x-equals-six',
           label: 'x = 6',
-          detail: 'The isolated value.',
-        },
-        {
-          id: 'divide-four-first',
-          label: 'Divide by 4 first',
-          detail: 'This ignores the -5.',
         },
         {
           id: 'subtract-five-both',
           label: 'Subtract 5 from both sides',
-          detail: 'This repeats the -5 instead of undoing it.',
         },
         {
           id: 'x-equals-nineteen',
           label: 'x = 19',
-          detail: 'This uses the whole right side.',
         },
       ],
       correctOrder: ['add-five-both', 'divide-four-both', 'x-equals-six'],
@@ -97,7 +86,6 @@ export const twoStepEquationsLesson: Lesson = {
         incomplete: 'Use three tiles: clear the -5, split the 4x, then choose the value of x.',
         reveal: 'Tap "Add 5 to both sides", "Divide both sides by 4", then "x = 6".',
         hintsByTile: {
-          'divide-four-first': 'Dividing first is tempting, but the -5 still changes the 4x bundle.',
           'subtract-five-both': 'Subtracting 5 repeats the -5. Add 5 to undo it.',
           'x-equals-nineteen': '19 is the whole right side before either operation has been undone.',
           'x-equals-six': 'x = 6 is the result, but it belongs after both inverse moves.',
@@ -189,27 +177,18 @@ export const twoStepEquationsLesson: Lesson = {
         {
           id: 'subtract-five-both',
           label: 'Subtract 5 from both sides',
-          detail: '5 + 2x = 17 becomes 2x = 12.',
         },
         {
           id: 'divide-two-both',
           label: 'Divide both sides by 2',
-          detail: '2x = 12 becomes x = 6.',
         },
         {
           id: 'x-equals-six',
           label: 'x = 6',
-          detail: 'The isolated value.',
-        },
-        {
-          id: 'divide-two-first',
-          label: 'Divide by 2 first',
-          detail: 'This splits before clearing the +5.',
         },
         {
           id: 'x-equals-seventeen',
           label: 'x = 17',
-          detail: 'This treats the right side as x.',
         },
       ],
       correctOrder: ['subtract-five-both', 'divide-two-both', 'x-equals-six'],
@@ -219,7 +198,6 @@ export const twoStepEquationsLesson: Lesson = {
         incomplete: 'Choose the move that clears +5, the move that splits 2x, and then the value of x.',
         reveal: 'Tap "Subtract 5 from both sides", "Divide both sides by 2", then "x = 6".',
         hintsByTile: {
-          'divide-two-first': 'Dividing first changes the whole side while +5 is still attached.',
           'x-equals-seventeen': '17 is the whole right side, not one x.',
           'x-equals-six': 'x = 6 is the final tile, after the two inverse moves.',
         },
@@ -269,32 +247,22 @@ export const twoStepEquationsLesson: Lesson = {
         {
           id: 'add-four-both',
           label: 'Add 4 to both sides',
-          detail: 'x/3 - 4 = 2 becomes x/3 = 6.',
         },
         {
           id: 'multiply-three-both',
           label: 'Multiply both sides by 3',
-          detail: 'x/3 = 6 becomes x = 18.',
         },
         {
           id: 'x-equals-eighteen',
           label: 'x = 18',
-          detail: 'The isolated value.',
-        },
-        {
-          id: 'divide-three-first',
-          label: 'Divide both sides by 3 first',
-          detail: 'x is already split into thirds.',
         },
         {
           id: 'subtract-four-both',
           label: 'Subtract 4 from both sides',
-          detail: 'This repeats the -4 instead of undoing it.',
         },
         {
           id: 'x-equals-two',
           label: 'x = 2',
-          detail: 'This treats the right side as x.',
         },
       ],
       correctOrder: ['add-four-both', 'multiply-three-both', 'x-equals-eighteen'],
@@ -304,7 +272,6 @@ export const twoStepEquationsLesson: Lesson = {
         incomplete: 'Use three tiles: clear the -4, undo the divide-by-3, then state the value of x.',
         reveal: 'Tap "Add 4 to both sides", "Multiply both sides by 3", then "x = 18".',
         hintsByTile: {
-          'divide-three-first': 'Dividing again turns x/3 into x/9. The inverse of dividing by 3 is multiplying by 3.',
           'subtract-four-both': 'Subtracting 4 repeats the -4. Add 4 to undo it.',
           'x-equals-two': '2 is the right side before any inverse move has happened.',
           'multiply-three-both': 'Multiplying by 3 is the correct second move, but clear the -4 before it.',

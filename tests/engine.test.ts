@@ -34,17 +34,13 @@ import {
   restartLessonProgress,
   type ProgressByLesson,
 } from '../src/engine'
+import { findHintText, findStep } from './helpers/findStep'
 
 const lessonStep = <Type extends LessonStep['type']>(
   id: string,
   type: Type,
   lesson: Lesson = balancingEquationsLesson,
-) => {
-  const step = lesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(step)
-  assert.equal(step.type, type)
-  return step as Extract<LessonStep, { type: Type }>
-}
+) => findStep(lesson, id, type)
 
 const expectedLessonOrder: LessonId[] = [
   'balancing-equations',
@@ -80,8 +76,8 @@ const completedThrough = (...lessonIds: LessonId[]): ProgressByLesson =>
     return accumulator
   }, {})
 
-// Self-contained operation-choice step so feedback-escalation tests don't depend on lesson
-// data the content wave is actively editing.
+// These self-contained synthetic*Step fixtures keep the checker-escalation tests independent
+// of the authored lesson content, so each checker is exercised against fixed data.
 const syntheticOperationChoiceStep: Extract<LessonStep, { type: 'operation-choice' }> = {
   id: 'synthetic-operation-choice',
   type: 'operation-choice',
@@ -99,8 +95,6 @@ const syntheticOperationChoiceStep: Extract<LessonStep, { type: 'operation-choic
   },
 }
 
-// Self-contained plot steps so the checker's escalation is verified independently of the
-// coordinate-plane lesson content (which the content wave is actively editing).
 const syntheticPointPlotStep: Extract<LessonStep, { type: 'plot' }> = {
   id: 'synthetic-point-plot',
   type: 'plot',
@@ -140,8 +134,6 @@ const syntheticQuadrantPlotStep: Extract<LessonStep, { type: 'plot' }> = {
   },
 }
 
-// Self-contained slider step so the checker's escalation is verified independently of the
-// graphing-lines lesson content (which the content wave is actively editing).
 const syntheticSliderStep: Extract<LessonStep, { type: 'slider' }> = {
   id: 'synthetic-slider',
   type: 'slider',
@@ -165,8 +157,6 @@ const syntheticSliderStep: Extract<LessonStep, { type: 'slider' }> = {
   },
 }
 
-// Self-contained drag-terms step so the checker's escalation is verified independently of the
-// like-terms lesson content (which the content wave is actively editing).
 const syntheticDragTermsStep: Extract<LessonStep, { type: 'dragTerms' }> = {
   id: 'synthetic-drag-terms',
   type: 'dragTerms',
@@ -240,7 +230,7 @@ test('input accepts equivalent numeric answers without evaluating invalid expres
 
 test('balance recovery keeps reveal until the third miss', () => {
   const step = lessonStep('drag-to-level', 'balance')
-  const missingItemHint = step.feedback.hints.find((hint) => hint.when === 'missing-item')?.text
+  const missingItemHint = findHintText(step, 'missing-item')
   assert.ok(missingItemHint)
 
   // The empty start state has no required block placed yet, so it escalates like any miss.
@@ -265,8 +255,8 @@ test('balance level goal distinguishes missing item, not level, and solved state
   const five = bank.find((item) => item.id === 'tray-right-5')
   assert.ok(three && two && five)
 
-  const missingItemHint = step.feedback.hints.find((hint) => hint.when === 'missing-item')?.text
-  const notLevelHint = step.feedback.hints.find((hint) => hint.when === 'not-level')?.text
+  const missingItemHint = findHintText(step, 'missing-item')
+  const notLevelHint = findHintText(step, 'not-level')
   assert.ok(missingItemHint && notLevelHint)
 
   // Empty pans (the start state): the required blocks are still in the tray.
@@ -655,7 +645,7 @@ test('recommendations use average mastery threshold and end-of-path copy', () =>
     'Like Terms & Variables on Both Sides',
   )
   // Finishing Like Terms with Coordinate Plane still open points to the other branch, not
-  // the locked merge lesson (Graphing Lines) the linear nextLessonId would have chosen.
+  // the locked merge lesson (Graphing Lines) a naive linear order would have chosen.
   assert.equal(
     getRecommendedNextLesson(
       lessons['like-terms-variables-both-sides'],
@@ -684,7 +674,7 @@ test('next-lesson recommendation skips locked merge and already-completed branch
     }))
 
   // Learner took the Coordinate Plane branch first: Like Terms is still open and the merge
-  // lesson (Graphing Lines) is still locked, so the linear nextLessonId would be wrong.
+  // lesson (Graphing Lines) is still locked, so a naive linear order would be wrong.
   const coordinateFirst = completedThrough(
     'balancing-equations',
     'one-step-equations',
@@ -1149,8 +1139,8 @@ test('two-step lesson teaches reverse order with operation and sequence puzzles'
     'Choose "-3 from both sides": 18 = 5x + 3 becomes 15 = 5x, then x = 3.',
   )
 
-  const wrongOrder = checkSequenceStep(ordered, ['divide-four-first', 'add-five-both', 'x-equals-six'], 1)
-  assert.equal(wrongOrder.feedback, 'Dividing first is tempting, but the -5 still changes the 4x bundle.')
+  const wrongOrder = checkSequenceStep(ordered, ['subtract-five-both', 'divide-four-both', 'x-equals-six'], 1)
+  assert.equal(wrongOrder.feedback, 'Subtracting 5 repeats the -5. Add 5 to undo it.')
 
   const solvedOrder = checkSequenceStep(ordered, ['add-five-both', 'divide-four-both', 'x-equals-six'], 1)
   assert.equal(solvedOrder.correct, true)
@@ -1179,8 +1169,8 @@ test('like-terms lesson combines terms before variables-on-both-sides solving', 
   )
   const finalInput = lessonStep('input-variable-both-sides', 'input', lessons['like-terms-variables-both-sides'])
 
-  const sortTermsHint = (when: string) => sortTerms.feedback.hints?.find((hint) => hint.when === when)?.text
-  const sortEquationHint = (when: string) => sortEquationTerms.feedback.hints?.find((hint) => hint.when === when)?.text
+  const sortTermsHint = (when: string) => findHintText(sortTerms, when)
+  const sortEquationHint = (when: string) => findHintText(sortEquationTerms, when)
 
   // Sorting 4x + 3 - x + 2y: 4x and -x are x-terms, 2y is the y-term, 3 is the constant.
   assert.equal(
@@ -1373,7 +1363,7 @@ test('coordinate-plane lesson checks ordered-pair direction and quadrant misconc
   assert.equal(checkPlotStep(pointPlot, [{ x: -4, y: 2 }], 1).correct, true)
   assert.equal(
     checkPlotStep(pointPlot, [{ x: 2, y: -4 }], 1).feedback,
-    pointPlot.feedback.hints?.find((hint) => hint.when === 'swapped')?.text,
+    findHintText(pointPlot, 'swapped'),
   )
 
   assert.equal(checkInputStep(robotInput, '-5,1', 1).correct, true)
@@ -1398,7 +1388,7 @@ test('graphing-lines lesson connects slope-intercept sliders, points, and tables
   assert.equal(checkSliderStep(matchLine, { slope: 3, intercept: 2 }, 1).correct, true)
   assert.equal(
     checkSliderStep(matchLine, { slope: 3, intercept: -2 }, 1).feedback,
-    matchLine.feedback.hints?.find((hint) => hint.when === 'intercept-off')?.text,
+    findHintText(matchLine, 'intercept-off'),
   )
 
   const flippedSlope = checkSequenceStep(plotOrder, ['start-at-intercept', 'move-right-two-up-one', 'mark-one-one'], 1)
@@ -1424,7 +1414,6 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
     assert.equal(lessons[lessonId].id, lessonId)
     assert.ok(algebraCourse.lessons.some((node) => node.id === lessonId))
     assert.deepEqual(lessons[lessonId].prerequisites, expectedPrerequisites[lessonId])
-    assert.equal(lessons[lessonId].nextLessonId, expectedLessonOrder[expectedLessonOrder.indexOf(lessonId) + 1])
   })
 
   expectedLessonOrder.map((lessonId) => lessons[lessonId]).forEach((lesson) => {
@@ -1488,7 +1477,6 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
   })
 
   assert.ok(lessons['two-step-equations'].steps.length > 0)
-  assert.equal(algebraCourse.lessons.find((node) => node.id === 'two-step-equations')?.status, 'locked')
   assert.deepEqual(lessons['two-step-equations'].prerequisites, ['one-step-equations'])
   assert.equal(algebraCourse.lessons.length, 6)
 })

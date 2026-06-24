@@ -17,7 +17,7 @@ import type {
 } from '../domain'
 import { lessons } from '../domain'
 import { isValidEmail } from '../authValidation'
-import type { LocalDatabase, LocalUser, SignUpInput } from './types'
+import type { LocalDatabase, SignUpInput } from './types'
 
 export const emptyDatabase = (): LocalDatabase => ({
   users: {},
@@ -68,15 +68,16 @@ const isLessonScore = (value: unknown): value is LessonScore => {
   )
 }
 
-const normalizeRecord = <Value>(
+const normalizeRecordWith = <Value>(
   value: unknown,
-  isValue: (candidate: unknown) => candidate is Value,
+  normalize: (candidate: unknown) => Value | null,
 ): Record<string, Value> => {
   if (!isRecord(value)) return {}
 
   return Object.entries(value).reduce<Record<string, Value>>((record, [key, candidate]) => {
-    if (isValue(candidate)) {
-      record[key] = candidate
+    const normalized = normalize(candidate)
+    if (normalized !== null) {
+      record[key] = normalized
     }
 
     return record
@@ -104,21 +105,6 @@ export const normalizeUserProfile = (value: unknown): UserProfile | null => {
     ...(typeof value.emailVerified === 'boolean' ? { emailVerified: value.emailVerified } : {}),
     createdAt: value.createdAt,
   }
-}
-
-const normalizeLocalUser = normalizeUserProfile
-
-const normalizeUserRecord = (value: unknown): Record<string, LocalUser> => {
-  if (!isRecord(value)) return {}
-
-  return Object.entries(value).reduce<Record<string, LocalUser>>((record, [key, candidate]) => {
-    const user = normalizeLocalUser(candidate)
-    if (user) {
-      record[key] = user
-    }
-
-    return record
-  }, {})
 }
 
 const normalizeStepResults = (
@@ -173,19 +159,6 @@ export const normalizeLessonProgress = (value: unknown): LessonProgress | null =
   }
 }
 
-const normalizeLessonProgressRecord = (value: unknown): Record<string, LessonProgress> => {
-  if (!isRecord(value)) return {}
-
-  return Object.entries(value).reduce<Record<string, LessonProgress>>((record, [key, candidate]) => {
-    const progress = normalizeLessonProgress(candidate)
-    if (progress) {
-      record[key] = progress
-    }
-
-    return record
-  }, {})
-}
-
 export const isSkillMastery = (value: unknown): value is SkillMastery => {
   if (!isRecord(value)) return false
 
@@ -218,9 +191,11 @@ export const normalizeDatabase = (value: unknown): LocalDatabase => {
   if (!isRecord(value)) return emptyDatabase()
 
   return {
-    users: normalizeUserRecord(value.users),
-    progress: normalizeLessonProgressRecord(value.progress),
-    mastery: normalizeRecord(value.mastery, isSkillMastery),
+    users: normalizeRecordWith(value.users, normalizeUserProfile),
+    progress: normalizeRecordWith(value.progress, normalizeLessonProgress),
+    mastery: normalizeRecordWith(value.mastery, (candidate) =>
+      isSkillMastery(candidate) ? candidate : null,
+    ),
     attempts: Array.isArray(value.attempts) ? value.attempts.filter(isAttemptEvent) : [],
   }
 }

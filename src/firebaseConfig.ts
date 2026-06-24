@@ -9,8 +9,6 @@ import {
   type FirebaseEnvKey,
 } from './firebaseConfigCore'
 
-export type { BackendProvider, FirebaseEnvKey }
-
 const firebaseEnv = () => import.meta.env as FirebaseEnv
 
 export const getBackendProvider = (): BackendProvider =>

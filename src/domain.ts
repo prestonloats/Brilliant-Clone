@@ -15,9 +15,6 @@ export {
   lessons,
   balancingEquationsLesson,
   oneStepEquationsLesson,
-  twoStepEquationsLesson,
-  likeTermsVariablesBothSidesLesson,
-  coordinatePlaneLesson,
   graphingLinesLesson,
 } from './content/lessons'
 

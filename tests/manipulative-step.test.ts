@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import {
   manipulativeBuildProductExampleStep,
   manipulativeExampleStep,
-} from '../src/content/examples/manipulative-example'
+} from './fixtures/manipulative-example'
 import type { ManipulativeStep } from '../src/domain'
 import { checkManipulativeStep } from '../src/engine'
 

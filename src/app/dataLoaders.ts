@@ -8,7 +8,7 @@ export async function getInitialLessonSession(backend: Backend, user: UserProfil
     backend.mastery.getUserMastery(user.id),
     backend.attempts.getAttempts(user.id),
   ])
-  const activeLessonId = getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, 'balancing-equations')
+  const activeLessonId = getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, algebraCourse.lessonOrder[0])
   // Only surface progress that was actually saved. A brand-new learner sees "Start" with
   // no 0% bar until they begin a lesson, so we never create or persist an inProgress
   // record here; that happens in launchLesson when they actually start.

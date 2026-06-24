@@ -1,4 +1,4 @@
-import type { ManipulativeStep } from '../types'
+import type { ManipulativeStep } from '../../src/content/types'
 
 // Reference instance for the data-driven manipulative puzzle step.
 //

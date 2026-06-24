@@ -6,7 +6,6 @@ export const oneStepEquationsLesson: Lesson = {
   subtitle: 'Undo one operation',
   skillIds: ['one-step-equations'],
   prerequisites: ['balancing-equations'],
-  nextLessonId: 'two-step-equations',
   steps: [
     {
       id: 'concept-undoing',
@@ -94,22 +93,18 @@ export const oneStepEquationsLesson: Lesson = {
         {
           id: 'subtract-six-both',
           label: 'Subtract 6 from both sides',
-          detail: 'Undo the +6.',
         },
         {
           id: 'x-equals-four',
           label: 'x = 4',
-          detail: 'The right side becomes 10 - 6.',
         },
         {
           id: 'add-six-both',
           label: 'Add 6 to both sides',
-          detail: 'This repeats +6.',
         },
         {
           id: 'x-equals-ten',
           label: 'x = 10',
-          detail: 'This uses the whole right side.',
         },
       ],
       correctOrder: ['subtract-six-both', 'x-equals-four'],
@@ -191,22 +186,18 @@ export const oneStepEquationsLesson: Lesson = {
         {
           id: 'multiply-six-both',
           label: 'Multiply both sides by 6',
-          detail: 'Undo division by 6.',
         },
         {
           id: 'x-equals-twelve',
           label: 'x = 12',
-          detail: 'The right side becomes 2 x 6.',
         },
         {
           id: 'divide-six-both',
           label: 'Divide both sides by 6',
-          detail: 'This repeats the division.',
         },
         {
           id: 'x-equals-two',
           label: 'x = 2',
-          detail: 'This is the result before undoing the division.',
         },
       ],
       correctOrder: ['multiply-six-both', 'x-equals-twelve'],

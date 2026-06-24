@@ -28,22 +28,18 @@ const SIMPLE_FRACTION = /(^|[\s(=+\-*/])([A-Za-z0-9]+)\s*\/\s*([A-Za-z0-9]+)/g
 const EXPLICIT_TIMES = /\*/g
 
 export function equationToLatex(input: string): string {
-  const source = (input ?? '').trim()
+  const source = input.trim()
   if (!source) return ''
-  try {
-    return source
-      .replace(PROSE_WORD, (word) => `\\text{${word}}`)
-      .replace(ARROW, ' \\rightarrow ')
-      .replace(SIMPLE_FRACTION, (_match, lead: string, numerator: string, denominator: string) => `${lead}\\frac{${numerator}}{${denominator}}`)
-      .replace(EXPLICIT_TIMES, ' \\cdot ')
-  } catch {
-    return source
-  }
+  return source
+    .replace(PROSE_WORD, (word) => `\\text{${word}}`)
+    .replace(ARROW, ' \\rightarrow ')
+    .replace(SIMPLE_FRACTION, (_match, lead: string, numerator: string, denominator: string) => `${lead}\\frac{${numerator}}{${denominator}}`)
+    .replace(EXPLICIT_TIMES, ' \\cdot ')
 }
 
 // A readable plain-text label for screen readers. Keeps the original equation but spells
 // out the "->" step arrow, which a screen reader would otherwise read as "minus greater
 // than". Everything else (=, +, -, /) is announced sensibly as-is.
 export function equationToAriaLabel(input: string): string {
-  return (input ?? '').trim().replace(/\s*->\s*/g, ', then ')
+  return input.trim().replace(ARROW, ', then ')
 }

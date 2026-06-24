@@ -7,11 +7,11 @@ import {
   sideTotal,
   type BalanceCheckMeta,
 } from '../../engine'
-import type { BalanceItem, BalanceOperation, BalanceSide, BalanceState, BalanceStep } from '../../domain'
+import type { BalanceItem, BalanceOperation, BalanceSide, BalanceState, BalanceStep, StepResult } from '../../domain'
 import { DragPreview } from '../../components/DragPreview'
 import { FeedbackPanel } from '../../components/FeedbackPanel'
 import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { CompleteOptions } from '../types'
 import {
   cloneBalanceState,
   describeBalanceChange,
@@ -22,7 +22,13 @@ import {
   reconstructSolvedBalanceState,
   type DropTarget,
 } from '../balanceHelpers'
+import { BOUNCE_RESET_MS } from './constants'
 import { Pan, PhysicalScaleStage } from './BalancePans'
+
+// The beam tilts up to MAX_TILT_DEG in either direction, gaining TILT_DEG_PER_UNIT degrees for
+// each unit of imbalance between the pans until it saturates at the cap.
+const MAX_TILT_DEG = 11
+const TILT_DEG_PER_UNIT = 3
 
 type DraggingTile = {
   item: BalanceItem
@@ -41,7 +47,7 @@ export function BalanceStepView({
   onComplete,
 }: {
   step: BalanceStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
@@ -70,7 +76,7 @@ export function BalanceStepView({
   const leftTotal = sideTotal(state.left)
   const rightTotal = sideTotal(state.right)
   const balanceCue = getBalanceCue(leftTotal, rightTotal)
-  const tilt = Math.max(-11, Math.min(11, (rightTotal - leftTotal) * 3))
+  const tilt = Math.max(-MAX_TILT_DEG, Math.min(MAX_TILT_DEG, (rightTotal - leftTotal) * TILT_DEG_PER_UNIT))
   const isPhysicalDrag = step.layout === 'physical-drag'
   // A tray-backed step lets the learner drag weights on/off the pans, so re-dragging
   // (between pans, or back to the tray) is the recovery path. Operation-based steps
@@ -82,7 +88,7 @@ export function BalanceStepView({
   useEffect(() => {
     if (!lastDropSide) return
 
-    const timeoutId = window.setTimeout(() => setLastDropSide(null), 420)
+    const timeoutId = window.setTimeout(() => setLastDropSide(null), BOUNCE_RESET_MS)
     return () => window.clearTimeout(timeoutId)
   }, [lastDropSide])
 
@@ -304,20 +310,12 @@ export function BalanceStepView({
           className={`item-bank ${isPhysicalDrag ? 'physical-bank' : ''} ${hoverTarget === 'bank' ? 'drop-target' : ''}`}
           data-drop-zone="bank"
         >
-          <p id={`${step.id}-bank-instructions`}>
-            {dragging
-              ? 'Release over a glowing pan, or drop here to send the block back to the tray.'
-              : isPhysicalDrag
-                ? 'Drag a block onto the pan that makes the scale level. Dropped it on the wrong side? Just drag it again.'
-                : 'Drag a tile to a pan or back to the tray, or tap where it should go.'}
-          </p>
           {bankItems.length > 0 ? (
             bankItems.map((item) => (
               <div className="bank-item" key={item.id}>
                 <button
                   className={`tile bank-tile movable-tile ${dragging?.item.id === item.id ? 'dragging-source' : ''}`}
                   type="button"
-                  aria-describedby={`${step.id}-bank-instructions`}
                   aria-label={`Drag ${item.label} block to a pan`}
                   disabled={correct}
                   onPointerDown={(event) => startDrag(event, item)}

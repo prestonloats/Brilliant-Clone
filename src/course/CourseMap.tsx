@@ -10,11 +10,14 @@ import {
 import { getCourseProgressSummary, type ProgressByLesson } from '../engine'
 import { ProgressBar } from '../components/ProgressBar'
 import {
+  getLessonActionLabel,
   getLessonProgressLabel,
   getLessonProgressPercent,
   getReviewSuggestedLessonId,
   getScoreSummaryText,
 } from './courseHelpers'
+import { getCourseMasterySummary } from './masteryCelebration'
+import { MasterySparkles } from './MasterySparkles'
 import { CoursePathGraph } from './CoursePathGraph'
 
 type CourseMapProps = {
@@ -38,6 +41,7 @@ export function CourseMap({
 }: CourseMapProps) {
   const reviewLessonId = getReviewSuggestedLessonId(progressByLesson, mastery)
   const pathSummary = getCourseProgressSummary(algebraCourse, lessons, progressByLesson, activeLesson.id)
+  const masterySummary = getCourseMasterySummary(algebraCourse, lessons, progressByLesson, mastery)
   const featuredLessonId = pathSummary.recommendedLessonId
   const reviewLesson = reviewLessonId && reviewLessonId !== featuredLessonId ? lessons[reviewLessonId] : null
   const featuredLesson = lessons[featuredLessonId]
@@ -50,12 +54,10 @@ export function CourseMap({
     pathSummary.lastCompletedBestScore,
   )
   const progressLabel = `${pathSummary.completedLessons} of ${pathSummary.totalLessons} lessons complete`
-  const actionLabel =
-    pathSummary.recommendedAction === 'view-summary'
-      ? 'View summary'
-      : pathSummary.recommendedAction === 'continue'
-        ? 'Continue'
-        : 'Start'
+  const actionLabel = getLessonActionLabel({
+    completed: pathSummary.recommendedAction === 'view-summary',
+    started: pathSummary.recommendedAction === 'continue',
+  })
 
   return (
     <section className="screen-stack">
@@ -74,7 +76,26 @@ export function CourseMap({
             <strong>{lastCompletedLesson?.title ?? 'Nothing completed yet'}</strong>
             <small>{lastCompletedScore || (lastCompletedLesson ? 'Completed' : 'Start the first lesson to begin your path.')}</small>
           </div>
+          <div className={`overview-stat ${masterySummary.masteredCount > 0 ? 'overview-stat-mastery' : ''}`}>
+            <span>Subjects mastered</span>
+            <strong>
+              {masterySummary.masteredCount} of {masterySummary.totalLessons}
+            </strong>
+            <small>{masterySummary.percentMastered}% mastered</small>
+          </div>
         </div>
+        {masterySummary.masteredCount > 0 && (
+          <div className={`mastery-banner ${masterySummary.allMastered ? 'is-complete' : ''}`}>
+            <span className="mastery-banner-icon" aria-hidden="true">
+              {masterySummary.allMastered ? '🎉' : '🏆'}
+            </span>
+            <div className="mastery-banner-copy">
+              <strong>{masterySummary.headline}</strong>
+              <span>{masterySummary.message}</span>
+            </div>
+            {masterySummary.allMastered && <MasterySparkles seed={masterySummary.totalLessons} count={20} />}
+          </div>
+        )}
         <div className="continue-panel">
           <div>
             <span>Recommended next</span>

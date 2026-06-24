@@ -96,18 +96,14 @@ function PhysicalPan({
       <span className="physical-pan-cables" aria-hidden="true" />
       <div className="physical-pan-surface">
         <span className="physical-pan-label">{title}</span>
-        <div className="physical-tile-row">
-          {items.map((item) => (
-            <BalanceTile
-              key={item.id}
-              item={item}
-              location={title}
-              movable={Boolean(onTilePointerDown) && !item.locked && !tilesDisabled}
-              dragging={draggingId === item.id}
-              onTilePointerDown={onTilePointerDown}
-            />
-          ))}
-        </div>
+        <TileRow
+          className="physical-tile-row"
+          items={items}
+          location={title}
+          onTilePointerDown={onTilePointerDown}
+          draggingId={draggingId}
+          tilesDisabled={tilesDisabled}
+        />
       </div>
     </div>
   )
@@ -140,18 +136,47 @@ export function Pan({
         <strong>{title}</strong>
         <small>Total {total}</small>
       </span>
-      <div className="tile-row">
-        {items.map((item) => (
-          <BalanceTile
-            key={item.id}
-            item={item}
-            location={title}
-            movable={Boolean(onTilePointerDown) && !item.locked && !tilesDisabled}
-            dragging={draggingId === item.id}
-            onTilePointerDown={onTilePointerDown}
-          />
-        ))}
-      </div>
+      <TileRow
+        className="tile-row"
+        items={items}
+        location={title}
+        onTilePointerDown={onTilePointerDown}
+        draggingId={draggingId}
+        tilesDisabled={tilesDisabled}
+      />
+    </div>
+  )
+}
+
+// Renders the weights sitting on a pan. Pan and PhysicalPan share this exact mapping and only
+// differ in their wrapper markup and the row's className.
+function TileRow({
+  className,
+  items,
+  location,
+  onTilePointerDown,
+  draggingId,
+  tilesDisabled,
+}: {
+  className: string
+  items: BalanceItem[]
+  location: string
+  onTilePointerDown?: (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => void
+  draggingId?: string
+  tilesDisabled?: boolean
+}) {
+  return (
+    <div className={className}>
+      {items.map((item) => (
+        <BalanceTile
+          key={item.id}
+          item={item}
+          location={location}
+          movable={Boolean(onTilePointerDown) && !item.locked && !tilesDisabled}
+          dragging={draggingId === item.id}
+          onTilePointerDown={onTilePointerDown}
+        />
+      ))}
     </div>
   )
 }

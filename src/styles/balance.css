@@ -493,14 +493,6 @@ button.tile {
     rgba(37, 99, 235, 0.18) 0 16px 30px;
 }
 
-.tray-empty {
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-  margin: 4px 0 0;
-  text-align: center;
-}
-
 /* Unlocked weights sitting on a pan can be picked back up and re-dragged. */
 .movable-tile {
   cursor: grab;
@@ -522,4 +514,4 @@ button.tile {
   margin: 12px 0 0;
   padding: 12px 14px;
 }
-
+

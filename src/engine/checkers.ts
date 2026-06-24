@@ -5,15 +5,7 @@
 // (hint -> explanation -> reveal) through the shared `buildWrongResult` helper. The balance
 // checker reuses the `sideTotal`/`isLevel` predicates from the balance module.
 
-import type {
-  BalanceState,
-  DragTermsHintWhen,
-  LessonStep,
-  ManipulativeHintWhen,
-  PlotHintWhen,
-  PlotPoint,
-  SliderHintWhen,
-} from '../domain'
+import type { BalanceState, LessonStep, PlotPoint } from '../domain'
 import type { BalanceCheckMeta, CheckResult } from './types'
 import { isLevel, sideTotal } from './balance'
 
@@ -92,6 +84,27 @@ const buildWrongResult = ({
   }
 }
 
+// Shared hint/feedback factory for the data-driven checkers (manipulative, plot, slider,
+// dragTerms). Each resolves an authored hint by `when`, falls back to the `default` hint and
+// then the generic `incorrect`, and wraps it in `buildWrongResult` with the same escalation.
+const makeHintHelpers = <W extends string>(
+  step: { feedback: { incorrect: string; reveal: string; hints?: { when: W; text: string }[] } },
+  attemptNumber: number,
+) => {
+  const hintFor = (when: W) =>
+    step.feedback.hints?.find((hint) => hint.when === when)?.text ??
+    step.feedback.hints?.find((hint) => hint.when === 'default')?.text ??
+    step.feedback.incorrect
+  const wrong = (when: W) =>
+    buildWrongResult({
+      attemptNumber,
+      hint: hintFor(when),
+      explanation: step.feedback.incorrect,
+      reveal: step.feedback.reveal,
+    })
+  return { hintFor, wrong }
+}
+
 const safeEvaluateNumber = (value: string) => {
   const normalized = normalizeExpression(value)
   if (!/^-?\d+(\.\d+)?(\/-?\d+(\.\d+)?)?$/.test(normalized)) {
@@ -106,18 +119,22 @@ const safeEvaluateNumber = (value: string) => {
   return Number(normalized)
 }
 
+// Absolute tolerance for accepting a typed numeric answer (e.g. 0.5 vs 1/2). Deliberately
+// looser than the slider's 1e-9 epsilon because learners hand-type decimal approximations.
+const INPUT_NUMERIC_TOLERANCE = 0.001
+
 export const checkInputStep = (
   step: Extract<LessonStep, { type: 'input' }>,
   answer: string,
   attemptNumber = 1,
 ): CheckResult => {
   const normalizedAnswer = normalizeExpression(answer)
+  const answerNumber = safeEvaluateNumber(answer)
   const accepted = step.accept.some((value) => {
     if (normalizeExpression(value) === normalizedAnswer) return true
 
     const acceptedNumber = safeEvaluateNumber(value)
-    const answerNumber = safeEvaluateNumber(answer)
-    return Number.isFinite(acceptedNumber) && Math.abs(acceptedNumber - answerNumber) < 0.001
+    return Number.isFinite(acceptedNumber) && Math.abs(acceptedNumber - answerNumber) < INPUT_NUMERIC_TOLERANCE
   })
 
   if (accepted) {
@@ -187,17 +204,7 @@ export const checkManipulativeStep = (
   groupCounts: number[],
   attemptNumber = 1,
 ): CheckResult => {
-  const hintFor = (when: ManipulativeHintWhen) =>
-    step.feedback.hints?.find((hint) => hint.when === when)?.text ??
-    step.feedback.hints?.find((hint) => hint.when === 'default')?.text ??
-    step.feedback.incorrect
-  const wrong = (when: ManipulativeHintWhen) =>
-    buildWrongResult({
-      attemptNumber,
-      hint: hintFor(when),
-      explanation: step.feedback.incorrect,
-      reveal: step.feedback.reveal,
-    })
+  const { wrong } = makeHintHelpers(step, attemptNumber)
 
   const placed = groupCounts.reduce((total, count) => total + count, 0)
 
@@ -241,7 +248,7 @@ export const checkManipulativeStep = (
 
 // The quadrant a point falls in, or null when it sits on an axis (so it is in none).
 // Numbered counterclockwise from the upper right: I (+,+), II (-,+), III (-,-), IV (+,-).
-export const quadrantOf = (point: PlotPoint): 1 | 2 | 3 | 4 | null => {
+const quadrantOf = (point: PlotPoint): 1 | 2 | 3 | 4 | null => {
   if (point.x === 0 || point.y === 0) return null
   if (point.x > 0) return point.y > 0 ? 1 : 4
   return point.y > 0 ? 2 : 3
@@ -268,17 +275,7 @@ export const checkPlotStep = (
   placed: PlotPoint[],
   attemptNumber = 1,
 ): CheckResult => {
-  const hintFor = (when: PlotHintWhen) =>
-    step.feedback.hints?.find((hint) => hint.when === when)?.text ??
-    step.feedback.hints?.find((hint) => hint.when === 'default')?.text ??
-    step.feedback.incorrect
-  const wrong = (when: PlotHintWhen) =>
-    buildWrongResult({
-      attemptNumber,
-      hint: hintFor(when),
-      explanation: step.feedback.incorrect,
-      reveal: step.feedback.reveal,
-    })
+  const { wrong } = makeHintHelpers(step, attemptNumber)
 
   if (placed.length === 0) return wrong('empty')
 
@@ -352,17 +349,7 @@ export const checkSliderStep = (
   value: { slope: number; intercept: number },
   attemptNumber = 1,
 ): CheckResult => {
-  const hintFor = (when: SliderHintWhen) =>
-    step.feedback.hints?.find((hint) => hint.when === when)?.text ??
-    step.feedback.hints?.find((hint) => hint.when === 'default')?.text ??
-    step.feedback.incorrect
-  const wrong = (when: SliderHintWhen) =>
-    buildWrongResult({
-      attemptNumber,
-      hint: hintFor(when),
-      explanation: step.feedback.incorrect,
-      reveal: step.feedback.reveal,
-    })
+  const { wrong } = makeHintHelpers(step, attemptNumber)
 
   // A tiny default epsilon keeps fractional `step` values from failing on float rounding
   // while still behaving as an exact match for the common integer case.
@@ -400,17 +387,7 @@ export const checkDragTermsStep = (
   placements: Record<string, string | undefined>,
   attemptNumber = 1,
 ): CheckResult => {
-  const hintFor = (when: DragTermsHintWhen) =>
-    step.feedback.hints?.find((hint) => hint.when === when)?.text ??
-    step.feedback.hints?.find((hint) => hint.when === 'default')?.text ??
-    step.feedback.incorrect
-  const wrong = (when: DragTermsHintWhen) =>
-    buildWrongResult({
-      attemptNumber,
-      hint: hintFor(when),
-      explanation: step.feedback.incorrect,
-      reveal: step.feedback.reveal,
-    })
+  const { wrong } = makeHintHelpers(step, attemptNumber)
 
   const sortedTiles = step.tiles.filter((tile) => Boolean(placements[tile.id]))
   if (sortedTiles.length === 0) return wrong('empty')
@@ -430,14 +407,16 @@ export const checkDragTermsStep = (
   return wrong('incomplete')
 }
 
+type BalanceHintWhen = 'not-level' | 'missing-item' | 'one-side-only' | 'not-isolated' | 'default'
+
 export const checkBalanceStep = (
   step: Extract<LessonStep, { type: 'balance' }>,
   state: BalanceState,
   meta: BalanceCheckMeta = {},
   attemptNumber = 1,
 ): CheckResult => {
-  const hint = (when: Parameters<typeof findHint>[1]) => findHint(step, when)
-  const wrong = (when: Parameters<typeof findHint>[1]) =>
+  const hint = (when: BalanceHintWhen) => findHint(step, when)
+  const wrong = (when: BalanceHintWhen) =>
     buildWrongResult({
       attemptNumber,
       hint: hint(when),
@@ -462,7 +441,14 @@ export const checkBalanceStep = (
       state[placement.side].some((item) => item.id === placement.itemId),
     )
 
-    if (!requiredMet) {
+    // Side-agnostic requirement: every listed block must sit on EITHER pan (not the tray).
+    // This rejects the empty 0 = 0 start without pinning blocks to a side, so both mirror
+    // arrangements that are level (e.g. {3,2} vs {5}) count as solved.
+    const placedMet = (step.goal.requirePlacedItems ?? []).every((itemId) =>
+      [...state.left, ...state.right].some((item) => item.id === itemId),
+    )
+
+    if (!requiredMet || !placedMet) {
       return wrong('missing-item')
     }
 
@@ -494,5 +480,5 @@ export const checkBalanceStep = (
 
 const findHint = (
   step: Extract<LessonStep, { type: 'balance' }>,
-  when: 'not-level' | 'missing-item' | 'one-side-only' | 'not-isolated' | 'default',
+  when: BalanceHintWhen,
 ) => step.feedback.hints.find((hint) => hint.when === when)?.text ?? step.feedback.hints.at(-1)?.text ?? step.feedback.reveal

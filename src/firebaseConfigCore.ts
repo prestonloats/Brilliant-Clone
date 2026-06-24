@@ -1,4 +1,6 @@
-export type BackendProvider = 'local' | 'firebase'
+import type { BackendProvider } from './backend/types'
+
+export type { BackendProvider }
 
 export type FirebaseEnvKey =
   | 'VITE_FIREBASE_API_KEY'
@@ -10,7 +12,7 @@ export type FirebaseEnvKey =
 
 export type FirebaseEnv = Partial<Record<FirebaseEnvKey | 'VITE_FIREBASE_MEASUREMENT_ID', string>>
 
-export type FirebaseWebConfig = {
+type FirebaseWebConfig = {
   apiKey: string
   authDomain: string
   projectId: string
@@ -20,7 +22,7 @@ export type FirebaseWebConfig = {
   measurementId?: string
 }
 
-export const requiredFirebaseEnvKeys: FirebaseEnvKey[] = [
+const requiredFirebaseEnvKeys: FirebaseEnvKey[] = [
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
   'VITE_FIREBASE_PROJECT_ID',
@@ -43,34 +45,25 @@ export const getMissingFirebaseEnvKeysFromEnv = (env: FirebaseEnv): FirebaseEnvK
   requiredFirebaseEnvKeys.filter((key) => !env[key]?.trim())
 
 export const getFirebaseConfigFromEnv = (env: FirebaseEnv): FirebaseWebConfig | null => {
-  const config = {
-    apiKey: env.VITE_FIREBASE_API_KEY?.trim() ?? '',
-    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN?.trim() ?? '',
-    projectId: env.VITE_FIREBASE_PROJECT_ID?.trim() ?? '',
-    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET?.trim() ?? '',
-    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim() ?? '',
-    appId: env.VITE_FIREBASE_APP_ID?.trim() ?? '',
-    measurementId: env.VITE_FIREBASE_MEASUREMENT_ID?.trim(),
-  }
+  const apiKey = env.VITE_FIREBASE_API_KEY?.trim() ?? ''
+  const authDomain = env.VITE_FIREBASE_AUTH_DOMAIN?.trim() ?? ''
+  const projectId = env.VITE_FIREBASE_PROJECT_ID?.trim() ?? ''
+  const storageBucket = env.VITE_FIREBASE_STORAGE_BUCKET?.trim() ?? ''
+  const messagingSenderId = env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim() ?? ''
+  const appId = env.VITE_FIREBASE_APP_ID?.trim() ?? ''
+  const measurementId = env.VITE_FIREBASE_MEASUREMENT_ID?.trim()
 
-  if (
-    !config.apiKey ||
-    !config.authDomain ||
-    !config.projectId ||
-    !config.storageBucket ||
-    !config.messagingSenderId ||
-    !config.appId
-  ) {
+  if (!apiKey || !authDomain || !projectId || !storageBucket || !messagingSenderId || !appId) {
     return null
   }
 
   return {
-    apiKey: config.apiKey,
-    authDomain: config.authDomain,
-    projectId: config.projectId,
-    storageBucket: config.storageBucket,
-    messagingSenderId: config.messagingSenderId,
-    appId: config.appId,
-    ...(config.measurementId ? { measurementId: config.measurementId } : {}),
+    apiKey,
+    authDomain,
+    projectId,
+    storageBucket,
+    messagingSenderId,
+    appId,
+    ...(measurementId ? { measurementId } : {}),
   }
 }

@@ -2,53 +2,12 @@ import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
 import { createAttemptEvent, createBackend, LocalBackend } from '../src/backend'
-
-const STORAGE_KEY = 'balance-local-backend-v1'
-const SESSION_KEY = 'balance-local-session-v1'
-
-class MemoryStorage {
-  private values = new Map<string, string>()
-
-  getItem(key: string) {
-    return this.values.get(key) ?? null
-  }
-
-  setItem(key: string, value: string) {
-    this.values.set(key, value)
-  }
-
-  removeItem(key: string) {
-    this.values.delete(key)
-  }
-
-  clear() {
-    this.values.clear()
-  }
-}
+import { installLocalStorage, MemoryStorage, setActiveUser, STORAGE_KEY } from './helpers/localStorage'
 
 let storage: MemoryStorage
-let sessionStorage: MemoryStorage
-
-const installLocalStorage = () => {
-  const nextStorage = new MemoryStorage()
-  const nextSessionStorage = new MemoryStorage()
-
-  Object.defineProperty(globalThis, 'window', {
-    value: { localStorage: nextStorage, sessionStorage: nextSessionStorage },
-    configurable: true,
-    writable: true,
-  })
-
-  storage = nextStorage
-  sessionStorage = nextSessionStorage
-}
-
-const setActiveUser = (userId: string) => {
-  sessionStorage.setItem(SESSION_KEY, userId)
-}
 
 beforeEach(() => {
-  installLocalStorage()
+  storage = installLocalStorage()
 })
 
 test('createBackend("local") returns a working in-memory backend', () => {

@@ -7,13 +7,8 @@
 
 export type {
   BalanceCheckMeta,
-  CheckResult,
-  CourseProgressSummary,
-  LessonGraph,
   LessonGraphConnector,
   LessonGraphNode,
-  LessonGraphStage,
-  NextLessonRecommendation,
   ProgressByLesson,
 } from './engine/types'
 export { MASTERY_READY_THRESHOLD } from './engine/types'
@@ -28,7 +23,6 @@ export {
   checkSequenceStep,
   checkSliderStep,
   normalizeExpression,
-  quadrantOf,
 } from './engine/checkers'
 
 export { applyBalanceOperation, isLevel, sideTotal } from './engine/balance'

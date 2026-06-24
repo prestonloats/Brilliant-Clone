@@ -3,15 +3,12 @@ import { test } from 'node:test'
 
 import { lessons, type LessonStep } from '../src/domain'
 import { checkInputStep, checkManipulativeStep, checkSequenceStep } from '../src/engine'
+import { findHintText, findStep } from './helpers/findStep'
 
 const twoStep = lessons['two-step-equations']
 
-const step = <Type extends LessonStep['type']>(id: string, type: Type) => {
-  const found = twoStep.steps.find((candidate) => candidate.id === id)
-  assert.ok(found, `missing step ${id}`)
-  assert.equal(found.type, type)
-  return found as Extract<LessonStep, { type: Type }>
-}
+const step = <Type extends LessonStep['type']>(id: string, type: Type) =>
+  findStep(twoStep, id, type)
 
 test('two-step lesson keeps a concept summary last and the new content before it', () => {
   const steps = twoStep.steps
@@ -56,7 +53,7 @@ test('manipulative reactor puzzle accepts the even split that uses every core', 
 
 test('manipulative reactor puzzle escalates targeted hints into a reveal', () => {
   const reactor = step('manipulative-split-reactor-cores', 'manipulative')
-  const hintText = (when: string) => reactor.feedback.hints?.find((hint) => hint.when === when)?.text
+  const hintText = (when: string) => findHintText(reactor, when)
 
   const empty = checkManipulativeStep(reactor, [0, 0, 0, 0], 1)
   assert.equal(empty.correct, false)
@@ -99,12 +96,12 @@ test('mastery division sequence checks order and division-specific misconception
   assert.equal(incomplete.correct, false)
   assert.equal(incomplete.feedback, ordering.feedback.incomplete)
 
-  const dividedFirst = checkSequenceStep(
+  const subtractedInstead = checkSequenceStep(
     ordering,
-    ['divide-three-first', 'multiply-three-both', 'x-equals-eighteen'],
+    ['subtract-four-both', 'multiply-three-both', 'x-equals-eighteen'],
     1,
   )
-  assert.equal(dividedFirst.feedback, ordering.feedback.hintsByTile?.['divide-three-first'])
+  assert.equal(subtractedInstead.feedback, ordering.feedback.hintsByTile?.['subtract-four-both'])
 
   const multiplyFirst = checkSequenceStep(
     ordering,

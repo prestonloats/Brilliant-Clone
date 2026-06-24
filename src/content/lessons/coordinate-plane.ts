@@ -8,7 +8,6 @@ export const coordinatePlaneLesson: Lesson = {
   // Path branch: Coordinate Plane runs parallel to Like Terms, so both open once
   // Two-Step Equations is complete rather than chaining off Like Terms.
   prerequisites: ['two-step-equations'],
-  nextLessonId: 'graphing-lines',
   steps: [
     {
       id: 'concept-coordinate-plane',
@@ -25,27 +24,22 @@ export const coordinatePlaneLesson: Lesson = {
         {
           id: 'move-right-three',
           label: 'Move 3 right',
-          detail: 'Positive x moves right.',
         },
         {
           id: 'move-down-two',
           label: 'Move 2 down',
-          detail: 'Negative y moves down.',
         },
         {
           id: 'arrive-three-negative-two',
           label: 'Land at (3, -2)',
-          detail: 'The final point.',
         },
         {
           id: 'move-left-three',
           label: 'Move 3 left',
-          detail: 'This would be x = -3.',
         },
         {
           id: 'move-up-two',
           label: 'Move 2 up',
-          detail: 'This would be y = 2.',
         },
       ],
       correctOrder: ['move-right-three', 'move-down-two', 'arrive-three-negative-two'],

@@ -1,5 +1,5 @@
-import type { LessonStep } from '../domain'
-import type { CompleteOptions, StepPriorResult } from './types'
+import type { LessonStep, StepResult } from '../domain'
+import type { CompleteOptions } from './types'
 import { BalanceStepView } from './steps/BalanceStepView'
 import { ConceptCard } from './steps/ConceptCard'
 import { DragTermsStepView } from './steps/DragTermsStepView'
@@ -14,7 +14,7 @@ import { SliderStepView } from './steps/SliderStepView'
 
 type StepRendererProps = {
   step: LessonStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
   onAdvance: (feedback: string) => void
 }
@@ -45,13 +45,7 @@ export function StepRenderer({ step, priorResult, onComplete, onAdvance }: StepR
     // pre-counted drag tray), so it has its own view. Dispatching here keeps each view's hooks
     // unconditional (rules-of-hooks).
     return step.goal.type === 'build-product' ? (
-      <ManipulativeBuildView
-        step={step}
-        goal={step.goal}
-        priorResult={priorResult}
-        onAdvance={onAdvance}
-        onComplete={onComplete}
-      />
+      <ManipulativeBuildView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
     ) : (
       <ManipulativeStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
     )
@@ -69,5 +63,13 @@ export function StepRenderer({ step, priorResult, onComplete, onAdvance }: StepR
     return <DragTermsStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
   }
 
-  return <BalanceStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+  if (step.type === 'balance') {
+    return <BalanceStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+  }
+
+  return assertNever(step)
+}
+
+function assertNever(step: never): never {
+  throw new Error(`Unhandled step type: ${(step as { type: string }).type}`)
 }

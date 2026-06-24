@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createAttemptEvent, type Backend } from '../backend'
 import {
   applyStepResult,
@@ -31,7 +31,7 @@ import { ProfileScreen } from '../screens/ProfileScreen'
 export function LearningApp({ backend }: { backend: Backend }) {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [view, setView] = useState<'auth' | 'verify-email' | 'course' | 'lesson' | 'complete' | 'profile'>('auth')
-  const [activeLessonId, setActiveLessonId] = useState<LessonId>('balancing-equations')
+  const [activeLessonId, setActiveLessonId] = useState<LessonId>(algebraCourse.lessonOrder[0])
   const [progress, setProgress] = useState<LessonProgress | null>(null)
   const [mastery, setMastery] = useState<SkillMastery[]>([])
   const [progressByLesson, setProgressByLesson] = useState<ProgressByLesson>({})
@@ -41,6 +41,26 @@ export function LearningApp({ backend }: { backend: Backend }) {
   const activeLesson = lessons[activeLessonId]
   const currentStep = progress ? activeLesson.steps[progress.currentStepIndex] : null
   const recommendation = getRecommendedNextLesson(activeLesson, mastery, algebraCourse, lessons, progressByLesson)
+
+  const applySession = useCallback(
+    (sessionUser: UserProfile, session: Awaited<ReturnType<typeof getInitialLessonSession>>) => {
+      setUser(sessionUser)
+      setActiveLessonId(session.activeLessonId)
+      setProgress(session.progress)
+      setProgressByLesson(session.progressByLesson)
+      setMastery(session.mastery)
+      setAttempts(session.attempts)
+      setView('course')
+    },
+    [],
+  )
+
+  const clearLearnerState = () => {
+    setProgress(null)
+    setProgressByLesson({})
+    setMastery([])
+    setAttempts([])
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -66,13 +86,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
         const session = await getInitialLessonSession(backend, currentUser)
         if (cancelled) return
 
-        setUser(currentUser)
-        setActiveLessonId(session.activeLessonId)
-        setProgress(session.progress)
-        setProgressByLesson(session.progressByLesson)
-        setMastery(session.mastery)
-        setAttempts(session.attempts)
-        setView('course')
+        applySession(currentUser, session)
       } catch (error) {
         if (!cancelled) {
           setRuntimeError(error instanceof Error ? error.message : 'The current session could not be loaded.')
@@ -90,7 +104,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
     return () => {
       cancelled = true
     }
-  }, [backend])
+  }, [backend, applySession])
 
   const refreshLearnerData = async (signedInUser: UserProfile, progressOverride?: LessonProgress) => {
     const [nextMastery, nextProgressByLesson, nextAttempts] = await Promise.all([
@@ -168,13 +182,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
 
   const loadSignedInSession = async (signedInUser: UserProfile) => {
     const saved = await getInitialLessonSession(backend, signedInUser)
-    setUser(signedInUser)
-    setActiveLessonId(saved.activeLessonId)
-    setProgress(saved.progress)
-    setProgressByLesson(saved.progressByLesson)
-    setMastery(saved.mastery)
-    setAttempts(saved.attempts)
-    setView('course')
+    applySession(signedInUser, saved)
   }
 
   const handleSignedIn = async (signedInUser: UserProfile) => {
@@ -182,10 +190,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
 
     if (isEmailVerificationRequired(backend.provider, signedInUser.emailVerified)) {
       setUser(signedInUser)
-      setProgress(null)
-      setProgressByLesson({})
-      setMastery([])
-      setAttempts([])
+      clearLearnerState()
       setView('verify-email')
       return
     }
@@ -223,10 +228,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
     try {
       await backend.auth.signOut()
       setUser(null)
-      setProgress(null)
-      setProgressByLesson({})
-      setMastery([])
-      setAttempts([])
+      clearLearnerState()
       setView('auth')
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Sign out failed.')

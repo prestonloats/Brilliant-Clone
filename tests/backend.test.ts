@@ -22,50 +22,16 @@ import {
   toFirestoreSkillMastery,
   toFirestoreUserProfile,
 } from '../src/firebaseBackendCore'
-
-const STORAGE_KEY = 'balance-local-backend-v1'
-const SESSION_KEY = 'balance-local-session-v1'
-
-class MemoryStorage {
-  private values = new Map<string, string>()
-
-  getItem(key: string) {
-    return this.values.get(key) ?? null
-  }
-
-  setItem(key: string, value: string) {
-    this.values.set(key, value)
-  }
-
-  removeItem(key: string) {
-    this.values.delete(key)
-  }
-
-  clear() {
-    this.values.clear()
-  }
-}
+import {
+  getSessionStorage,
+  installLocalStorage,
+  MemoryStorage,
+  SESSION_KEY,
+  setActiveUser,
+  STORAGE_KEY,
+} from './helpers/localStorage'
 
 let storage: MemoryStorage
-let sessionStorage: MemoryStorage
-
-const installLocalStorage = () => {
-  const nextStorage = new MemoryStorage()
-  const nextSessionStorage = new MemoryStorage()
-
-  Object.defineProperty(globalThis, 'window', {
-    value: { localStorage: nextStorage, sessionStorage: nextSessionStorage },
-    configurable: true,
-    writable: true,
-  })
-
-  sessionStorage = nextSessionStorage
-  return nextStorage
-}
-
-const setActiveUser = (userId: string) => {
-  sessionStorage.setItem(SESSION_KEY, userId)
-}
 
 const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
   userId,
@@ -158,10 +124,10 @@ test('local auth keeps the active session out of persistent storage', () => {
 
   assert.equal(backend.auth.getCurrentUser()?.id, user.id)
   assert.doesNotMatch(storage.getItem(STORAGE_KEY) ?? '', /currentUserId/)
-  assert.equal(sessionStorage.getItem(SESSION_KEY), user.id)
+  assert.equal(getSessionStorage().getItem(SESSION_KEY), user.id)
 
   backend.auth.signOut()
-  assert.equal(sessionStorage.getItem(SESSION_KEY), null)
+  assert.equal(getSessionStorage().getItem(SESSION_KEY), null)
 })
 
 test('local auth normalizes email for resume and duplicate checks', () => {

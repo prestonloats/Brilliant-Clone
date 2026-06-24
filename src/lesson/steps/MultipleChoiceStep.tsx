@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import type { McqStep } from '../../domain'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
-import type { CompleteOptions, StepPriorResult } from '../types'
+import type { McqStep, StepResult } from '../../domain'
+import type { CompleteOptions } from '../types'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
 
 export function MultipleChoiceStep({
   step,
@@ -11,16 +11,12 @@ export function MultipleChoiceStep({
   onComplete,
 }: {
   step: McqStep
-  priorResult?: StepPriorResult
+  priorResult?: StepResult
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
-  const [selectedFeedback, setSelectedFeedback] = useState(priorResult?.feedback ?? '')
+  const { feedback, correct, attempts, reveal, retryGuidance, submit } = useCheckableStep({ priorResult, onComplete })
   const [selectedId, setSelectedId] = useState('')
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
-  const wasCorrect = selectedId === step.correctId || Boolean(priorResult?.correct)
 
   return (
     <article className="lesson-card card">
@@ -36,18 +32,18 @@ export function MultipleChoiceStep({
               className={selected ? 'selected-option' : ''}
               type="button"
               key={option.id}
-              disabled={wasCorrect}
+              disabled={correct}
               onClick={() => {
                 const nextAttempt = attempts + 1
-                const correct = option.id === step.correctId
+                const isCorrect = option.id === step.correctId
                 // A newly selected wrong option always shows ITS OWN authored misconception.
                 // The generic explanation layers into the reveal slot at attempt 2, and the
                 // exact reveal takes over at attempt 3 (mirrors the engine's choice-step
                 // escalation in buildWrongResult so mcq and operation-choice behave alike).
-                const feedback = correct ? step.feedback?.correct ?? option.feedback : option.feedback
+                const optionFeedback = isCorrect ? step.feedback?.correct ?? option.feedback : option.feedback
                 const explanation = step.feedback?.incorrect
                 const revealText = step.feedback?.reveal
-                const layeredReveal = correct
+                const layeredReveal = isCorrect
                   ? ''
                   : nextAttempt >= 3 && revealText
                     ? revealText
@@ -56,15 +52,15 @@ export function MultipleChoiceStep({
                       : ''
 
                 setSelectedId(option.id)
-                setAttempts(nextAttempt)
-                setSelectedFeedback(feedback)
-                setReveal(layeredReveal)
-                setRetryGuidance(
-                  !correct && nextAttempt >= 3 && revealText
-                    ? 'Use the reveal, then choose the prediction that matches the totals.'
-                    : 'Compare the two totals, then choose another option.',
-                )
-                onComplete(correct, feedback, { advance: false })
+                submit({
+                  correct: isCorrect,
+                  feedback: optionFeedback,
+                  reveal: layeredReveal,
+                  retryGuidance:
+                    !isCorrect && nextAttempt >= 3 && revealText
+                      ? 'Use the reveal, then choose the prediction that matches the totals.'
+                      : 'Compare the two totals, then choose another option.',
+                })
               }}
             >
               {option.label}
@@ -73,13 +69,15 @@ export function MultipleChoiceStep({
           )
         })}
       </div>
-      {selectedFeedback && <FeedbackPanel key={attempts} correct={wasCorrect} message={selectedFeedback} reveal={!wasCorrect ? reveal : undefined} />}
-      {selectedFeedback && !wasCorrect && <RetryPrompt message={retryGuidance || 'Choose another option to try again.'} />}
-      {wasCorrect && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(selectedFeedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Choose another option to try again."
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }
@@ -99,16 +97,14 @@ function PredictScaleCard({
   left,
   right,
   cue,
-  tilt = 'level',
 }: {
   title: string
   left: string
   right: string
   cue: string
-  tilt?: 'level' | 'left-heavy'
 }) {
   return (
-    <div className={`predict-scale-card ${tilt}`}>
+    <div className="predict-scale-card level">
       <span className="predict-title">{title}</span>
       <div className="predict-mini-scale" aria-hidden="true">
         <div className="predict-beam">

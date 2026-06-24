@@ -4,13 +4,10 @@ import { test } from 'node:test'
 import { oneStepEquationsLesson } from '../src/domain'
 import type { LessonStep, ManipulativeHintWhen } from '../src/domain'
 import { checkInputStep, checkManipulativeStep } from '../src/engine'
+import { findHintText, findStep as findLessonStep } from './helpers/findStep'
 
-const findStep = <Type extends LessonStep['type']>(id: string, type: Type) => {
-  const step = oneStepEquationsLesson.steps.find((candidate) => candidate.id === id)
-  assert.ok(step, `expected a step with id "${id}"`)
-  assert.equal(step.type, type)
-  return step as Extract<LessonStep, { type: Type }>
-}
+const findStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
+  findLessonStep(oneStepEquationsLesson, id, type)
 
 test('one-step division manipulative discovers x by building the product, not pre-counting it', () => {
   const jars = findStep('model-division-jars', 'manipulative')
@@ -33,8 +30,7 @@ test('one-step division manipulative discovers x by building the product, not pr
 
 test('one-step division manipulative escalates group/per-group hints to a reveal', () => {
   const jars = findStep('model-division-jars', 'manipulative')
-  const hintText = (when: ManipulativeHintWhen) =>
-    jars.feedback.hints?.find((hint) => hint.when === when)?.text
+  const hintText = (when: ManipulativeHintWhen) => findHintText(jars, when)
 
   // Every required hint branch for the discover-the-total mode is authored.
   for (const when of ['empty', 'groups', 'per-group', 'default'] as ManipulativeHintWhen[]) {
@@ -91,7 +87,6 @@ test('one-step lesson keeps new content before a concept summary and preserves t
 
   assert.equal(oneStepEquationsLesson.id, 'one-step-equations')
   assert.deepEqual(oneStepEquationsLesson.prerequisites, ['balancing-equations'])
-  assert.equal(oneStepEquationsLesson.nextLessonId, 'two-step-equations')
 
   // Unique ids across every step.
   assert.equal(new Set(ids).size, ids.length)
