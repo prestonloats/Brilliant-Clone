@@ -67,6 +67,9 @@ export type InputStep = {
   id: string
   type: 'input'
   prompt: string
+  // Optional equation shown below the prompt, kept in plain authoring notation
+  // (e.g. "x / 4 = 2") and converted to LaTeX at render time, like operation-choice/sequence.
+  equation?: string
   accept: string[]
   feedback: Feedback & {
     hintsByAnswer?: Record<string, string>
@@ -123,7 +126,15 @@ export type BalanceState = {
 }
 
 export type BalanceGoal =
-  | { type: 'level'; requireItemOnSide?: { itemId: string; side: BalanceSide } }
+  | {
+      type: 'level'
+      // A single required placement, kept as a shorthand for the simple one-block case.
+      requireItemOnSide?: { itemId: string; side: BalanceSide }
+      // Multiple required placements: every listed block must sit on its named pan for the
+      // step to count as solved. This forces the learner to build the whole balanced scale
+      // from the tray instead of leaving the pans trivially empty (0 = 0).
+      requireItemsOnSide?: { itemId: string; side: BalanceSide }[]
+    }
   | { type: 'isolate'; unknownId: string; value: number }
 
 export type BalanceOperation = {
@@ -161,22 +172,42 @@ export type ManipulativeObject = {
 }
 
 // What makes a manipulative puzzle correct. Authors pick one operation/goal:
-// - equal-groups: split/distribute every item into `groups` groups of `perGroup`.
+// - equal-groups: split/distribute every item from a pre-counted tray into `groups`
+//   groups of `perGroup` (a division model where the total is given and known).
 // - collect: combine/select exactly `count` items into a single group.
+// - build-product: from a large pool, set BOTH the number of groups and the per-group
+//   count; the total (groups x perGroup) is computed live and is the value being
+//   DISCOVERED (e.g. the x in x / 5 = 3). Solved when both `groups` and `perGroup` match
+//   the authored targets, so the displayed total equals x. `maxGroups`/`maxPerGroup`
+//   bound the steppers (the renderer falls back to generous defaults when omitted), and
+//   `total` is the size of the abundant pool the learner draws from.
 export type ManipulativeGoal =
   | { type: 'equal-groups'; groups: number; perGroup: number }
   | { type: 'collect'; count: number }
+  | { type: 'build-product'; groups: number; perGroup: number; maxGroups?: number; maxPerGroup?: number }
 
-export type ManipulativeHintWhen = 'empty' | 'too-few' | 'too-many' | 'uneven' | 'default'
+export type ManipulativeHintWhen =
+  | 'empty'
+  | 'too-few'
+  | 'too-many'
+  | 'uneven'
+  // build-product only: the number of groups does not match the target yet.
+  | 'groups'
+  // build-product only: the groups match, but the per-group count is still off.
+  | 'per-group'
+  | 'default'
 
-// A data-driven creative puzzle: drag/tap identical objects from a tray into one or
-// more group zones to satisfy `goal`. Everything (theme, counts, goal, feedback) is
-// authored in data, so new puzzles need no shared-renderer changes.
+// A data-driven creative puzzle. Two interaction shapes share this one step type:
+// - equal-groups/collect: drag/tap identical objects from a tray into group zones.
+// - build-product: adjust group and per-group steppers while a live total updates.
+// Everything (theme, counts, goal, feedback) is authored in data, so new puzzles need
+// no shared-renderer changes.
 export type ManipulativeStep = {
   id: string
   type: 'manipulative'
   prompt: string
-  // Total number of objects available in the tray.
+  // Total number of objects available. For equal-groups/collect this is the pre-counted
+  // tray; for build-product it is the size of the large pool the learner draws from.
   total: number
   object: ManipulativeObject
   goal: ManipulativeGoal

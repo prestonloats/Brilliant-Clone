@@ -12,39 +12,44 @@ const findStep = <Type extends LessonStep['type']>(id: string, type: Type) => {
   return step as Extract<LessonStep, { type: Type }>
 }
 
-test('one-step division manipulative is a valid equal-groups rebuild of the dividend', () => {
+test('one-step division manipulative discovers x by building the product, not pre-counting it', () => {
   const jars = findStep('model-division-jars', 'manipulative')
-  assert.equal(jars.total, 15)
-  assert.equal(jars.goal.type, 'equal-groups')
-  if (jars.goal.type !== 'equal-groups') throw new Error('expected an equal-groups goal')
+  assert.equal(jars.goal.type, 'build-product')
+  if (jars.goal.type !== 'build-product') throw new Error('expected a build-product goal')
   assert.equal(jars.goal.groups, 5)
   assert.equal(jars.goal.perGroup, 3)
-  // Tray empties exactly when the puzzle is solved: 5 jars x 3 marbles = 15.
-  assert.equal(jars.total, jars.goal.groups * jars.goal.perGroup)
+  // The pool is deliberately larger than the answer, so the total (x = 15) is never pre-shown.
+  assert.ok(jars.total > jars.goal.groups * jars.goal.perGroup)
 
+  // Solved only when both controls match: 5 groups of 3, so the live total reads 15 = x.
   const solved = checkManipulativeStep(jars, [3, 3, 3, 3, 3], 1)
   assert.equal(solved.correct, true)
   assert.equal(solved.feedback, jars.feedback.correct)
+
+  // The right total via the wrong configuration (3 groups of 5 = 15) is rejected: the grouping
+  // must mirror the equation's divisor (5 groups) and quotient (3 each).
+  assert.equal(checkManipulativeStep(jars, [5, 5, 5], 1).correct, false)
 })
 
-test('one-step division manipulative escalates misconception hints to a reveal', () => {
+test('one-step division manipulative escalates group/per-group hints to a reveal', () => {
   const jars = findStep('model-division-jars', 'manipulative')
   const hintText = (when: ManipulativeHintWhen) =>
     jars.feedback.hints?.find((hint) => hint.when === when)?.text
 
-  // Every required hint branch is authored.
-  for (const when of ['empty', 'too-many', 'uneven', 'too-few', 'default'] as ManipulativeHintWhen[]) {
+  // Every required hint branch for the discover-the-total mode is authored.
+  for (const when of ['empty', 'groups', 'per-group', 'default'] as ManipulativeHintWhen[]) {
     assert.ok(hintText(when), `manipulative should author a "${when}" hint`)
   }
 
-  // Each malformed rebuild surfaces the misconception-specific hint on the first miss.
-  assert.equal(checkManipulativeStep(jars, [0, 0, 0, 0, 0], 1).feedback, hintText('empty'))
-  assert.equal(checkManipulativeStep(jars, [4, 3, 3, 3, 2], 1).feedback, hintText('too-many'))
-  assert.equal(checkManipulativeStep(jars, [3, 3, 3, 3, 2], 1).feedback, hintText('uneven'))
-  assert.equal(checkManipulativeStep(jars, [2, 2, 2, 2, 2], 1).feedback, hintText('too-few'))
-  assert.equal(checkManipulativeStep(jars, [3, 3, 3, 3, 3, 3], 1).feedback, hintText('default'))
+  // Nothing built yet -> empty.
+  assert.equal(checkManipulativeStep(jars, [], 1).feedback, hintText('empty'))
+  assert.equal(checkManipulativeStep(jars, [0], 1).feedback, hintText('empty'))
+  // Wrong number of groups (even with the right per-group) -> groups hint.
+  assert.equal(checkManipulativeStep(jars, [3, 3, 3], 1).feedback, hintText('groups'))
+  // Right number of groups, wrong per-group amount -> per-group hint.
+  assert.equal(checkManipulativeStep(jars, [2, 2, 2, 2, 2], 1).feedback, hintText('per-group'))
 
-  const reveal = checkManipulativeStep(jars, [4, 3, 3, 3, 2], 3)
+  const reveal = checkManipulativeStep(jars, [2, 2, 2, 2, 2], 3)
   assert.equal(reveal.correct, false)
   assert.equal(reveal.feedback, jars.feedback.incorrect)
   assert.equal(reveal.reveal, jars.feedback.reveal)

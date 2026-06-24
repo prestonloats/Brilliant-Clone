@@ -245,6 +245,21 @@ export const checkManipulativeStep = (
     return wrong('default')
   }
 
+  // build-product: the learner sets the number of groups and a single per-group count, so
+  // `groupCounts` arrives as `numGroups` copies of the per-group value. The puzzle is solved
+  // when both match the targets (which makes the live total = groups x perGroup equal x). The
+  // total is discovered, never pre-given, so there is no "uses every item" condition here.
+  if (step.goal.type === 'build-product') {
+    const { groups, perGroup } = step.goal
+    const numGroups = groupCounts.length
+    const solved = numGroups === groups && groupCounts.every((count) => count === perGroup)
+
+    if (solved) return { correct: true, feedback: step.feedback.correct }
+    if (placed === 0) return wrong('empty')
+    if (numGroups !== groups) return wrong('groups')
+    return wrong('per-group')
+  }
+
   const { count } = step.goal
   if (placed === count) return { correct: true, feedback: step.feedback.correct }
   if (placed === 0) return wrong('empty')
@@ -479,10 +494,17 @@ export const checkBalanceStep = (
   }
 
   if (step.goal.type === 'level') {
-    const required = step.goal.requireItemOnSide
-    const requiredMet = required
-      ? state[required.side].some((item) => item.id === required.itemId)
-      : true
+    // Combine the single-block shorthand and the multi-block list, then require EVERY listed
+    // block to sit on its named pan. With a full required list this rejects the trivially
+    // empty scale (0 = 0) and any mirrored/decoy arrangement that happens to be level but
+    // does not place each block where it belongs.
+    const required = [
+      ...(step.goal.requireItemOnSide ? [step.goal.requireItemOnSide] : []),
+      ...(step.goal.requireItemsOnSide ?? []),
+    ]
+    const requiredMet = required.every((placement) =>
+      state[placement.side].some((item) => item.id === placement.itemId),
+    )
 
     if (!requiredMet) {
       return wrong('missing-item')

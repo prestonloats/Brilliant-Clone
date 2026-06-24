@@ -136,34 +136,32 @@ export const oneStepEquationsLesson: Lesson = {
       id: 'model-division-jars',
       type: 'manipulative',
       prompt:
-        'A bag of x marbles was poured evenly into 5 jars, leaving 3 marbles in each jar. Rebuild the jars to undo the division and find x in x / 5 = 3.',
-      total: 15,
+        'In x / 5 = 3, a bag of x marbles was split evenly into 5 jars with 3 left in each. Set the number of jars and the marbles per jar to match the equation, and the live total reveals x.',
+      // A large pool (not a pre-counted 15) so the total is discovered, never given away.
+      total: 35,
       object: { label: 'marble', emoji: '\u{1F535}' },
-      goal: { type: 'equal-groups', groups: 5, perGroup: 3 },
+      goal: { type: 'build-product', groups: 5, perGroup: 3, maxGroups: 7, maxPerGroup: 5 },
       feedback: {
-        correct: 'Exactly. Rebuilding 5 equal jars of 3 reverses the division: x = 5 x 3 = 15.',
-        incorrect: 'Each jar held 3 marbles, and all 15 must go back into the 5 jars to rebuild the bag.',
-        reveal: 'Drag 3 marbles into each of the 5 jars: 3 + 3 + 3 + 3 + 3 = 15, so x = 15.',
+        correct: 'Exactly. 5 jars of 3 rebuild the bag, so x = 5 x 3 = 15. Multiplying by 5 undoes dividing by 5.',
+        incorrect:
+          'Match x / 5 = 3: the divisor 5 is the number of jars and the 3 is how many sit in each. The total you build is x.',
+        reveal: 'Set 5 jars with 3 marbles in each. The live total reads 5 x 3 = 15, so x = 15.',
         hints: [
           {
             when: 'empty',
-            text: 'Start filling jars. Each jar ended with 3 marbles, so undo x / 5 by rebuilding the groups.',
+            text: 'Add some jars and marbles. The live total shows how many marbles you have built so far.',
           },
           {
-            when: 'too-many',
-            text: 'One jar has more than 3. The equation says each of the 5 jars holds exactly 3.',
+            when: 'groups',
+            text: 'Dividing by 5 means 5 equal jars. Set the number of groups to the divisor in x / 5.',
           },
           {
-            when: 'uneven',
-            text: 'Dividing evenly means equal jars. Even them out so every jar holds the same 3 marbles.',
-          },
-          {
-            when: 'too-few',
-            text: 'Keep going. Multiplying both sides by 5 means all 5 jars need 3 marbles each.',
+            when: 'per-group',
+            text: 'Each jar ended with 3 marbles (the right side of x / 5 = 3). Set the per-group amount to 3.',
           },
           {
             when: 'default',
-            text: 'Make 5 equal jars of 3 to reverse dividing x by 5.',
+            text: 'Make 5 jars with 3 marbles each, then read the live total: that product is x.',
           },
         ],
       },
@@ -228,6 +226,7 @@ export const oneStepEquationsLesson: Lesson = {
       id: 'input-x-divided-by-four',
       type: 'input',
       prompt: 'Solve x / 4 = 2. What is x?',
+      equation: 'x / 4 = 2',
       accept: ['8', 'x=8', 'x = 8', '16/2'],
       feedback: {
         correct: 'Exactly. x = 8 because 8 / 4 = 2.',

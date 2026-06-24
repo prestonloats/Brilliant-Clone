@@ -13,36 +13,45 @@ const lessonStep = <Type extends LessonStep['type']>(id: string, type: Type) => 
 
 // --- Task A: the "make it level" drag interaction ---------------------------------
 
-test('drag-to-level starts with the movable weight in the tray and the scale unbalanced', () => {
+test('drag-to-level starts with every weight in the tray and both pans empty', () => {
   const step = lessonStep('drag-to-level', 'balance')
 
-  // All weights the learner controls begin in the tray; only the fixed equation sits
-  // on the pans (and it is locked so it cannot be dragged off).
-  assert.ok(step.state.bank && step.state.bank.length > 0)
+  // The learner must build the whole scale: every weight begins loose in the tray and
+  // both pans start empty.
+  assert.ok(step.state.bank && step.state.bank.length === 3)
   assert.ok(step.state.bank.every((item) => !item.locked))
-  assert.ok([...step.state.left, ...step.state.right].every((item) => item.locked))
-  assert.equal(isLevel(step.state), false)
+  assert.equal(step.state.left.length, 0)
+  assert.equal(step.state.right.length, 0)
+
+  // Empty pans are technically level (0 = 0), so the empty start must NOT count as solved —
+  // the required blocks have to be placed first.
+  assert.equal(isLevel(step.state), true)
+  assert.equal(checkBalanceStep(step, step.state, {}, 1).correct, false)
 })
 
 test('re-dragging is the recovery: a wrong pan stays unsolved, the correct pan solves it', () => {
   const step = lessonStep('drag-to-level', 'balance')
-  const matching = step.state.bank?.find((item) => item.id === 'right-match-2')
-  assert.ok(matching)
+  const bank = step.state.bank ?? []
+  const three = bank.find((item) => item.id === 'tray-left-3')
+  const two = bank.find((item) => item.id === 'tray-left-2')
+  const five = bank.find((item) => item.id === 'tray-right-5')
+  assert.ok(three && two && five)
 
-  // Learner drops the 2 on the WRONG (left) pan.
+  // Learner places the 3 and 2 on the left but drops the 5 on the WRONG (left) pan too.
   const droppedOnWrongPan: BalanceState = {
     ...step.state,
-    left: [...step.state.left, matching],
+    left: [three, two, five],
+    right: [],
     bank: [],
   }
   const wrong = checkBalanceStep(step, droppedOnWrongPan, {}, 1)
   assert.equal(wrong.correct, false)
-  assert.equal(wrong.feedback, 'The left side has an extra 2. Put a matching 2 on the right side.')
 
-  // Learner simply drags the same 2 again, this time onto the right pan.
+  // Learner simply drags the same 5 again, this time onto the right pan — no reset needed.
   const movedToRightPan: BalanceState = {
     ...step.state,
-    right: [...step.state.right, matching],
+    left: [three, two],
+    right: [five],
     bank: [],
   }
   const solved = checkBalanceStep(step, movedToRightPan, {}, 2)
@@ -51,23 +60,34 @@ test('re-dragging is the recovery: a wrong pan stays unsolved, the correct pan s
   assert.ok(isLevel(movedToRightPan))
 })
 
-test('drag-to-level requires the specific matching weight on the right pan', () => {
+test('drag-to-level requires every block on its correct pan, rejecting mirrored balances', () => {
   const step = lessonStep('drag-to-level', 'balance')
+  const bank = step.state.bank ?? []
+  const three = bank.find((item) => item.id === 'tray-left-3')
+  const two = bank.find((item) => item.id === 'tray-left-2')
+  const five = bank.find((item) => item.id === 'tray-right-5')
+  assert.ok(three && two && five)
 
   assert.equal(step.goal.type, 'level')
   if (step.goal.type === 'level') {
-    assert.deepEqual(step.goal.requireItemOnSide, { itemId: 'right-match-2', side: 'right' })
+    // Each tray block is pinned to a specific pan, so the learner has to place all of them.
+    assert.deepEqual(step.goal.requireItemsOnSide, [
+      { itemId: 'tray-left-3', side: 'left' },
+      { itemId: 'tray-left-2', side: 'left' },
+      { itemId: 'tray-right-5', side: 'right' },
+    ])
   }
 
-  // A different 2 makes the totals equal, but it is not the required item, so the
-  // required-item gate still fails.
-  const decoyEqualTotals: BalanceState = {
+  // Putting the 5 on the left and 3 + 2 on the right is also level (5 = 5), but it is not the
+  // required placement, so the required-item gate still fails.
+  const mirrored: BalanceState = {
     ...step.state,
-    right: [...step.state.right, { id: 'decoy-2', label: '2', value: 2, kind: 'weight' }],
+    left: [five],
+    right: [three, two],
     bank: [],
   }
-  assert.ok(isLevel(decoyEqualTotals))
-  assert.equal(checkBalanceStep(step, decoyEqualTotals, {}, 1).correct, false)
+  assert.ok(isLevel(mirrored))
+  assert.equal(checkBalanceStep(step, mirrored, {}, 1).correct, false)
 })
 
 test('balance feedback escalates from hint to explanation to reveal', () => {
@@ -136,10 +156,10 @@ test('mastery sequence question checks the full ordered balance story', () => {
   const step = lessonStep('mastery-balance-story', 'sequence')
 
   assert.match(step.prompt, /mastery/i)
-  assert.ok(step.correctOrder.length >= 3)
+  assert.ok(step.correctOrder.length >= 2)
   assert.ok(step.correctOrder.every((id) => step.tiles.some((tile) => tile.id === id)))
 
-  const solved = checkSequenceStep(step, ['add-six-both', 'x-equals-nine-plus-six', 'x-equals-fifteen'], 1)
+  const solved = checkSequenceStep(step, ['add-six-both', 'x-equals-fifteen'], 1)
   assert.equal(solved.correct, true)
   assert.equal(solved.feedback, step.feedback.correct)
 
@@ -147,11 +167,11 @@ test('mastery sequence question checks the full ordered balance story', () => {
   assert.equal(incomplete.correct, false)
   assert.equal(incomplete.feedback, step.feedback.incomplete)
 
-  const oneSideMistake = checkSequenceStep(step, ['add-six-left', 'x-equals-nine-plus-six', 'x-equals-fifteen'], 1)
+  const oneSideMistake = checkSequenceStep(step, ['add-six-left', 'x-equals-fifteen'], 1)
   assert.equal(oneSideMistake.correct, false)
   assert.equal(oneSideMistake.feedback, 'Adding 6 to only the left side breaks equality. Do it to both sides.')
 
-  const reveal = checkSequenceStep(step, ['x-equals-fifteen', 'x-equals-nine-plus-six', 'add-six-both'], 3)
+  const reveal = checkSequenceStep(step, ['x-equals-fifteen', 'add-six-both'], 3)
   assert.equal(reveal.correct, false)
   assert.equal(reveal.reveal, step.feedback.reveal)
 })

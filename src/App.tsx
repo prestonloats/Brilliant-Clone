@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
+import { MathText } from './MathText'
 import { createAttemptEvent, createBackend, type Backend } from './backend'
 import {
   applyBalanceOperation,
@@ -1288,7 +1289,20 @@ function StepRenderer({ step, priorResult, onComplete, onAdvance }: StepRenderer
   }
 
   if (step.type === 'manipulative') {
-    return <ManipulativeStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+    // The discover-the-total mode is a different interaction (steppers + live total instead of a
+    // pre-counted drag tray), so it has its own view. Dispatching here keeps each view's hooks
+    // unconditional (rules-of-hooks).
+    return step.goal.type === 'build-product' ? (
+      <ManipulativeBuildView
+        step={step}
+        goal={step.goal}
+        priorResult={priorResult}
+        onAdvance={onAdvance}
+        onComplete={onComplete}
+      />
+    ) : (
+      <ManipulativeStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+    )
   }
 
   if (step.type === 'plot') {
@@ -1477,6 +1491,11 @@ function NumericInputStep({
     <article className="lesson-card card">
       <p className="eyebrow">Try it</p>
       <h1>{step.prompt}</h1>
+      {step.equation && (
+        <div className="puzzle-equation">
+          <MathText display>{step.equation}</MathText>
+        </div>
+      )}
       <label className="answer-field">
         Your answer
         <input
@@ -1538,7 +1557,11 @@ function OperationChoiceStepView({
     <article className="lesson-card card">
       <p className="eyebrow">Choose a move</p>
       <h1>{step.prompt}</h1>
-      {step.equation && <div className="puzzle-equation">{step.equation}</div>}
+      {step.equation && (
+        <div className="puzzle-equation">
+          <MathText display>{step.equation}</MathText>
+        </div>
+      )}
       <div className="operation-grid puzzle-grid">
         {step.choices.map((choice) => {
           const selected = selectedId === choice.id || (!selectedId && priorResult?.correct && choice.id === step.correctId)
@@ -1634,13 +1657,17 @@ function SequenceStepView({
     <article className="lesson-card card">
       <p className="eyebrow">Order the steps</p>
       <h1>{step.prompt}</h1>
-      {step.equation && <div className="puzzle-equation">{step.equation}</div>}
+      {step.equation && (
+        <div className="puzzle-equation">
+          <MathText display>{step.equation}</MathText>
+        </div>
+      )}
 
       <div className="sequence-board">
         <div className="sequence-slots" aria-label="Selected solution steps">
           {selectedTiles.length === 0 && <span className="empty-slot">Tap tiles below to build your solution.</span>}
           {selectedTiles.map((tile, index) => (
-            <button disabled={correct} key={`${tile.id}-${index}`} type="button" onClick={() => removeTile(tile.id)}>
+            <button disabled={correct} key={tile.id} type="button" onClick={() => removeTile(tile.id)}>
               <span className="sequence-number">{index + 1}</span>
               <span>{tile.label}</span>
             </button>
@@ -1690,6 +1717,11 @@ function describeManipulativeGoal(step: ManipulativeStep) {
   if (step.goal.type === 'equal-groups') {
     return `Goal: make ${step.goal.groups} equal groups of ${step.goal.perGroup}, using all ${step.total}.`
   }
+  if (step.goal.type === 'build-product') {
+    // Deliberately omits the target numbers and the total: the learner maps the equation onto
+    // the two controls and discovers the total (x) from the live readout rather than being told it.
+    return 'Goal: set the number of groups and how many go in each to match the equation, then read the total they build.'
+  }
   return `Goal: place exactly ${step.goal.count} into the group.`
 }
 
@@ -1712,7 +1744,9 @@ function ManipulativeStepView({
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
-  const goal = step.goal
+  // The drag/zone machinery here only handles the equal-groups/collect distribution puzzles;
+  // the discover-the-total (build-product) mode is dispatched to ManipulativeBuildView upstream.
+  const goal = step.goal as Extract<ManipulativeStep['goal'], { type: 'equal-groups' | 'collect' }>
   const zoneCount = goal.type === 'equal-groups' ? goal.groups : 1
   const makeEmptyGroups = () => Array.from({ length: zoneCount }, () => 0)
   const makeSolvedGroups = () =>
@@ -1835,7 +1869,7 @@ function ManipulativeStepView({
   return (
     <article className="lesson-card card manipulative-card">
       <p className="eyebrow">Build it</p>
-      <h1>{step.prompt}</h1>
+      <h1 className="build-prompt">{step.prompt}</h1>
       <p className="manipulative-goal" role="note">
         {describeManipulativeGoal(step)}
       </p>
@@ -1937,6 +1971,231 @@ function ManipulativeStepView({
   )
 }
 
+// The "discover the total" manipulative: instead of a pre-counted tray (which would reveal the
+// answer), the learner adjusts a number-of-groups stepper and a per-group stepper drawn from a
+// large pool. A live total = groups x perGroup updates as either control changes and is the value
+// (x) being discovered. The pure checkManipulativeStep verifies both controls match the targets.
+function ManipulativeBuildView({
+  step,
+  goal,
+  priorResult,
+  onAdvance,
+  onComplete,
+}: {
+  step: ManipulativeStep
+  goal: Extract<ManipulativeStep['goal'], { type: 'build-product' }>
+  priorResult?: StepRendererProps['priorResult']
+  onAdvance: (feedback: string) => void
+  onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
+}) {
+  const maxGroups = goal.maxGroups ?? Math.max(goal.groups + 2, 6)
+  const maxPerGroup = goal.maxPerGroup ?? Math.max(goal.perGroup + 2, 6)
+
+  const [numGroups, setNumGroups] = useState(priorResult?.correct ? goal.groups : 1)
+  const [perGroup, setPerGroup] = useState(priorResult?.correct ? goal.perGroup : 1)
+  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
+  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
+  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
+  const [reveal, setReveal] = useState('')
+  const [retryGuidance, setRetryGuidance] = useState('')
+
+  const liveTotal = numGroups * perGroup
+  const remaining = Math.max(0, step.total - liveTotal)
+  const chipGlyph = step.object.emoji ?? step.object.label.slice(0, 1).toUpperCase()
+  const objectName = step.object.label
+  const plural = (count: number) => `${objectName}${count === 1 ? '' : 's'}`
+  const poolChips = Math.min(remaining, 12)
+
+  const clearStatus = useCallback(() => {
+    setFeedback('')
+    setCorrect(false)
+    setReveal('')
+    setRetryGuidance('')
+  }, [])
+
+  const adjustGroups = (delta: number) => {
+    setNumGroups((current) => {
+      const next = current + delta
+      if (next < 1 || next > maxGroups) return current
+      // Never let the live total outgrow the pool the learner is drawing from.
+      if (delta > 0 && next * perGroup > step.total) return current
+      return next
+    })
+    clearStatus()
+  }
+
+  const adjustPerGroup = (delta: number) => {
+    setPerGroup((current) => {
+      const next = current + delta
+      if (next < 0 || next > maxPerGroup) return current
+      if (delta > 0 && numGroups * next > step.total) return current
+      return next
+    })
+    clearStatus()
+  }
+
+  const reset = () => {
+    setNumGroups(1)
+    setPerGroup(1)
+    clearStatus()
+  }
+
+  const check = () => {
+    const nextAttempt = attempts + 1
+    const result = checkManipulativeStep(
+      step,
+      Array.from({ length: numGroups }, () => perGroup),
+      nextAttempt,
+    )
+    setAttempts(nextAttempt)
+    setFeedback(result.feedback)
+    setCorrect(result.correct)
+    setReveal(result.reveal ?? '')
+    setRetryGuidance(result.retryGuidance ?? '')
+    onComplete(result.correct, result.feedback, { advance: false })
+  }
+
+  const canAddGroup = !correct && numGroups < maxGroups && (numGroups + 1) * perGroup <= step.total
+  const canRemoveGroup = !correct && numGroups > 1
+  const canAddPer = !correct && perGroup < maxPerGroup && numGroups * (perGroup + 1) <= step.total
+  const canRemovePer = !correct && perGroup > 0
+  const totalSentence = `${numGroups} ${numGroups === 1 ? 'group' : 'groups'} of ${perGroup} ${plural(perGroup)} = ${liveTotal} ${plural(liveTotal)} in total`
+
+  return (
+    <article className="lesson-card card manipulative-card">
+      <p className="eyebrow">Build it</p>
+      <h1 className="build-prompt">{step.prompt}</h1>
+      <p className="manipulative-goal" role="note">
+        {describeManipulativeGoal(step)}
+      </p>
+
+      <div className="manipulative-stage build-stage">
+        <div className="build-controls">
+          <div className="build-stepper" role="group" aria-label="Number of groups">
+            <span className="stepper-label">Groups</span>
+            <div className="stepper-row">
+              <button
+                type="button"
+                aria-label="Remove one group"
+                disabled={!canRemoveGroup}
+                onClick={() => adjustGroups(-1)}
+              >
+                &minus;
+              </button>
+              <span className="stepper-value">{numGroups}</span>
+              <button
+                type="button"
+                aria-label="Add one group"
+                disabled={!canAddGroup}
+                onClick={() => adjustGroups(1)}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <span className="build-operator" aria-hidden="true">
+            {'\u00D7'}
+          </span>
+
+          <div className="build-stepper" role="group" aria-label={`${objectName} in each group`}>
+            <span className="stepper-label">Per group</span>
+            <div className="stepper-row">
+              <button
+                type="button"
+                aria-label={`Remove one ${objectName} from each group`}
+                disabled={!canRemovePer}
+                onClick={() => adjustPerGroup(-1)}
+              >
+                &minus;
+              </button>
+              <span className="stepper-value">{perGroup}</span>
+              <button
+                type="button"
+                aria-label={`Add one ${objectName} to each group`}
+                disabled={!canAddPer}
+                onClick={() => adjustPerGroup(1)}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className={`build-total ${correct ? 'is-correct' : ''}`}>
+          <div className="build-total-display" aria-hidden="true">
+            <span className="build-total-eq">
+              {numGroups} {'\u00D7'} {perGroup} =
+            </span>
+            <span className="build-total-value">{liveTotal}</span>
+          </div>
+          <p className="build-total-caption" role="status" aria-live="polite">
+            {totalSentence}
+          </p>
+        </div>
+
+        <div className="manipulative-zones build-zones">
+          {Array.from({ length: numGroups }, (_, zoneIndex) => (
+            <div
+              className={`manipulative-zone build-zone ${correct ? 'is-correct' : ''}`}
+              key={zoneIndex}
+              aria-label={`Group ${zoneIndex + 1}: ${perGroup} ${plural(perGroup)}`}
+            >
+              <div className="zone-head">
+                <span className="zone-label">Group {zoneIndex + 1}</span>
+                <span className="zone-count" aria-hidden="true">
+                  {perGroup}
+                </span>
+              </div>
+              <div className="object-row" aria-hidden="true">
+                {perGroup === 0 && <span className="tray-empty">Empty</span>}
+                {Array.from({ length: perGroup }, (_, index) => (
+                  <span className="object-chip placed" key={index}>
+                    {chipGlyph}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="build-pool" aria-label={`Pool with ${remaining} ${plural(remaining)} left`}>
+          <span className="build-pool-text">
+            Pulling from a pool of {step.total} {objectName}. {remaining} still in the pool.
+          </span>
+          <span className="build-pool-chips" aria-hidden="true">
+            {Array.from({ length: poolChips }, (_, index) => (
+              <span className="object-chip pool-chip" key={index}>
+                {chipGlyph}
+              </span>
+            ))}
+            {remaining > poolChips && <span className="build-pool-more">+{remaining - poolChips}</span>}
+          </span>
+        </div>
+      </div>
+
+      <button className="primary-action" type="button" disabled={correct} onClick={check}>
+        Check
+      </button>
+      {feedback && (
+        <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />
+      )}
+      {feedback && !correct && (
+        <RetryPrompt
+          message={retryGuidance || 'Adjust the number of groups or how many go in each, then check again.'}
+          actionLabel="Reset"
+          onAction={reset}
+        />
+      )}
+      {correct && (
+        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
+          Continue
+        </button>
+      )}
+    </article>
+  )
+}
+
 const PLOT_VIEW_BOX = 360
 const PLOT_PADDING = 34
 const PLOT_AREA = PLOT_VIEW_BOX - PLOT_PADDING * 2
@@ -1987,8 +2246,6 @@ function PlotStepView({
   const [points, setPoints] = useState<PlotPoint[]>(priorResult?.correct ? makeSolvedPoints() : [])
   const [cursor, setCursor] = useState<PlotPoint>({ x: 0, y: 0 })
   const [showCursor, setShowCursor] = useState(false)
-  const [xField, setXField] = useState('0')
-  const [yField, setYField] = useState('0')
   const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
   const [correct, setCorrect] = useState(priorResult?.correct ?? false)
   const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
@@ -2075,8 +2332,6 @@ function PlotStepView({
       y: clampToRange(Math.round(point.y), range.min, range.max),
     }
     setCursor(rounded)
-    setXField(String(rounded.x))
-    setYField(String(rounded.y))
     togglePoint(rounded)
   }
 
@@ -2092,15 +2347,10 @@ function PlotStepView({
     if (move) {
       event.preventDefault()
       setShowCursor(true)
-      setCursor((current) => {
-        const next = {
-          x: clampToRange(current.x + move.x, range.min, range.max),
-          y: clampToRange(current.y + move.y, range.min, range.max),
-        }
-        setXField(String(next.x))
-        setYField(String(next.y))
-        return next
-      })
+      setCursor((current) => ({
+        x: clampToRange(current.x + move.x, range.min, range.max),
+        y: clampToRange(current.y + move.y, range.min, range.max),
+      }))
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -2108,19 +2358,6 @@ function PlotStepView({
       setShowCursor(true)
       togglePoint(cursor)
     }
-  }
-
-  const placeFromFields = () => {
-    const x = Number(xField)
-    const y = Number(yField)
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return
-    const rounded = {
-      x: clampToRange(Math.round(x), range.min, range.max),
-      y: clampToRange(Math.round(y), range.min, range.max),
-    }
-    setCursor(rounded)
-    setShowCursor(true)
-    placePoint(rounded)
   }
 
   const check = () => {
@@ -2235,35 +2472,6 @@ function PlotStepView({
         </svg>
 
         <div className="plot-controls">
-          <div className="plot-field-row">
-            <label className="plot-field">
-              x
-              <input
-                type="number"
-                inputMode="numeric"
-                value={xField}
-                min={range.min}
-                max={range.max}
-                disabled={correct}
-                onChange={(event) => setXField(event.target.value)}
-              />
-            </label>
-            <label className="plot-field">
-              y
-              <input
-                type="number"
-                inputMode="numeric"
-                value={yField}
-                min={range.min}
-                max={range.max}
-                disabled={correct}
-                onChange={(event) => setYField(event.target.value)}
-              />
-            </label>
-            <button type="button" className="plot-place" disabled={correct} onClick={placeFromFields}>
-              Place point
-            </button>
-          </div>
           <p className="plot-placed" aria-live="polite">
             {placedSummary}
           </p>
@@ -2434,7 +2642,7 @@ function SliderStepView({
   return (
     <article className="lesson-card card slider-card">
       <p className="eyebrow">Drag it</p>
-      <h1>{step.prompt}</h1>
+      <h1 className="build-prompt">{step.prompt}</h1>
       <p className="slider-goal" role="note">
         Goal: drag the m and b sliders until the live line matches the description.
       </p>
@@ -2498,7 +2706,7 @@ function SliderStepView({
 
         <div className="slider-controls">
           <p className="slider-equation" aria-live="polite">
-            {equation}
+            <MathText>{equation}</MathText>
           </p>
           <label className="slider-control">
             <span className="slider-control-head">
@@ -2778,7 +2986,11 @@ function DragTermsStepView({
     <article className="lesson-card card drag-terms-card">
       <p className="eyebrow">Sort it</p>
       <h1>{step.prompt}</h1>
-      {step.equation && <p className="drag-terms-equation">{step.equation}</p>}
+      {step.equation && (
+        <p className="drag-terms-equation">
+          <MathText>{step.equation}</MathText>
+        </p>
+      )}
       <p className="drag-terms-goal" role="note">
         Goal: drop every term tile into the bin that matches its variable part.
       </p>
@@ -2980,14 +3192,6 @@ function BalanceStepView({
   const hasTray = step.state.bank !== undefined
   const usesOperations = Boolean(step.operations && step.operations.length > 0)
   const bankItems = state.bank ?? []
-  // Every block the learner can still move, with where it currently sits. Drives the
-  // keyboard/tap placement fallback for physical-drag steps (which otherwise only respond
-  // to pointer drag). Locked weights (the fixed equation) are excluded.
-  const movableItems: { item: BalanceItem; location: DropTarget }[] = [
-    ...bankItems.map((item) => ({ item, location: 'bank' as const })),
-    ...state.left.filter((item) => !item.locked).map((item) => ({ item, location: 'left' as const })),
-    ...state.right.filter((item) => !item.locked).map((item) => ({ item, location: 'right' as const })),
-  ]
 
   useEffect(() => {
     if (!lastDropSide) return
@@ -3126,7 +3330,7 @@ function BalanceStepView({
   return (
     <article className={`lesson-card card ${isPhysicalDrag ? 'physical-balance-card' : ''}`}>
       <p className="eyebrow">Balance scale</p>
-      <h1>{step.prompt}</h1>
+      <h1 className="build-prompt">{step.prompt}</h1>
 
       {isPhysicalDrag ? (
         <PhysicalScaleStage
@@ -3147,13 +3351,13 @@ function BalanceStepView({
           <div className="equation-row" aria-live="polite">
             <span className="equation-side">
               <small>Left</small>
-              <strong>{formatSide(state.left)}</strong>
+              <strong><MathText>{formatSide(state.left)}</MathText></strong>
               <em>Total {leftTotal}</em>
             </span>
             <span className={`balance-symbol ${balanceCue.kind}`}>{balanceCue.symbol}</span>
             <span className="equation-side">
               <small>Right</small>
-              <strong>{formatSide(state.right)}</strong>
+              <strong><MathText>{formatSide(state.right)}</MathText></strong>
               <em>Total {rightTotal}</em>
             </span>
           </div>
@@ -3206,62 +3410,6 @@ function BalanceStepView({
             />
           </div>
           {lastChange && <p className="change-note" aria-live="polite">{lastChange}</p>}
-        </div>
-      )}
-
-      {isPhysicalDrag && (
-        <div className="accessible-balance-controls" role="group" aria-label="Place blocks without dragging">
-          <p id={`${step.id}-place-instructions`}>
-            Prefer keyboard or tap? Use these buttons to place each block. Pointer drag still works as an
-            enhancement.
-          </p>
-          {movableItems.length === 0 ? (
-            <p className="tray-empty" aria-live="polite">
-              Every movable block is placed. Check the scale when you are ready.
-            </p>
-          ) : (
-            <ul className="placement-list">
-              {movableItems.map(({ item, location }) => (
-                <li className="placement-row" key={item.id}>
-                  <span className="placement-label">
-                    {item.label} block — {describeBalanceLocation(location)}
-                  </span>
-                  <span className="placement-buttons">
-                    {location !== 'left' && (
-                      <button
-                        type="button"
-                        disabled={correct}
-                        aria-describedby={`${step.id}-place-instructions`}
-                        onClick={() => quickDrop(item, 'left')}
-                      >
-                        Place {item.label} on left pan
-                      </button>
-                    )}
-                    {location !== 'right' && (
-                      <button
-                        type="button"
-                        disabled={correct}
-                        aria-describedby={`${step.id}-place-instructions`}
-                        onClick={() => quickDrop(item, 'right')}
-                      >
-                        Place {item.label} on right pan
-                      </button>
-                    )}
-                    {location !== 'bank' && (
-                      <button
-                        type="button"
-                        disabled={correct}
-                        aria-describedby={`${step.id}-place-instructions`}
-                        onClick={() => moveItem(item, 'bank')}
-                      >
-                        Return {item.label} to tray
-                      </button>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 
@@ -3856,11 +4004,13 @@ function ProfileScreen({
 }
 
 function MiniScale({ visual }: { visual?: ConceptStep['visual'] }) {
+  const leftSide = visual === 'unknown-box' ? 'x + 2' : '3'
+  const rightSide = visual === 'unknown-box' ? '5' : '3'
   return (
-    <div className="mini-scale" aria-label="Equation balance visual">
-      <span>{visual === 'unknown-box' ? 'x + 2' : '3'}</span>
+    <div className="mini-scale">
+      <span><MathText>{leftSide}</MathText></span>
       <strong>=</strong>
-      <span>{visual === 'unknown-box' ? '5' : '3'}</span>
+      <span><MathText>{rightSide}</MathText></span>
     </div>
   )
 }
@@ -3888,6 +4038,32 @@ function reconstructSolvedBalanceState(step: BalanceStep): BalanceState | null {
     if (checkBalanceStep(step, candidate, {}).correct) return candidate
   }
 
+  // Level goals with required placements: move every required block onto its target pan
+  // (pulled from the tray or whichever pan it currently sits on), then verify the result is
+  // genuinely solved. This rebuilds multi-block "build the scale" steps where no single
+  // bank placement alone solves the goal.
+  if (step.goal.type === 'level') {
+    const required = [
+      ...(step.goal.requireItemOnSide ? [step.goal.requireItemOnSide] : []),
+      ...(step.goal.requireItemsOnSide ?? []),
+    ]
+    if (required.length > 0) {
+      const allItems = [...base.left, ...base.right, ...(base.bank ?? [])]
+      const isRequired = (item: BalanceItem) => required.some((placement) => placement.itemId === item.id)
+      const candidate: BalanceState = {
+        ...base,
+        left: base.left.filter((item) => !isRequired(item)),
+        right: base.right.filter((item) => !isRequired(item)),
+        bank: (base.bank ?? []).filter((item) => !isRequired(item)),
+      }
+      required.forEach((placement) => {
+        const item = allItems.find((candidateItem) => candidateItem.id === placement.itemId)
+        if (item) candidate[placement.side] = [...candidate[placement.side], item]
+      })
+      if (checkBalanceStep(step, candidate, {}).correct) return candidate
+    }
+  }
+
   const bank = base.bank ?? []
   for (const item of bank) {
     for (const side of ['left', 'right'] as BalanceSide[]) {
@@ -3902,11 +4078,6 @@ function reconstructSolvedBalanceState(step: BalanceStep): BalanceState | null {
   }
 
   return null
-}
-
-function describeBalanceLocation(location: DropTarget) {
-  if (location === 'bank') return 'in the tray'
-  return location === 'left' ? 'on the left pan' : 'on the right pan'
 }
 
 function formatSide(items: BalanceItem[]) {

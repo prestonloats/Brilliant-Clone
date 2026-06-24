@@ -49,35 +49,43 @@ export const balancingEquationsLesson: Lesson = {
       type: 'balance',
       layout: 'physical-drag',
       prompt:
-        'Make the scale level again. Drag the loose 2 from the tray onto the pan that balances it — if it lands on the wrong side, just drag it again.',
+        'Build the balanced scale yourself. The tray holds a 3, a 2, and a 5. Drag the 3 and the 2 onto the left pan and the 5 onto the right pan so both sides weigh the same. If a block lands on the wrong side, just drag it again.',
       state: {
-        left: [
-          { id: 'left-3', label: '3', value: 3, kind: 'weight', locked: true },
-          { id: 'left-extra-2', label: '2', value: 2, kind: 'weight', locked: true },
+        left: [],
+        right: [],
+        bank: [
+          { id: 'tray-left-3', label: '3', value: 3, kind: 'weight' },
+          { id: 'tray-left-2', label: '2', value: 2, kind: 'weight' },
+          { id: 'tray-right-5', label: '5', value: 5, kind: 'weight' },
         ],
-        right: [{ id: 'right-3', label: '3', value: 3, kind: 'weight', locked: true }],
-        bank: [{ id: 'right-match-2', label: '2', value: 2, kind: 'weight' }],
       },
-      goal: { type: 'level', requireItemOnSide: { itemId: 'right-match-2', side: 'right' } },
+      goal: {
+        type: 'level',
+        requireItemsOnSide: [
+          { itemId: 'tray-left-3', side: 'left' },
+          { itemId: 'tray-left-2', side: 'left' },
+          { itemId: 'tray-right-5', side: 'right' },
+        ],
+      },
       feedback: {
-        correct: 'Adding the same amount to both sides keeps the equation balanced.',
+        correct: 'Balanced! The left pan holds 3 + 2 and the right pan holds 5, so both sides weigh 5.',
         explanation:
-          'A level scale means both pans total the same amount. The left side is 3 + 2, so the right side also needs to total 5.',
+          'A level scale means both pans total the same amount. Put the 3 and the 2 on the left pan (3 + 2 = 5) and the 5 on the right pan so both sides weigh 5.',
         hints: [
           {
             when: 'missing-item',
-            text: 'The left side has an extra 2. Put a matching 2 on the right side.',
+            text: 'Every block starts in the tray. The 3 and the 2 belong on the left pan; the 5 belongs on the right pan. Drag any block again if it lands on the wrong side.',
           },
           {
             when: 'not-level',
-            text: 'The scale is still tilted. Your goal is for both pans to weigh the same.',
+            text: 'The scale is still tilted. Both pans must weigh the same — 3 + 2 on the left equals 5 on the right.',
           },
           {
             when: 'default',
-            text: 'Drag the 2 onto the pan that makes both totals equal. You can drag it again if it lands on the wrong side.',
+            text: 'Drag all three blocks out of the tray: the 3 and the 2 onto the left pan, the 5 onto the right pan, so both totals are 5.',
           },
         ],
-        reveal: 'Drag the 2 from the tray to the right pan so both sides weigh 5.',
+        reveal: 'Drag the 3 and the 2 onto the left pan and the 5 onto the right pan so both sides weigh 5.',
       },
     },
     {
@@ -241,21 +249,20 @@ export const balancingEquationsLesson: Lesson = {
       equation: 'x - 6 = 9',
       tiles: [
         { id: 'add-six-both', label: 'Add 6 to both sides', detail: 'Undo the -6 next to x without tipping the scale.' },
-        { id: 'x-equals-nine-plus-six', label: 'x = 9 + 6', detail: 'Show the right side before simplifying.' },
-        { id: 'x-equals-fifteen', label: 'x = 15', detail: 'Simplify 9 + 6.' },
+        { id: 'x-equals-fifteen', label: 'x = 15', detail: 'The right side becomes 9 + 6.' },
         { id: 'add-six-left', label: 'Add 6 to the left only', detail: 'Tempting, but it tips the scale.' },
         { id: 'x-equals-nine', label: 'x = 9', detail: 'This forgets to undo the -6.' },
       ],
-      correctOrder: ['add-six-both', 'x-equals-nine-plus-six', 'x-equals-fifteen'],
+      correctOrder: ['add-six-both', 'x-equals-fifteen'],
       feedback: {
-        correct: 'Exactly. Add 6 to both sides, so x = 9 + 6 = 15, and the scale stays balanced the whole way.',
-        incorrect: 'Keep the scale balanced first, then show the arithmetic that isolates x.',
-        incomplete: 'Use all three steps: the balancing move, the rewrite, then the final value.',
-        reveal: 'Order: "Add 6 to both sides", then "x = 9 + 6", then "x = 15".',
+        correct: 'Exactly. Add 6 to both sides, so x = 15, and the scale stays balanced the whole way.',
+        incorrect: 'Keep the scale balanced first, then name the value left for x.',
+        incomplete: 'Choose the balancing move, then the resulting value.',
+        reveal: 'Tap "Add 6 to both sides", then "x = 15".',
         hintsByTile: {
           'add-six-left': 'Adding 6 to only the left side breaks equality. Do it to both sides.',
-          'x-equals-nine': 'x = 9 skips undoing the -6. After adding 6, the right side is 9 + 6.',
-          'x-equals-fifteen': 'x = 15 is the final value, but first show the move and the rewrite that reach it.',
+          'x-equals-nine': 'x = 9 skips undoing the -6. After adding 6 to both sides, x = 15.',
+          'x-equals-fifteen': 'x = 15 is the final value, but first show the move that gets there.',
         },
       },
     },

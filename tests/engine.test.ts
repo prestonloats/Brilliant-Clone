@@ -240,54 +240,62 @@ test('input accepts equivalent numeric answers without evaluating invalid expres
 
 test('balance recovery keeps reveal until the third miss', () => {
   const step = lessonStep('drag-to-level', 'balance')
+  const missingItemHint = step.feedback.hints.find((hint) => hint.when === 'missing-item')?.text
+  assert.ok(missingItemHint)
 
+  // The empty start state has no required block placed yet, so it escalates like any miss.
   const firstMiss = checkBalanceStep(step, step.state, {}, 1)
   assert.equal(firstMiss.correct, false)
-  assert.equal(firstMiss.feedback, 'The left side has an extra 2. Put a matching 2 on the right side.')
+  assert.equal(firstMiss.feedback, missingItemHint)
   assert.equal(firstMiss.reveal, undefined)
 
   const secondMiss = checkBalanceStep(step, step.state, {}, 2)
-  assert.equal(
-    secondMiss.feedback,
-    'A level scale means both pans total the same amount. The left side is 3 + 2, so the right side also needs to total 5.',
-  )
+  assert.equal(secondMiss.feedback, step.feedback.explanation)
   assert.equal(secondMiss.reveal, undefined)
 
   const thirdMiss = checkBalanceStep(step, step.state, {}, 3)
-  assert.equal(thirdMiss.reveal, 'Drag the 2 from the tray to the right pan so both sides weigh 5.')
+  assert.equal(thirdMiss.reveal, step.feedback.reveal)
 })
 
 test('balance level goal distinguishes missing item, not level, and solved states', () => {
   const step = lessonStep('drag-to-level', 'balance')
-  const matchingItem = step.state.bank?.find((item) => item.id === 'right-match-2')
-  assert.ok(matchingItem)
+  const bank = step.state.bank ?? []
+  const three = bank.find((item) => item.id === 'tray-left-3')
+  const two = bank.find((item) => item.id === 'tray-left-2')
+  const five = bank.find((item) => item.id === 'tray-right-5')
+  assert.ok(three && two && five)
 
+  const missingItemHint = step.feedback.hints.find((hint) => hint.when === 'missing-item')?.text
+  const notLevelHint = step.feedback.hints.find((hint) => hint.when === 'not-level')?.text
+  assert.ok(missingItemHint && notLevelHint)
+
+  // Empty pans (the start state): the required blocks are still in the tray.
   const missingItem = checkBalanceStep(step, step.state, {}, 1)
   assert.equal(missingItem.correct, false)
-  assert.equal(missingItem.feedback, 'The left side has an extra 2. Put a matching 2 on the right side.')
+  assert.equal(missingItem.feedback, missingItemHint)
 
+  // Every required block is on its correct pan, but an extra weight tips the scale.
   const notLevel = checkBalanceStep(
     step,
     {
       ...step.state,
-      right: [
-        ...step.state.right,
-        matchingItem,
-        { id: 'extra-right-1', label: '1', value: 1, kind: 'weight' },
-      ],
+      left: [three, two],
+      right: [five, { id: 'extra-right-1', label: '1', value: 1, kind: 'weight' }],
       bank: [],
     },
     {},
     1,
   )
   assert.equal(notLevel.correct, false)
-  assert.equal(notLevel.feedback, 'The scale is still tilted. Your goal is for both pans to weigh the same.')
+  assert.equal(notLevel.feedback, notLevelHint)
 
+  // Every required block on its correct pan and the scale level.
   const solved = checkBalanceStep(
     step,
     {
       ...step.state,
-      right: [...step.state.right, matchingItem],
+      left: [three, two],
+      right: [five],
       bank: [],
     },
     {},

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { manipulativeExampleStep } from '../src/content/examples/manipulative-example'
+import {
+  manipulativeBuildProductExampleStep,
+  manipulativeExampleStep,
+} from '../src/content/examples/manipulative-example'
 import type { ManipulativeStep } from '../src/domain'
 import { checkManipulativeStep } from '../src/engine'
 
@@ -27,6 +30,34 @@ test('manipulative equal-groups returns targeted hints and escalates to reveal',
 
   const reveal = checkManipulativeStep(manipulativeExampleStep, [6, 4, 2], 3)
   assert.equal(reveal.reveal, manipulativeExampleStep.feedback.reveal)
+})
+
+test('manipulative build-product accepts only the matching groups and per-group', () => {
+  const step = manipulativeBuildProductExampleStep
+  assert.equal(step.goal.type, 'build-product')
+
+  // 4 groups of 2 -> live total 8 = y.
+  assert.equal(checkManipulativeStep(step, [2, 2, 2, 2], 1).correct, true)
+  // The same total (8) built the wrong way (2 groups of 4) is rejected.
+  assert.equal(checkManipulativeStep(step, [4, 4], 1).correct, false)
+  // The right number of groups but the wrong per-group amount is rejected.
+  assert.equal(checkManipulativeStep(step, [1, 1, 1, 1], 1).correct, false)
+})
+
+test('manipulative build-product escalates group/per-group hints to a reveal', () => {
+  const step = manipulativeBuildProductExampleStep
+  const hint = (when: string) => step.feedback.hints?.find((entry) => entry.when === when)?.text
+
+  // Nothing built yet, wrong group count, and wrong per-group each surface their own hint.
+  assert.equal(checkManipulativeStep(step, [], 1).feedback, hint('empty'))
+  assert.equal(checkManipulativeStep(step, [2, 2], 1).feedback, hint('groups'))
+  assert.equal(checkManipulativeStep(step, [3, 3, 3, 3], 1).feedback, hint('per-group'))
+
+  // Escalation matches the other checkers: explanation at attempt 2, reveal at attempt 3.
+  const reveal = checkManipulativeStep(step, [3, 3, 3, 3], 3)
+  assert.equal(reveal.correct, false)
+  assert.equal(reveal.feedback, step.feedback.incorrect)
+  assert.equal(reveal.reveal, step.feedback.reveal)
 })
 
 test('manipulative collect goal checks an exact target count', () => {
