@@ -180,6 +180,46 @@ export const checkOperationChoiceStep = (
   })
 }
 
+// MCQ ("predict") steps escalate exactly like operation-choice: a newly chosen wrong
+// option keeps its OWN authored misconception as the main feedback, the generic
+// explanation layers into the reveal slot at attempt 2, and the exact reveal takes over
+// at attempt 3. The escalation previously lived inline in the view (App.tsx), duplicating
+// buildWrongResult's logic; keeping it here makes MCQ uniform with the other assessed
+// step types and unit-testable. The retry copy is the prediction-step wording the view
+// has always shown (MCQ's only authored use is the balance prediction).
+export const checkMcqStep = (
+  step: Extract<LessonStep, { type: 'mcq' }>,
+  optionId: string,
+  attemptNumber = 1,
+): CheckResult => {
+  const option = step.options.find((candidate) => candidate.id === optionId)
+
+  if (optionId === step.correctId) {
+    return { correct: true, feedback: step.feedback?.correct ?? option?.feedback ?? 'Correct.' }
+  }
+
+  const hint = option?.feedback ?? step.feedback?.incorrect ?? ''
+  const explanation = step.feedback?.incorrect
+  const reveal = step.feedback?.reveal
+
+  if (attemptNumber >= 3 && reveal) {
+    return {
+      correct: false,
+      feedback: hint,
+      reveal,
+      retryGuidance: 'Use the reveal, then choose the prediction that matches the totals.',
+    }
+  }
+
+  const layeredExplanation = attemptNumber >= 2 && explanation && explanation !== hint ? explanation : undefined
+  return {
+    correct: false,
+    feedback: hint,
+    ...(layeredExplanation ? { reveal: layeredExplanation } : {}),
+    retryGuidance: 'Compare the two totals, then choose another option.',
+  }
+}
+
 export const checkSequenceStep = (
   step: Extract<LessonStep, { type: 'sequence' }>,
   selectedIds: string[],
