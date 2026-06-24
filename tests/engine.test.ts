@@ -14,11 +14,15 @@ import {
 import {
   applyBalanceOperation,
   applyStepResult,
+  buildLessonGraph,
   calculateLessonScore,
   checkBalanceStep,
+  checkDragTermsStep,
   checkInputStep,
   checkOperationChoiceStep,
+  checkPlotStep,
   checkSequenceStep,
+  checkSliderStep,
   createInitialProgress,
   getBestLessonScore,
   getCourseProgressSummary,
@@ -51,13 +55,143 @@ const expectedLessonOrder: LessonId[] = [
   'graphing-lines',
 ]
 
+// The path diverges after Two-Step Equations (Like Terms and Coordinate Plane run in
+// parallel) and merges again at Graphing Lines (which needs both branches complete).
 const expectedPrerequisites: Record<LessonId, LessonId[]> = {
   'balancing-equations': [],
   'one-step-equations': ['balancing-equations'],
   'two-step-equations': ['one-step-equations'],
   'like-terms-variables-both-sides': ['two-step-equations'],
-  'coordinate-plane': ['like-terms-variables-both-sides'],
-  'graphing-lines': ['coordinate-plane'],
+  'coordinate-plane': ['two-step-equations'],
+  'graphing-lines': ['like-terms-variables-both-sides', 'coordinate-plane'],
+}
+
+const completedProgress = (lessonId: LessonId): LessonProgress => ({
+  ...createInitialProgress('user-1', lessonId),
+  status: 'completed',
+  currentStepIndex: lessons[lessonId].steps.length - 1,
+  completedAt: '2026-06-23T00:00:00.000Z',
+})
+
+// Progress map with the given lessons marked completed, for branch-aware recommendation tests.
+const completedThrough = (...lessonIds: LessonId[]): ProgressByLesson =>
+  lessonIds.reduce<ProgressByLesson>((accumulator, lessonId) => {
+    accumulator[lessonId] = completedProgress(lessonId)
+    return accumulator
+  }, {})
+
+// Self-contained operation-choice step so feedback-escalation tests don't depend on lesson
+// data the content wave is actively editing.
+const syntheticOperationChoiceStep: Extract<LessonStep, { type: 'operation-choice' }> = {
+  id: 'synthetic-operation-choice',
+  type: 'operation-choice',
+  prompt: 'Pick the move that isolates x.',
+  correctId: 'divide-both',
+  choices: [
+    { id: 'divide-both', label: '/3 on both sides', feedback: 'Right. Dividing both sides by 3 isolates x.' },
+    { id: 'multiply-both', label: 'x3 on both sides', feedback: 'Multiplying repeats the operation instead of undoing it.' },
+    { id: 'divide-left', label: '/3 on the left only', feedback: 'Changing one side breaks the balance.' },
+  ],
+  feedback: {
+    correct: 'Right. Dividing both sides by 3 isolates x.',
+    incorrect: 'Undo multiplication with division, and do it to both sides.',
+    reveal: 'Choose "/3 on both sides" because 3x / 3 = x.',
+  },
+}
+
+// Self-contained plot steps so the checker's escalation is verified independently of the
+// coordinate-plane lesson content (which the content wave is actively editing).
+const syntheticPointPlotStep: Extract<LessonStep, { type: 'plot' }> = {
+  id: 'synthetic-point-plot',
+  type: 'plot',
+  prompt: 'Plot the point (1, -2).',
+  range: { min: -3, max: 3 },
+  target: { kind: 'points', points: [{ x: 1, y: -2 }] },
+  feedback: {
+    correct: 'Right. (1, -2) is one right and two down.',
+    incorrect: 'Keep the order (x, y) and each sign.',
+    reveal: 'Place the point at (1, -2).',
+    hints: [
+      { when: 'empty', text: 'Tap the grid to drop a point.' },
+      { when: 'swapped', text: 'That looks reversed. x comes first.' },
+      { when: 'too-many', text: 'Only one point is needed.' },
+      { when: 'default', text: 'Move one right and two down.' },
+    ],
+  },
+}
+
+const syntheticQuadrantPlotStep: Extract<LessonStep, { type: 'plot' }> = {
+  id: 'synthetic-quadrant-plot',
+  type: 'plot',
+  prompt: 'Place one point in each quadrant.',
+  range: { min: -4, max: 4 },
+  target: { kind: 'quadrants', quadrants: [1, 2, 3, 4] },
+  feedback: {
+    correct: 'Every quadrant is covered.',
+    incorrect: 'Cover all four quadrants with no point on an axis.',
+    reveal: 'Use (2, 2), (-2, 2), (-2, -2), and (2, -2).',
+    hints: [
+      { when: 'empty', text: 'Start placing points in the corners.' },
+      { when: 'on-axis', text: 'Keep both coordinates off the axes.' },
+      { when: 'incomplete', text: 'Keep going until all four are covered.' },
+      { when: 'wrong-quadrant', text: 'Two points share a quadrant.' },
+      { when: 'too-many', text: 'Only four points are needed.' },
+    ],
+  },
+}
+
+// Self-contained slider step so the checker's escalation is verified independently of the
+// graphing-lines lesson content (which the content wave is actively editing).
+const syntheticSliderStep: Extract<LessonStep, { type: 'slider' }> = {
+  id: 'synthetic-slider',
+  type: 'slider',
+  prompt: 'Match the line y = 2x + 1.',
+  slope: { min: -5, max: 5 },
+  intercept: { min: -5, max: 5 },
+  target: { slope: 2, intercept: 1 },
+  range: { min: -6, max: 6 },
+  feedback: {
+    correct: 'Right. y = 2x + 1.',
+    incorrect: 'Match m to the rise over run and b to the y-intercept.',
+    reveal: 'Set m = 2 and b = 1.',
+    hints: [
+      { when: 'slope-direction', text: 'This line rises, so make m positive.' },
+      { when: 'slope-off', text: 'Intercept is right. Adjust the slope.' },
+      { when: 'intercept-off', text: 'Slope is right. Adjust the intercept.' },
+      { when: 'both-off', text: 'Set the intercept first, then the slope.' },
+      { when: 'close', text: 'Almost. Nudge m and b a little more.' },
+      { when: 'default', text: 'Set m = 2 and b = 1.' },
+    ],
+  },
+}
+
+// Self-contained drag-terms step so the checker's escalation is verified independently of the
+// like-terms lesson content (which the content wave is actively editing).
+const syntheticDragTermsStep: Extract<LessonStep, { type: 'dragTerms' }> = {
+  id: 'synthetic-drag-terms',
+  type: 'dragTerms',
+  prompt: 'Sort 5x, -2x, and 7 into x-terms and constants.',
+  equation: '5x - 2x + 7',
+  bins: [
+    { id: 'x-terms', label: 'x-terms' },
+    { id: 'constants', label: 'Constants' },
+  ],
+  tiles: [
+    { id: 't-5x', label: '5x', bin: 'x-terms' },
+    { id: 't-neg-2x', label: '-2x', bin: 'x-terms' },
+    { id: 't-7', label: '7', bin: 'constants' },
+  ],
+  feedback: {
+    correct: 'Right. 5x and -2x are x-terms; 7 is a constant.',
+    incorrect: 'Sort by the variable part.',
+    reveal: 'x-terms: 5x and -2x. Constants: 7.',
+    hints: [
+      { when: 'empty', text: 'Drag a tile into a bin to start.' },
+      { when: 'incomplete', text: 'Keep going until every tile is sorted.' },
+      { when: 'misplaced', text: 'A tile is on the wrong team.' },
+      { when: 'default', text: 'x-terms hold x; constants are plain numbers.' },
+    ],
+  },
 }
 
 test('input recovery escalates from hint to explanation to reveal', () => {
@@ -206,32 +340,39 @@ test('wrong assessed results stay on the same step and remain retryable', () => 
 const finalSummaryCases = [
   {
     lesson: balancingEquationsLesson,
-    finalAssessedId: 'order-balance-repair',
+    // Wave 3 added two mastery checks before the summary; the balance story is now last.
+    finalAssessedId: 'mastery-balance-story',
     finalSummaryId: 'complete-summary',
   },
   {
     lesson: lessons['one-step-equations'],
-    finalAssessedId: 'input-x-divided-by-four',
+    // Mastery checks (add-negative, divide-by-negative) follow the x/4 input solve.
+    finalAssessedId: 'mastery-divide-by-negative',
     finalSummaryId: 'complete-one-step-summary',
   },
   {
     lesson: lessons['two-step-equations'],
+    // Unchanged: the spot-the-mistake capstone stays second-to-last by design.
     finalAssessedId: 'spot-two-step-mistake',
     finalSummaryId: 'complete-two-step-summary',
   },
   {
     lesson: lessons['like-terms-variables-both-sides'],
-    finalAssessedId: 'input-variable-both-sides',
+    // Mastery input + full-solution sequence were appended after the both-sides input.
+    finalAssessedId: 'mastery-sequence-full-solution',
     finalSummaryId: 'complete-like-terms-summary',
   },
   {
     lesson: lessons['coordinate-plane'],
-    finalAssessedId: 'choose-quadrant',
+    // Plot tasks (each-quadrant map, net-walk input, Quadrant II plot) follow choose-quadrant;
+    // the Quadrant II plot stays the last assessed step before the summary.
+    finalAssessedId: 'choose-point-in-quadrant-two',
     finalSummaryId: 'complete-coordinate-plane-summary',
   },
   {
     lesson: lessons['graphing-lines'],
-    finalAssessedId: 'choose-line-table',
+    // Two mastery checks (equation-from-graph, find-intercept) follow the table choice.
+    finalAssessedId: 'mastery-find-intercept',
     finalSummaryId: 'complete-graphing-lines-summary',
   },
 ]
@@ -423,8 +564,16 @@ test('recommendations distinguish clean mastery from repeated misses', () => {
     lastPracticedAt: '2026-06-23T00:00:00.000Z',
   }))
 
-  assert.equal(getRecommendedNextLesson(balancingEquationsLesson, cleanMastery).title, 'One-Step Equations')
-  assert.equal(getRecommendedNextLesson(balancingEquationsLesson, missedMastery).title, 'Review Balancing Equations')
+  const afterBalancing = completedThrough('balancing-equations')
+
+  assert.equal(
+    getRecommendedNextLesson(balancingEquationsLesson, cleanMastery, algebraCourse, lessons, afterBalancing).title,
+    'One-Step Equations',
+  )
+  assert.equal(
+    getRecommendedNextLesson(balancingEquationsLesson, missedMastery, algebraCourse, lessons, afterBalancing).title,
+    'Review Balancing Equations',
+  )
 })
 
 test('recommendations use average mastery threshold and end-of-path copy', () => {
@@ -473,17 +622,107 @@ test('recommendations use average mastery threshold and end-of-path copy', () =>
     lastPracticedAt: '2026-06-23T00:00:00.000Z',
   }))
 
-  assert.equal(getRecommendedNextLesson(balancingEquationsLesson, masteryAtThreshold).title, 'One-Step Equations')
-  assert.equal(getRecommendedNextLesson(balancingEquationsLesson, missingSkillMastery).title, 'Review Balancing Equations')
+  const afterBalancing = completedThrough('balancing-equations')
+  const afterTwoStep = completedThrough('balancing-equations', 'one-step-equations', 'two-step-equations')
+  const afterLikeTerms = completedThrough(
+    'balancing-equations',
+    'one-step-equations',
+    'two-step-equations',
+    'like-terms-variables-both-sides',
+  )
+  const everythingDone = completedThrough(...algebraCourse.lessonOrder)
+
   assert.equal(
-    getRecommendedNextLesson(lessons['two-step-equations'], twoStepMastery).title,
+    getRecommendedNextLesson(balancingEquationsLesson, masteryAtThreshold, algebraCourse, lessons, afterBalancing).title,
+    'One-Step Equations',
+  )
+  assert.equal(
+    getRecommendedNextLesson(balancingEquationsLesson, missingSkillMastery, algebraCourse, lessons, afterBalancing)
+      .title,
+    'Review Balancing Equations',
+  )
+  // After Two-Step, both branches unlock; the next available lesson is the first branch.
+  assert.equal(
+    getRecommendedNextLesson(lessons['two-step-equations'], twoStepMastery, algebraCourse, lessons, afterTwoStep).title,
     'Like Terms & Variables on Both Sides',
   )
+  // Finishing Like Terms with Coordinate Plane still open points to the other branch, not
+  // the locked merge lesson (Graphing Lines) the linear nextLessonId would have chosen.
   assert.equal(
-    getRecommendedNextLesson(lessons['like-terms-variables-both-sides'], likeTermsMastery).title,
+    getRecommendedNextLesson(
+      lessons['like-terms-variables-both-sides'],
+      likeTermsMastery,
+      algebraCourse,
+      lessons,
+      afterLikeTerms,
+    ).title,
     'Coordinate Plane',
   )
-  assert.equal(getRecommendedNextLesson(lessons['graphing-lines'], graphingMastery).title, 'Course path complete')
+  assert.equal(
+    getRecommendedNextLesson(lessons['graphing-lines'], graphingMastery, algebraCourse, lessons, everythingDone).title,
+    'Course path complete',
+  )
+})
+
+test('next-lesson recommendation skips locked merge and already-completed branches', () => {
+  const masteredFor = (lessonId: LessonId): SkillMastery[] =>
+    lessons[lessonId].skillIds.map((skillId) => ({
+      userId: 'user-1',
+      skillId,
+      score: 1,
+      attempts: 4,
+      correct: 4,
+      lastPracticedAt: '2026-06-23T00:00:00.000Z',
+    }))
+
+  // Learner took the Coordinate Plane branch first: Like Terms is still open and the merge
+  // lesson (Graphing Lines) is still locked, so the linear nextLessonId would be wrong.
+  const coordinateFirst = completedThrough(
+    'balancing-equations',
+    'one-step-equations',
+    'two-step-equations',
+    'coordinate-plane',
+  )
+  assert.equal(isLessonUnlocked(lessons['graphing-lines'], coordinateFirst), false)
+  const afterCoordinate = getRecommendedNextLesson(
+    lessons['coordinate-plane'],
+    masteredFor('coordinate-plane'),
+    algebraCourse,
+    lessons,
+    coordinateFirst,
+  )
+  assert.equal(afterCoordinate.kind, 'next')
+  assert.equal(afterCoordinate.lessonId, 'like-terms-variables-both-sides')
+
+  // With both branches done, finishing Like Terms points at the now-unlocked merge lesson.
+  const bothBranches = completedThrough(
+    'balancing-equations',
+    'one-step-equations',
+    'two-step-equations',
+    'coordinate-plane',
+    'like-terms-variables-both-sides',
+  )
+  const afterLikeTerms = getRecommendedNextLesson(
+    lessons['like-terms-variables-both-sides'],
+    masteredFor('like-terms-variables-both-sides'),
+    algebraCourse,
+    lessons,
+    bothBranches,
+  )
+  assert.equal(afterLikeTerms.kind, 'next')
+  assert.equal(afterLikeTerms.lessonId, 'graphing-lines')
+
+  // Finishing the final lesson ends the path gracefully instead of recommending a redo.
+  const everythingDone = completedThrough(...algebraCourse.lessonOrder)
+  const afterGraphing = getRecommendedNextLesson(
+    lessons['graphing-lines'],
+    masteredFor('graphing-lines'),
+    algebraCourse,
+    lessons,
+    everythingDone,
+  )
+  assert.equal(afterGraphing.kind, 'complete')
+  assert.equal(afterGraphing.lessonId, undefined)
 })
 
 test('path recommends one-step equations after balancing is completed', () => {
@@ -545,9 +784,88 @@ test('path recommends like terms after two-step equations are completed', () => 
     },
   }
 
+  // Branch point: completing Two-Step opens both parallel lessons, but the merge lesson stays locked.
   assert.equal(isLessonUnlocked(lessons['like-terms-variables-both-sides'], progressByLesson), true)
-  assert.equal(isLessonUnlocked(lessons['coordinate-plane'], progressByLesson), false)
+  assert.equal(isLessonUnlocked(lessons['coordinate-plane'], progressByLesson), true)
+  assert.equal(isLessonUnlocked(lessons['graphing-lines'], progressByLesson), false)
   assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson), 'like-terms-variables-both-sides')
+})
+
+test('two-step equations unlocks both parallel branches at once', () => {
+  const progressByLesson: ProgressByLesson = {
+    'balancing-equations': completedProgress('balancing-equations'),
+    'one-step-equations': completedProgress('one-step-equations'),
+    'two-step-equations': completedProgress('two-step-equations'),
+  }
+
+  assert.equal(isLessonUnlocked(lessons['like-terms-variables-both-sides'], progressByLesson), true)
+  assert.equal(isLessonUnlocked(lessons['coordinate-plane'], progressByLesson), true)
+  assert.equal(isLessonUnlocked(lessons['graphing-lines'], progressByLesson), false)
+})
+
+test('graphing lines unlocks only after both parallel branches are completed', () => {
+  const base: ProgressByLesson = {
+    'balancing-equations': completedProgress('balancing-equations'),
+    'one-step-equations': completedProgress('one-step-equations'),
+    'two-step-equations': completedProgress('two-step-equations'),
+  }
+
+  const onlyLikeTerms: ProgressByLesson = {
+    ...base,
+    'like-terms-variables-both-sides': completedProgress('like-terms-variables-both-sides'),
+  }
+  assert.equal(isLessonUnlocked(lessons['graphing-lines'], onlyLikeTerms), false)
+  assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, onlyLikeTerms), 'coordinate-plane')
+
+  const onlyCoordinatePlane: ProgressByLesson = {
+    ...base,
+    'coordinate-plane': completedProgress('coordinate-plane'),
+  }
+  assert.equal(isLessonUnlocked(lessons['graphing-lines'], onlyCoordinatePlane), false)
+  assert.equal(
+    getRecommendedPathLessonId(algebraCourse, lessons, onlyCoordinatePlane),
+    'like-terms-variables-both-sides',
+  )
+
+  const bothBranches: ProgressByLesson = {
+    ...base,
+    'like-terms-variables-both-sides': completedProgress('like-terms-variables-both-sides'),
+    'coordinate-plane': completedProgress('coordinate-plane'),
+  }
+  assert.equal(isLessonUnlocked(lessons['graphing-lines'], bothBranches), true)
+  assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, bothBranches), 'graphing-lines')
+})
+
+test('buildLessonGraph derives ranks, branch split, and merge stages', () => {
+  const graph = buildLessonGraph(algebraCourse, lessons)
+
+  assert.equal(graph.nodes['balancing-equations'].rank, 0)
+  assert.equal(graph.nodes['one-step-equations'].rank, 1)
+  assert.equal(graph.nodes['two-step-equations'].rank, 2)
+  assert.equal(graph.nodes['like-terms-variables-both-sides'].rank, 3)
+  assert.equal(graph.nodes['coordinate-plane'].rank, 3)
+  assert.equal(graph.nodes['graphing-lines'].rank, 4)
+
+  assert.deepEqual(graph.nodes['two-step-equations'].unlocks, [
+    'like-terms-variables-both-sides',
+    'coordinate-plane',
+  ])
+  assert.deepEqual(graph.nodes['graphing-lines'].prerequisites, [
+    'like-terms-variables-both-sides',
+    'coordinate-plane',
+  ])
+  assert.deepEqual(graph.nodes['graphing-lines'].unlocks, [])
+
+  assert.deepEqual(
+    graph.stages.map((stage) => stage.connector),
+    ['start', 'linear', 'linear', 'split', 'merge'],
+  )
+
+  const branchStage = graph.stages.find((stage) => stage.connector === 'split')
+  assert.deepEqual(branchStage?.nodeIds, ['like-terms-variables-both-sides', 'coordinate-plane'])
+
+  const mergeStage = graph.stages.find((stage) => stage.connector === 'merge')
+  assert.deepEqual(mergeStage?.nodeIds, ['graphing-lines'])
 })
 
 test('review suggestion does not block starting the unlocked next lesson', () => {
@@ -570,7 +888,10 @@ test('review suggestion does not block starting the unlocked next lesson', () =>
   }))
   const oneStepProgress = createInitialProgress('user-1', 'one-step-equations')
 
-  assert.equal(getRecommendedNextLesson(balancingEquationsLesson, reviewMastery).title, 'Review Balancing Equations')
+  assert.equal(
+    getRecommendedNextLesson(balancingEquationsLesson, reviewMastery, algebraCourse, lessons, progressByLesson).title,
+    'Review Balancing Equations',
+  )
   assert.equal(isLessonUnlocked(lessons['one-step-equations'], progressByLesson), true)
   assert.equal(getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, 'balancing-equations'), 'one-step-equations')
   assert.equal(oneStepProgress.lessonId, 'one-step-equations')
@@ -671,24 +992,48 @@ test('one-step balance operation isolates x minus three', () => {
   assert.equal(result.feedback, 'Yes. x = 7 because adding 3 to both sides turns x - 3 = 4 into x = 7.')
 })
 
-test('operation choice recovery escalates from authored choice feedback to reveal', () => {
-  const step = lessonStep('input-three-x', 'operation-choice', lessons['one-step-equations'])
+test('operation-choice keeps the chosen misconception while layering explanation then reveal', () => {
+  const step = syntheticOperationChoiceStep
+  const wrong = step.choices.find((choice) => choice.id === 'multiply-both')
+  assert.ok(wrong)
 
-  const firstMiss = checkOperationChoiceStep(step, 'multiply-three-both', 1)
+  const firstMiss = checkOperationChoiceStep(step, wrong.id, 1)
   assert.equal(firstMiss.correct, false)
-  assert.equal(firstMiss.feedback, 'Multiplying by 3 repeats the operation. To undo 3 times x, divide by 3.')
+  assert.equal(firstMiss.feedback, wrong.feedback)
   assert.equal(firstMiss.reveal, undefined)
 
-  const secondMiss = checkOperationChoiceStep(step, 'multiply-three-both', 2)
-  assert.equal(secondMiss.feedback, '3x means multiplication, so use the inverse operation on both sides.')
-  assert.equal(secondMiss.reveal, undefined)
+  // Attempt 2 still leads with the option's misconception and layers the generic
+  // explanation into the reveal slot (previously the misconception was overwritten).
+  const secondMiss = checkOperationChoiceStep(step, wrong.id, 2)
+  assert.equal(secondMiss.feedback, wrong.feedback)
+  assert.equal(secondMiss.reveal, step.feedback.incorrect)
 
-  const thirdMiss = checkOperationChoiceStep(step, 'multiply-three-both', 3)
-  assert.equal(thirdMiss.reveal, 'Choose "/3 on both sides" because 3x / 3 = x and 12 / 3 = 4.')
+  // Attempt 3 keeps the misconception and swaps the reveal slot to the exact move, so the
+  // reveal field stays the authored reveal string (lesson tests rely on this).
+  const thirdMiss = checkOperationChoiceStep(step, wrong.id, 3)
+  assert.equal(thirdMiss.feedback, wrong.feedback)
+  assert.equal(thirdMiss.reveal, step.feedback.reveal)
 
-  const solved = checkOperationChoiceStep(step, 'divide-three-both', 2)
+  const solved = checkOperationChoiceStep(step, step.correctId, 2)
   assert.equal(solved.correct, true)
-  assert.equal(solved.feedback, 'Right. x = 4 because 12 divided by 3 is 4.')
+  assert.equal(solved.feedback, step.feedback.correct)
+})
+
+test('operation-choice surfaces each newly selected wrong option misconception on later attempts', () => {
+  const step = syntheticOperationChoiceStep
+  const wrongChoices = step.choices.filter(
+    (choice) => choice.id !== step.correctId && choice.feedback !== step.feedback.incorrect,
+  )
+  assert.ok(wrongChoices.length >= 2)
+  const [firstWrong, secondWrong] = wrongChoices
+
+  assert.equal(checkOperationChoiceStep(step, firstWrong.id, 1).feedback, firstWrong.feedback)
+
+  // Selecting a DIFFERENT wrong option on attempt 2 shows that option's own misconception,
+  // not the generic feedback.incorrect that previously replaced it.
+  const secondMiss = checkOperationChoiceStep(step, secondWrong.id, 2)
+  assert.equal(secondMiss.feedback, secondWrong.feedback)
+  assert.notEqual(secondMiss.feedback, step.feedback.incorrect)
 })
 
 test('sequence puzzle checks order and gives tile-specific misconceptions', () => {
@@ -738,12 +1083,12 @@ test('new one-step puzzles target one-side and division misconceptions', () => {
     'The mistake is adding 5 only on the left. Correct path: x - 5 = 9 -> x = 14.',
   )
 
-  const repeatedDivision = checkSequenceStep(divisionOrder, ['divide-four-both', 'x-equals-eight'], 1)
-  assert.equal(repeatedDivision.feedback, 'Dividing by 4 again repeats the operation. Use multiplication to undo division.')
+  const repeatedDivision = checkSequenceStep(divisionOrder, ['divide-six-both', 'x-equals-twelve'], 1)
+  assert.equal(repeatedDivision.feedback, 'Dividing by 6 again repeats the operation. Use multiplication to undo division.')
 
-  const solved = checkSequenceStep(divisionOrder, ['multiply-four-both', 'x-equals-eight'], 1)
+  const solved = checkSequenceStep(divisionOrder, ['multiply-six-both', 'x-equals-twelve'], 1)
   assert.equal(solved.correct, true)
-  assert.equal(solved.feedback, 'Correct. Multiplying both sides by 4 gives x = 8.')
+  assert.equal(solved.feedback, 'Correct. Multiplying both sides by 6 gives x = 12.')
 })
 
 test('one-step input and two-step mistake feedback catch inverse-operation misconceptions', () => {
@@ -770,8 +1115,8 @@ test('two-step inputs and balance puzzle catch authored misconceptions', () => {
   assert.ok(addFiveBoth)
   assert.ok(addFiveLeft)
 
-  assert.equal(checkInputStep(gateInput, '21', 1).feedback, '21 is the value of the whole expression 3x + 6, not x.')
-  assert.equal(checkInputStep(gateInput, '9', 1).feedback, 'That looks like adding 6 before dividing. The +6 should be subtracted away.')
+  assert.equal(checkInputStep(gateInput, '16', 1).feedback, '16 is the value of the whole expression 2x + 4, not x.')
+  assert.equal(checkInputStep(gateInput, '10', 1).feedback, 'That looks like adding 4 before dividing. The +4 should be subtracted away.')
   assert.equal(checkInputStep(negativeInput, '4', 1).feedback, 'Check the arithmetic after adding 7: 5 + 7 is 12, then 12 / 2 is 6.')
 
   const oneSideOnly = checkBalanceStep(balance, applyBalanceOperation(balance.state, addFiveLeft), { movedOneSideOnly: true }, 1)
@@ -783,15 +1128,18 @@ test('two-step inputs and balance puzzle catch authored misconceptions', () => {
 })
 
 test('two-step lesson teaches reverse order with operation and sequence puzzles', () => {
-  const firstMove = lessonStep('choose-first-two-step-move', 'operation-choice', lessons['two-step-equations'])
+  const firstMove = lessonStep('choose-right-side-expression', 'operation-choice', lessons['two-step-equations'])
   const ordered = lessonStep('order-two-step-solution', 'sequence', lessons['two-step-equations'])
   const mistake = lessonStep('spot-two-step-mistake', 'operation-choice', lessons['two-step-equations'])
 
   assert.equal(
-    checkOperationChoiceStep(firstMove, 'divide-four-both', 1).feedback,
-    'That split comes second. The -5 is outside the 4x bundle, so clear it before dividing.',
+    checkOperationChoiceStep(firstMove, 'divide-five-both', 1).feedback,
+    'That division comes second. First turn 18 = 5x + 3 into 15 = 5x.',
   )
-  assert.equal(checkOperationChoiceStep(firstMove, 'add-five-left', 3).reveal, 'Choose "+5 to both sides" first. Then divide both sides by 4.')
+  assert.equal(
+    checkOperationChoiceStep(firstMove, 'subtract-three-right', 3).reveal,
+    'Choose "-3 from both sides": 18 = 5x + 3 becomes 15 = 5x, then x = 3.',
+  )
 
   const wrongOrder = checkSequenceStep(ordered, ['divide-four-first', 'add-five-both', 'x-equals-six'], 1)
   assert.equal(wrongOrder.feedback, 'Dividing first is tempting, but the -5 still changes the 4x bundle.')
@@ -805,14 +1153,10 @@ test('two-step lesson teaches reverse order with operation and sequence puzzles'
 })
 
 test('like-terms lesson combines terms before variables-on-both-sides solving', () => {
-  const pairChoice = lessonStep(
-    'choose-like-term-pair',
-    'operation-choice',
-    lessons['like-terms-variables-both-sides'],
-  )
-  const classifyTerms = lessonStep(
-    'choose-equation-variable-terms',
-    'operation-choice',
+  const sortTerms = lessonStep('sort-like-terms', 'dragTerms', lessons['like-terms-variables-both-sides'])
+  const sortEquationTerms = lessonStep(
+    'sort-equation-terms',
+    'dragTerms',
     lessons['like-terms-variables-both-sides'],
   )
   const solveOrder = lessonStep(
@@ -827,19 +1171,38 @@ test('like-terms lesson combines terms before variables-on-both-sides solving', 
   )
   const finalInput = lessonStep('input-variable-both-sides', 'input', lessons['like-terms-variables-both-sides'])
 
+  const sortTermsHint = (when: string) => sortTerms.feedback.hints?.find((hint) => hint.when === when)?.text
+  const sortEquationHint = (when: string) => sortEquationTerms.feedback.hints?.find((hint) => hint.when === when)?.text
+
+  // Sorting 4x + 3 - x + 2y: 4x and -x are x-terms, 2y is the y-term, 3 is the constant.
   assert.equal(
-    checkOperationChoiceStep(pairChoice, 'x-and-y', 1).feedback,
-    'Those both have variables, but x and y are different variable parts, so they cannot combine.',
+    checkDragTermsStep(
+      sortTerms,
+      { 'tile-4x': 'x-terms', 'tile-neg-x': 'x-terms', 'tile-2y': 'y-terms', 'tile-3': 'constants' },
+      1,
+    ).correct,
+    true,
+  )
+  // Dropping the y-term onto the x team is the classic "different variable part" slip.
+  assert.equal(
+    checkDragTermsStep(sortTerms, { 'tile-4x': 'x-terms', 'tile-2y': 'x-terms' }, 1).feedback,
+    sortTermsHint('misplaced'),
+  )
+  assert.equal(checkDragTermsStep(sortTerms, {}, 1).feedback, sortTermsHint('empty'))
+
+  // The cross-the-equals-sign sort: 3x on the right is still an x-term, not a constant.
+  assert.equal(
+    checkDragTermsStep(
+      sortEquationTerms,
+      { 'tile-6x': 'x-terms', 'tile-2x': 'x-terms', 'tile-3x': 'x-terms', 'tile-neg-4': 'constants', 'tile-16': 'constants' },
+      1,
+    ).correct,
+    true,
   )
   assert.equal(
-    checkOperationChoiceStep(pairChoice, 'number-and-x', 3).reveal,
-    'Choose "4x and -x" because both are x-terms.',
+    checkDragTermsStep(sortEquationTerms, { 'tile-3x': 'constants' }, 1).feedback,
+    sortEquationHint('misplaced'),
   )
-  assert.equal(
-    checkOperationChoiceStep(classifyTerms, 'left-x-terms-only', 1).feedback,
-    'Those are x-terms, but 3x on the right is also a variable term. The equals sign separates sides, not term types.',
-  )
-  assert.equal(checkOperationChoiceStep(classifyTerms, 'all-x-terms', 1).correct, true)
 
   const wrongVariableMove = checkSequenceStep(
     solveOrder,
@@ -866,12 +1229,116 @@ test('like-terms lesson combines terms before variables-on-both-sides solving', 
   assert.equal(checkInputStep(finalInput, 'x = 5', 1).correct, true)
 })
 
+test('plot checker escalates exact-point feedback from hint to explanation to reveal', () => {
+  const step = syntheticPointPlotStep
+
+  assert.equal(checkPlotStep(step, [{ x: 1, y: -2 }], 1).correct, true)
+  assert.equal(checkPlotStep(step, [], 1).feedback, 'Tap the grid to drop a point.')
+  assert.equal(checkPlotStep(step, [{ x: -2, y: 1 }], 1).feedback, 'That looks reversed. x comes first.')
+  assert.equal(checkPlotStep(step, [{ x: 1, y: -2 }, { x: 0, y: 0 }], 1).feedback, 'Only one point is needed.')
+
+  const secondMiss = checkPlotStep(step, [{ x: 3, y: 3 }], 2)
+  assert.equal(secondMiss.feedback, step.feedback.incorrect)
+  assert.equal(secondMiss.reveal, undefined)
+
+  const thirdMiss = checkPlotStep(step, [{ x: 3, y: 3 }], 3)
+  assert.equal(thirdMiss.feedback, step.feedback.incorrect)
+  assert.equal(thirdMiss.reveal, step.feedback.reveal)
+})
+
+test('plot checker validates one off-axis point per quadrant by sign pattern', () => {
+  const step = syntheticQuadrantPlotStep
+
+  const solved = checkPlotStep(
+    step,
+    [{ x: 2, y: 2 }, { x: -2, y: 2 }, { x: -2, y: -2 }, { x: 2, y: -2 }],
+    1,
+  )
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, step.feedback.correct)
+
+  assert.equal(checkPlotStep(step, [{ x: 1, y: 0 }], 1).feedback, 'Keep both coordinates off the axes.')
+  assert.equal(checkPlotStep(step, [{ x: 2, y: 2 }, { x: -2, y: 2 }], 1).feedback, 'Keep going until all four are covered.')
+  assert.equal(checkPlotStep(step, [{ x: 1, y: 1 }, { x: 2, y: 2 }], 1).feedback, 'Two points share a quadrant.')
+  assert.equal(
+    checkPlotStep(
+      step,
+      [{ x: 2, y: 2 }, { x: -2, y: 2 }, { x: -2, y: -2 }, { x: 2, y: -2 }, { x: 3, y: 3 }],
+      1,
+    ).feedback,
+    'Only four points are needed.',
+  )
+
+  const thirdMiss = checkPlotStep(step, [{ x: 1, y: 1 }], 3)
+  assert.equal(thirdMiss.correct, false)
+  assert.equal(thirdMiss.reveal, step.feedback.reveal)
+})
+
+test('slider checker matches slope and intercept and routes targeted hints', () => {
+  const step = syntheticSliderStep
+
+  assert.equal(checkSliderStep(step, { slope: 2, intercept: 1 }, 1).correct, true)
+  // Wrong sign on the slope is caught before the generic misses (line tilts the wrong way).
+  assert.equal(checkSliderStep(step, { slope: -2, intercept: 1 }, 1).feedback, 'This line rises, so make m positive.')
+  // Intercept already matches, so only the slope hint surfaces, and vice versa.
+  assert.equal(checkSliderStep(step, { slope: 5, intercept: 1 }, 1).feedback, 'Intercept is right. Adjust the slope.')
+  assert.equal(checkSliderStep(step, { slope: 2, intercept: 5 }, 1).feedback, 'Slope is right. Adjust the intercept.')
+  // Both far off vs. both within one step route to the distinct both-off / close hints.
+  assert.equal(checkSliderStep(step, { slope: 5, intercept: -4 }, 1).feedback, 'Set the intercept first, then the slope.')
+  assert.equal(checkSliderStep(step, { slope: 3, intercept: 0 }, 1).feedback, 'Almost. Nudge m and b a little more.')
+})
+
+test('slider checker escalates to explanation then reveal on repeated misses', () => {
+  const step = syntheticSliderStep
+
+  const secondMiss = checkSliderStep(step, { slope: 5, intercept: -4 }, 2)
+  assert.equal(secondMiss.feedback, step.feedback.incorrect)
+  assert.equal(secondMiss.reveal, undefined)
+
+  const thirdMiss = checkSliderStep(step, { slope: 5, intercept: -4 }, 3)
+  assert.equal(thirdMiss.correct, false)
+  assert.equal(thirdMiss.feedback, step.feedback.incorrect)
+  assert.equal(thirdMiss.reveal, step.feedback.reveal)
+})
+
+test('drag-terms checker passes only when every tile is in its correct bin and routes hints', () => {
+  const step = syntheticDragTermsStep
+
+  const solved = checkDragTermsStep(step, { 't-5x': 'x-terms', 't-neg-2x': 'x-terms', 't-7': 'constants' }, 1)
+  assert.equal(solved.correct, true)
+  assert.equal(solved.feedback, step.feedback.correct)
+
+  // Nothing sorted, all-correct-but-incomplete, and a wrong bin route to their authored hints.
+  assert.equal(checkDragTermsStep(step, {}, 1).feedback, 'Drag a tile into a bin to start.')
+  assert.equal(checkDragTermsStep(step, { 't-5x': 'x-terms' }, 1).feedback, 'Keep going until every tile is sorted.')
+  assert.equal(
+    checkDragTermsStep(step, { 't-5x': 'constants', 't-neg-2x': 'x-terms', 't-7': 'constants' }, 1).feedback,
+    'A tile is on the wrong team.',
+  )
+  // A misplaced tile is surfaced before the incomplete nudge even while tiles remain unsorted.
+  assert.equal(checkDragTermsStep(step, { 't-7': 'x-terms' }, 1).feedback, 'A tile is on the wrong team.')
+})
+
+test('drag-terms checker escalates to explanation then reveal on repeated misses', () => {
+  const step = syntheticDragTermsStep
+  const wrong = { 't-5x': 'constants', 't-neg-2x': 'x-terms', 't-7': 'constants' }
+
+  const secondMiss = checkDragTermsStep(step, wrong, 2)
+  assert.equal(secondMiss.feedback, step.feedback.incorrect)
+  assert.equal(secondMiss.reveal, undefined)
+
+  const thirdMiss = checkDragTermsStep(step, wrong, 3)
+  assert.equal(thirdMiss.correct, false)
+  assert.equal(thirdMiss.feedback, step.feedback.incorrect)
+  assert.equal(thirdMiss.reveal, step.feedback.reveal)
+})
+
 test('coordinate-plane lesson checks ordered-pair direction and quadrant misconceptions', () => {
   const coordinateLesson = lessons['coordinate-plane']
   const plotOrder = lessonStep('order-plot-point', 'sequence', lessons['coordinate-plane'])
-  const pointChoice = lessonStep('choose-coordinate-point', 'operation-choice', lessons['coordinate-plane'])
+  const pointPlot = lessonStep('choose-coordinate-point', 'plot', lessons['coordinate-plane'])
   const robotInput = lessonStep('input-robot-coordinate', 'input', lessons['coordinate-plane'])
-  const quadrantChoice = lessonStep('choose-quadrant', 'operation-choice', lessons['coordinate-plane'])
+  const quadrantPlot = lessonStep('choose-quadrant', 'plot', lessons['coordinate-plane'])
   const quadrantConcept = lessonStep('concept-quadrants', 'concept', lessons['coordinate-plane'])
 
   assert.ok(
@@ -890,33 +1357,40 @@ test('coordinate-plane lesson checks ordered-pair direction and quadrant misconc
     'Left is for negative x-values. Here x is positive 3.',
   )
 
-  const solvedPlot = checkSequenceStep(plotOrder, ['move-right-three', 'move-down-two', 'arrive-three-negative-two'], 1)
-  assert.equal(solvedPlot.correct, true)
+  const solvedSequence = checkSequenceStep(plotOrder, ['move-right-three', 'move-down-two', 'arrive-three-negative-two'], 1)
+  assert.equal(solvedSequence.correct, true)
 
+  // The point recognition MCQ is now an interactive plot: placing (-4, 2) is correct, while a
+  // reversed pair earns the authored "swapped" hint.
+  assert.equal(checkPlotStep(pointPlot, [{ x: -4, y: 2 }], 1).correct, true)
   assert.equal(
-    checkOperationChoiceStep(pointChoice, 'two-negative-four', 1).feedback,
-    'This reverses the order. x is the first coordinate, so -4 must come first.',
+    checkPlotStep(pointPlot, [{ x: 2, y: -4 }], 1).feedback,
+    pointPlot.feedback.hints?.find((hint) => hint.when === 'swapped')?.text,
   )
+
   assert.equal(checkInputStep(robotInput, '-5,1', 1).correct, true)
   assert.equal(
     checkInputStep(robotInput, '(5,1)', 1).feedback,
     'Right 5 would be positive. Moving left makes the x-coordinate negative.',
   )
-  assert.equal(
-    checkOperationChoiceStep(quadrantChoice, 'quadrant-one', 3).reveal,
-    'Choose "Quadrant IV" because x > 0 and y < 0 gives the sign pattern (+,-), the lower-right quadrant.',
-  )
+
+  // The quadrant recognition MCQ is now a plot in Quadrant IV that escalates to its reveal.
+  assert.equal(checkPlotStep(quadrantPlot, [{ x: 3, y: -2 }], 1).correct, true)
+  assert.equal(checkPlotStep(quadrantPlot, [{ x: 1, y: 1 }], 3).reveal, quadrantPlot.feedback.reveal)
 })
 
-test('graphing-lines lesson connects slope-intercept equations, points, and tables', () => {
-  const equationChoice = lessonStep('choose-slope-intercept-equation', 'operation-choice', lessons['graphing-lines'])
+test('graphing-lines lesson connects slope-intercept sliders, points, and tables', () => {
+  const matchLine = lessonStep('match-slope-intercept-line', 'slider', lessons['graphing-lines'])
   const plotOrder = lessonStep('order-plot-line', 'sequence', lessons['graphing-lines'])
   const yValue = lessonStep('input-line-y-value', 'input', lessons['graphing-lines'])
   const tableChoice = lessonStep('choose-line-table', 'operation-choice', lessons['graphing-lines'])
 
+  // Dragging m and b to the described line (slope 3, intercept 2) solves it; a matching
+  // intercept with the wrong slope surfaces the slope-only hint.
+  assert.equal(checkSliderStep(matchLine, { slope: 3, intercept: 2 }, 1).correct, true)
   assert.equal(
-    checkOperationChoiceStep(equationChoice, 'y-equals-two-x-plus-three', 1).feedback,
-    'This swaps the two clues. The intercept is 2, so the constant should be +2.',
+    checkSliderStep(matchLine, { slope: 3, intercept: -2 }, 1).feedback,
+    matchLine.feedback.hints?.find((hint) => hint.when === 'intercept-off')?.text,
   )
 
   const flippedSlope = checkSequenceStep(plotOrder, ['start-at-intercept', 'move-right-two-up-one', 'mark-one-one'], 1)
@@ -989,6 +1463,18 @@ test('lesson catalog keeps Phase 1 interactive feedback and path ids coherent', 
         assert.ok(step.feedback.reveal.length > 0)
         assert.ok(step.feedback.hints.length > 0)
         assert.ok(step.feedback.hints.some((hint) => hint.when === 'default'))
+      }
+
+      if (step.type === 'dragTerms') {
+        assert.ok(step.tiles.length > 0)
+        assert.ok(step.bins.length > 0)
+        // Every tile must point at a real bin, and ids stay unique so placements are unambiguous.
+        assert.ok(step.tiles.every((tile) => step.bins.some((bin) => bin.id === tile.bin)))
+        assert.equal(new Set(step.tiles.map((tile) => tile.id)).size, step.tiles.length)
+        assert.equal(new Set(step.bins.map((bin) => bin.id)).size, step.bins.length)
+        assert.ok(step.feedback.correct.length > 0)
+        assert.ok(step.feedback.incorrect.length > 0)
+        assert.ok(step.feedback.reveal.length > 0)
       }
     })
   })

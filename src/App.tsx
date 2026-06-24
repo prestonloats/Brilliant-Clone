@@ -4,10 +4,15 @@ import { createAttemptEvent, createBackend, type Backend } from './backend'
 import {
   applyBalanceOperation,
   applyStepResult,
+  buildLessonGraph,
   checkBalanceStep,
+  checkDragTermsStep,
   checkInputStep,
+  checkManipulativeStep,
   checkOperationChoiceStep,
+  checkPlotStep,
   checkSequenceStep,
+  checkSliderStep,
   createInitialProgress,
   getBestLessonScore,
   getCourseProgressSummary,
@@ -21,12 +26,15 @@ import {
   restartLessonProgress,
   sideTotal,
   type BalanceCheckMeta,
+  type LessonGraphConnector,
+  type LessonGraphNode,
   type ProgressByLesson,
 } from './engine'
 import {
   algebraCourse,
   lessons,
   skills,
+  type AttemptEvent,
   type BalanceItem,
   type BalanceOperation,
   type BalanceSide,
@@ -36,23 +44,29 @@ import {
   type LessonScore,
   type BalanceStep,
   type ConceptStep,
+  type DragTermsStep,
   type LessonProgress,
   type LessonStep,
+  type ManipulativeStep,
   type McqStep,
   type OperationChoiceStep,
+  type PlotPoint,
+  type PlotStep,
   type SequenceStep,
+  type SliderStep,
   type SkillMastery,
   type UserProfile,
 } from './domain'
 import { getBackendProvider, getMissingFirebaseEnvKeys } from './firebaseConfig'
+import { isEmailVerificationRequired } from './firebaseBackendCore'
+import { validateAuthForm, type AuthMode } from './authValidation'
 
 type BackendStartup =
+  | { status: 'loading' }
   | { status: 'ready'; backend: Backend }
   | { status: 'error'; title: string; message: string; details: string[] }
 
-const backendStartup = initializeBackend()
-
-function initializeBackend(): BackendStartup {
+async function initializeBackend(): Promise<BackendStartup> {
   try {
     const provider = getBackendProvider()
 
@@ -66,6 +80,29 @@ function initializeBackend(): BackendStartup {
             'VITE_BACKEND_PROVIDER=firebase is set, but required Firebase web config values are missing. The app did not fall back to local demo mode.',
           details: missingKeys,
         }
+      }
+
+      // Firebase SDK code is loaded only when Firebase mode is selected, so the default
+      // local browser-only path never imports or initializes Firebase at startup.
+      const [{ getFirebaseServices }, { FirebaseBackend }] = await Promise.all([
+        import('./firebaseServices'),
+        import('./firebaseBackend'),
+      ])
+
+      const services = getFirebaseServices()
+      if (!services) {
+        return {
+          status: 'error',
+          title: 'Firebase adapter could not start.',
+          message:
+            'VITE_BACKEND_PROVIDER=firebase is set, but Firebase services could not be initialized. The app did not fall back to local demo mode.',
+          details: [],
+        }
+      }
+
+      return {
+        status: 'ready',
+        backend: createBackend(provider, { firebaseBackend: new FirebaseBackend(services) }),
       }
     }
 
@@ -81,34 +118,119 @@ function initializeBackend(): BackendStartup {
 }
 
 function App() {
-  if (backendStartup.status === 'error') {
-    return <BackendConfigurationError startup={backendStartup} />
+  const [startup, setStartup] = useState<BackendStartup>({ status: 'loading' })
+
+  useEffect(() => {
+    let cancelled = false
+
+    initializeBackend().then((result) => {
+      if (!cancelled) {
+        setStartup(result)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (startup.status === 'loading') {
+    return <LoadingScreen message="Starting backend..." />
   }
 
-  return <LearningApp backend={backendStartup.backend} />
+  if (startup.status === 'error') {
+    return <BackendConfigurationError startup={startup} />
+  }
+
+  return <LearningApp backend={startup.backend} />
 }
 
 function LearningApp({ backend }: { backend: Backend }) {
-  const initialSession = getInitialSession(backend)
-  const [user, setUser] = useState<UserProfile | null>(initialSession.user)
-  const [view, setView] = useState<'auth' | 'course' | 'lesson' | 'complete' | 'profile'>(
-    initialSession.user ? 'course' : 'auth',
-  )
-  const [activeLessonId, setActiveLessonId] = useState<LessonId>(initialSession.activeLessonId)
-  const [progress, setProgress] = useState<LessonProgress | null>(initialSession.progress)
-
-  const mastery = user ? backend.mastery.getUserMastery(user.id) : []
-  const progressByLesson = user ? getProgressByLesson(backend, user.id) : {}
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [view, setView] = useState<'auth' | 'verify-email' | 'course' | 'lesson' | 'complete' | 'profile'>('auth')
+  const [activeLessonId, setActiveLessonId] = useState<LessonId>('balancing-equations')
+  const [progress, setProgress] = useState<LessonProgress | null>(null)
+  const [mastery, setMastery] = useState<SkillMastery[]>([])
+  const [progressByLesson, setProgressByLesson] = useState<ProgressByLesson>({})
+  const [attempts, setAttempts] = useState<AttemptEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [runtimeError, setRuntimeError] = useState('')
   const activeLesson = lessons[activeLessonId]
   const currentStep = progress ? activeLesson.steps[progress.currentStepIndex] : null
-  const recommendation = getRecommendedNextLesson(activeLesson, mastery)
+  const recommendation = getRecommendedNextLesson(activeLesson, mastery, algebraCourse, lessons, progressByLesson)
 
-  const saveProgress = (nextProgress: LessonProgress) => {
-    backend.progress.saveLessonProgress(nextProgress)
+  useEffect(() => {
+    let cancelled = false
+
+    const loadInitialSession = async () => {
+      setRuntimeError('')
+      try {
+        const currentUser = await backend.auth.getCurrentUser()
+        if (cancelled) return
+
+        if (!currentUser) {
+          setUser(null)
+          setView('auth')
+          return
+        }
+
+        if (isEmailVerificationRequired(backend.provider, currentUser.emailVerified)) {
+          setUser(currentUser)
+          setView('verify-email')
+          return
+        }
+
+        const session = await getInitialLessonSession(backend, currentUser)
+        if (cancelled) return
+
+        setUser(currentUser)
+        setActiveLessonId(session.activeLessonId)
+        setProgress(session.progress)
+        setProgressByLesson(session.progressByLesson)
+        setMastery(session.mastery)
+        setAttempts(session.attempts)
+        setView('course')
+      } catch (error) {
+        if (!cancelled) {
+          setRuntimeError(error instanceof Error ? error.message : 'The current session could not be loaded.')
+          setView('auth')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadInitialSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [backend])
+
+  const refreshLearnerData = async (signedInUser: UserProfile, progressOverride?: LessonProgress) => {
+    const [nextMastery, nextProgressByLesson, nextAttempts] = await Promise.all([
+      backend.mastery.getUserMastery(signedInUser.id),
+      getProgressByLesson(backend, signedInUser.id),
+      backend.attempts.getAttempts(signedInUser.id),
+    ])
+
+    setMastery(nextMastery)
+    setAttempts(nextAttempts)
+    setProgressByLesson(
+      progressOverride
+        ? { ...nextProgressByLesson, [progressOverride.lessonId]: progressOverride }
+        : nextProgressByLesson,
+    )
+  }
+
+  const saveProgress = async (nextProgress: LessonProgress) => {
+    await backend.progress.saveLessonProgress(nextProgress)
     setProgress(nextProgress)
   }
 
-  const completeStep = (
+  const completeStep = async (
     step: LessonStep,
     correct: boolean,
     feedback: string,
@@ -116,6 +238,7 @@ function LearningApp({ backend }: { backend: Backend }) {
     options: CompleteOptions = {},
   ) => {
     if (!user || !progress) return
+    setRuntimeError('')
 
     const shouldAdvance = options.advance ?? correct
     const shouldRecordAttempt = options.recordAttempt ?? true
@@ -130,85 +253,174 @@ function LearningApp({ backend }: { backend: Backend }) {
       shouldRecordAttempt,
     )
 
-    if (shouldRecordAttempt) {
-      backend.attempts.recordAttempt(
-        createAttemptEvent(
-          user.id,
-          activeLesson.id,
-          step.id,
-          correct,
-          previousAttempts + 1,
-          msToAnswer,
-        ),
-      )
-    }
+    try {
+      if (shouldRecordAttempt) {
+        await backend.attempts.recordAttempt(
+          createAttemptEvent(
+            user.id,
+            activeLesson.id,
+            step.id,
+            correct,
+            previousAttempts + 1,
+            msToAnswer,
+          ),
+        )
+        await Promise.all(
+          activeLesson.skillIds.map((skillId) =>
+            backend.mastery.updateSkillMastery(user.id, skillId, correct),
+          ),
+        )
+      }
 
-    if (shouldRecordAttempt) {
-      activeLesson.skillIds.forEach((skillId) =>
-        backend.mastery.updateSkillMastery(user.id, skillId, correct),
-      )
-    }
+      await saveProgress(nextProgress)
+      await refreshLearnerData(user, nextProgress)
 
-    saveProgress(nextProgress)
-
-    if (nextProgress.status === 'completed') {
-      setView('complete')
+      if (nextProgress.status === 'completed') {
+        setView('complete')
+      }
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Progress could not be saved.')
     }
   }
 
-  const handleSignedIn = (signedInUser: UserProfile) => {
-    const saved = getInitialLessonSession(backend, signedInUser)
+  const loadSignedInSession = async (signedInUser: UserProfile) => {
+    const saved = await getInitialLessonSession(backend, signedInUser)
     setUser(signedInUser)
     setActiveLessonId(saved.activeLessonId)
     setProgress(saved.progress)
+    setProgressByLesson(saved.progressByLesson)
+    setMastery(saved.mastery)
+    setAttempts(saved.attempts)
     setView('course')
   }
 
-  const handleSignOut = () => {
-    backend.auth.signOut()
-    setUser(null)
-    setView('auth')
+  const handleSignedIn = async (signedInUser: UserProfile) => {
+    setRuntimeError('')
+
+    if (isEmailVerificationRequired(backend.provider, signedInUser.emailVerified)) {
+      setUser(signedInUser)
+      setProgress(null)
+      setProgressByLesson({})
+      setMastery([])
+      setAttempts([])
+      setView('verify-email')
+      return
+    }
+
+    try {
+      await loadSignedInSession(signedInUser)
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'The signed-in profile could not be loaded.')
+    }
   }
 
-  const launchLesson = (lessonId: LessonId) => {
-    if (!user) return
-
-    const lesson = lessons[lessonId]
-    const latestProgressByLesson = getProgressByLesson(backend, user.id)
-    if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
-
-    const nextProgress = getProgressForUser(backend, user, lessonId)
-    setActiveLessonId(lessonId)
-    setProgress(nextProgress)
-    setView(nextProgress.status === 'completed' ? 'complete' : 'lesson')
+  const handleResendVerification = async () => {
+    await backend.auth.resendEmailVerification()
   }
 
-  const retakeLesson = (lessonId: LessonId) => {
+  const handleVerificationContinue = async () => {
+    const refreshed = await backend.auth.reloadCurrentUser()
+    if (!refreshed) {
+      setUser(null)
+      setView('auth')
+      throw new Error('Your session ended. Sign in again to continue.')
+    }
+
+    setUser(refreshed)
+
+    if (isEmailVerificationRequired(backend.provider, refreshed.emailVerified)) {
+      throw new Error('Your email still looks unverified. Open the link we emailed you, then try again.')
+    }
+
+    await loadSignedInSession(refreshed)
+  }
+
+  const handleSignOut = async () => {
+    setRuntimeError('')
+    try {
+      await backend.auth.signOut()
+      setUser(null)
+      setProgress(null)
+      setProgressByLesson({})
+      setMastery([])
+      setAttempts([])
+      setView('auth')
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Sign out failed.')
+    }
+  }
+
+  const launchLesson = async (lessonId: LessonId) => {
     if (!user) return
+    setRuntimeError('')
 
-    const lesson = lessons[lessonId]
-    const latestProgressByLesson = getProgressByLesson(backend, user.id)
-    if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
+    try {
+      const lesson = lessons[lessonId]
+      const latestProgressByLesson = await getProgressByLesson(backend, user.id)
+      if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
 
-    const nextProgress = restartLessonProgress(getProgressForUser(backend, user, lessonId), lesson)
-    backend.progress.saveLessonProgress(nextProgress)
-    setActiveLessonId(lessonId)
-    setProgress(nextProgress)
-    setView('lesson')
+      const nextProgress = await getProgressForUser(backend, user, lessonId)
+      setActiveLessonId(lessonId)
+      setProgress(nextProgress)
+      setProgressByLesson({ ...latestProgressByLesson, [lessonId]: nextProgress })
+      setView(nextProgress.status === 'completed' ? 'complete' : 'lesson')
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Lesson progress could not be opened.')
+    }
+  }
+
+  const retakeLesson = async (lessonId: LessonId) => {
+    if (!user) return
+    setRuntimeError('')
+
+    try {
+      const lesson = lessons[lessonId]
+      const latestProgressByLesson = await getProgressByLesson(backend, user.id)
+      if (!isLessonUnlocked(lesson, latestProgressByLesson)) return
+
+      const currentProgress = await getProgressForUser(backend, user, lessonId)
+      const nextProgress = restartLessonProgress(currentProgress, lesson)
+      await backend.progress.saveLessonProgress(nextProgress)
+      setActiveLessonId(lessonId)
+      setProgress(nextProgress)
+      setProgressByLesson({ ...latestProgressByLesson, [lessonId]: nextProgress })
+      setView('lesson')
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Lesson could not be restarted.')
+    }
+  }
+
+  if (loading) {
+    return <LoadingScreen message="Loading your learning path..." />
   }
 
   return (
     <main className="app-shell">
-      {user && (
+      {runtimeError && (
+        <p className="feedback bad" role="alert" aria-live="assertive">
+          {runtimeError}
+        </p>
+      )}
+      {user && view !== 'verify-email' && (
         <header className="topbar">
           <button className="brand-button" type="button" onClick={() => setView('course')}>
             Balance
           </button>
           <nav aria-label="Primary">
-            <button type="button" onClick={() => setView('course')}>
+            <button
+              type="button"
+              className={view === 'course' ? 'nav-active' : ''}
+              aria-current={view === 'course' ? 'page' : undefined}
+              onClick={() => setView('course')}
+            >
               Path
             </button>
-            <button type="button" onClick={() => setView('profile')}>
+            <button
+              type="button"
+              className={view === 'profile' ? 'nav-active' : ''}
+              aria-current={view === 'profile' ? 'page' : undefined}
+              onClick={() => setView('profile')}
+            >
               Profile
             </button>
             <button type="button" onClick={handleSignOut}>
@@ -219,7 +431,15 @@ function LearningApp({ backend }: { backend: Backend }) {
       )}
 
       {view === 'auth' && <AuthScreen backend={backend} onSignedIn={handleSignedIn} />}
-      {view === 'course' && user && progress && (
+      {view === 'verify-email' && user && (
+        <VerifyEmailScreen
+          email={user.email}
+          onResend={handleResendVerification}
+          onContinue={handleVerificationContinue}
+          onSignOut={handleSignOut}
+        />
+      )}
+      {view === 'course' && user && (
         <CourseMap
           user={user}
           activeLesson={activeLesson}
@@ -249,8 +469,20 @@ function LearningApp({ backend }: { backend: Backend }) {
         />
       )}
       {view === 'profile' && user && (
-        <ProfileScreen user={user} mastery={mastery} attempts={backend.attempts.getAttempts(user.id)} />
+        <ProfileScreen user={user} mastery={mastery} attempts={attempts} backendProvider={backend.provider} />
       )}
+    </main>
+  )
+}
+
+function LoadingScreen({ message }: { message: string }) {
+  return (
+    <main className="app-shell">
+      <section className="auth-screen card">
+        <p className="eyebrow">Balance</p>
+        <h1>{message}</h1>
+        <p className="lead">Preparing the selected backend for the lesson path.</p>
+      </section>
     </main>
   )
 }
@@ -270,45 +502,130 @@ function BackendConfigurationError({ startup }: { startup: Extract<BackendStartu
           </ul>
         )}
         <p className="fine-print">
-          Use `VITE_BACKEND_PROVIDER=local` for the browser-only demo, or finish the Firebase adapter before enabling
-          Firebase mode.
+          Use `VITE_BACKEND_PROVIDER=local` for the browser-only demo, or finish `.env.local` and Firebase project setup
+          before enabling Firebase mode.
         </p>
       </section>
     </main>
   )
 }
 
-function getInitialSession(backend: Backend) {
-  const currentUser = backend.auth.getCurrentUser()
-  const lessonSession = currentUser ? getInitialLessonSession(backend, currentUser) : null
-  return {
-    user: currentUser,
-    activeLessonId: lessonSession?.activeLessonId ?? 'balancing-equations',
-    progress: lessonSession?.progress ?? null,
-  }
+type VerifyEmailScreenProps = {
+  email: string
+  onResend: () => Promise<void>
+  onContinue: () => Promise<void>
+  onSignOut: () => void | Promise<void>
 }
 
-function getInitialLessonSession(backend: Backend, user: UserProfile) {
-  const progressByLesson = getProgressByLesson(backend, user.id)
+function VerifyEmailScreen({ email, onResend, onContinue, onSignOut }: VerifyEmailScreenProps) {
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+
+  const resend = async () => {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await onResend()
+      setNotice(`We re-sent a verification link to ${email}. Check your inbox and spam folder.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The verification email could not be sent.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const continueAfterVerification = async () => {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await onContinue()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'We could not confirm your verification yet.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="auth-screen card">
+      <p className="eyebrow">Verify your email</p>
+      <h1>Confirm {email} to start saving progress.</h1>
+      <p className="lead">
+        Firebase mode requires a verified email before your learning progress, mastery, and attempts can be saved. We
+        sent a verification link to your inbox. Open it, then continue here.
+      </p>
+
+      {notice && (
+        <p className="feedback good" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="feedback bad" role="status">
+          {error}
+        </p>
+      )}
+
+      <button className="primary-action" type="button" disabled={busy} onClick={continueAfterVerification}>
+        I verified my email
+      </button>
+      <button className="secondary-action" type="button" disabled={busy} onClick={resend}>
+        Resend verification email
+      </button>
+      <button className="secondary-action" type="button" disabled={busy} onClick={() => void onSignOut()}>
+        Use a different account
+      </button>
+
+      <p className="fine-print">
+        Local demo mode never requires email verification. This step only applies to Firebase accounts so that course
+        writes are tied to a confirmed email address.
+      </p>
+    </section>
+  )
+}
+
+async function getInitialLessonSession(backend: Backend, user: UserProfile) {
+  const [progressByLesson, mastery, attempts] = await Promise.all([
+    getProgressByLesson(backend, user.id),
+    backend.mastery.getUserMastery(user.id),
+    backend.attempts.getAttempts(user.id),
+  ])
   const activeLessonId = getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, 'balancing-equations')
+  // Only surface progress that was actually saved. A brand-new learner sees "Start" with
+  // no 0% bar until they begin a lesson, so we never create or persist an inProgress
+  // record here; that happens in launchLesson when they actually start.
+  const progress = progressByLesson[activeLessonId] ?? null
+
   return {
     activeLessonId,
-    progress: getProgressForUser(backend, user, activeLessonId),
+    progress,
+    progressByLesson,
+    mastery,
+    attempts,
   }
 }
 
-function getProgressForUser(backend: Backend, user: UserProfile, lessonId: LessonId) {
-  const saved = backend.progress.getLessonProgress(user.id, lessonId)
+async function getProgressForUser(backend: Backend, user: UserProfile, lessonId: LessonId) {
+  const saved = await backend.progress.getLessonProgress(user.id, lessonId)
   if (saved) return saved
 
   const progress = createInitialProgress(user.id, lessonId)
-  backend.progress.saveLessonProgress(progress)
+  await backend.progress.saveLessonProgress(progress)
   return progress
 }
 
-function getProgressByLesson(backend: Backend, userId: string): ProgressByLesson {
-  return algebraCourse.lessonOrder.reduce<ProgressByLesson>((items, lessonId) => {
-    const progress = backend.progress.getLessonProgress(userId, lessonId)
+async function getProgressByLesson(backend: Backend, userId: string): Promise<ProgressByLesson> {
+  const lessonProgress = await Promise.all(
+    algebraCourse.lessonOrder.map(async (lessonId) => ({
+      lessonId,
+      progress: await backend.progress.getLessonProgress(userId, lessonId),
+    })),
+  )
+
+  return lessonProgress.reduce<ProgressByLesson>((items, { lessonId, progress }) => {
     if (progress) {
       items[lessonId] = progress
     }
@@ -318,106 +635,187 @@ function getProgressByLesson(backend: Backend, userId: string): ProgressByLesson
 
 type AuthScreenProps = {
   backend: Backend
-  onSignedIn: (user: UserProfile) => void
+  onSignedIn: (user: UserProfile) => void | Promise<void>
 }
 
 function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
-  const [mode, setMode] = useState<'signup' | 'login'>('signup')
-  const [displayName, setDisplayName] = useState('Maya')
-  const [email, setEmail] = useState('maya@example.com')
+  // Firebase is the real credential provider (email + password). Local demo mode stays
+  // passwordless on purpose so no plaintext password is ever stored in the browser.
+  const requiresPassword = backend.provider === 'firebase'
+  const [mode, setMode] = useState<AuthMode>('login')
+  const [displayName, setDisplayName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const submit = () => {
+  const isSignup = mode === 'signup'
+  const panelId = 'auth-form-panel'
+  const activeTabId = isSignup ? 'signup-tab' : 'login-tab'
+
+  const switchMode = (nextMode: AuthMode) => {
+    if (nextMode === mode) return
+    setMode(nextMode)
     setError('')
-    try {
-      const signedIn =
-        mode === 'signup'
-          ? backend.auth.signUp({ displayName, email })
-          : backend.auth.signIn(email)
-      onSignedIn(signedIn)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
-    }
+    setPassword('')
+    setConfirmPassword('')
   }
 
-  const demo = () => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const validationError = validateAuthForm(
+      { displayName, email, password, confirmPassword },
+      { mode, requiresPassword },
+    )
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
     setError('')
+    setBusy(true)
     try {
-      onSignedIn(
-        backend.auth.signUp({
-          displayName: `Maya ${Math.floor(Math.random() * 100)}`,
-          email: `maya-${Date.now()}@example.com`,
-        }),
-      )
+      const signedIn = isSignup
+        ? await backend.auth.signUp({
+            displayName,
+            email,
+            ...(requiresPassword ? { password } : {}),
+          })
+        : await backend.auth.signIn(email, requiresPassword ? password : undefined)
+      await onSignedIn(signedIn)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
     <section className="auth-screen card">
       <p className="eyebrow">Algebra Foundations</p>
-      <h1>Learn equations by balancing them.</h1>
+      <h1>{isSignup ? 'Create your account to start learning.' : 'Welcome back. Log in to keep learning.'}</h1>
       <p className="lead">
-        A Brilliant-style algebra lesson where every answer gives immediate, specific feedback.
+        A Brilliant-style algebra path where every answer gives immediate, specific feedback.
       </p>
 
-      <div className="auth-tabs" role="tablist" aria-label="Auth mode">
+      <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
         <button
-          aria-selected={mode === 'signup'}
-          className={mode === 'signup' ? 'active' : ''}
-          id="signup-tab"
-          role="tab"
-          type="button"
-          onClick={() => setMode('signup')}
-        >
-          New demo profile
-          {mode === 'signup' && <span className="tab-state">Current</span>}
-        </button>
-        <button
+          aria-controls={panelId}
           aria-selected={mode === 'login'}
           className={mode === 'login' ? 'active' : ''}
           id="login-tab"
           role="tab"
           type="button"
-          onClick={() => setMode('login')}
+          onClick={() => switchMode('login')}
         >
-          Resume profile
+          Log in
           {mode === 'login' && <span className="tab-state">Current</span>}
+        </button>
+        <button
+          aria-controls={panelId}
+          aria-selected={mode === 'signup'}
+          className={mode === 'signup' ? 'active' : ''}
+          id="signup-tab"
+          role="tab"
+          type="button"
+          onClick={() => switchMode('signup')}
+        >
+          Create account
+          {mode === 'signup' && <span className="tab-state">Current</span>}
         </button>
       </div>
 
-      <div
-        aria-labelledby={mode === 'signup' ? 'signup-tab' : 'login-tab'}
+      <form
+        aria-labelledby={activeTabId}
         className="form-stack"
-        id={mode === 'signup' ? 'signup-panel' : 'login-panel'}
+        id={panelId}
         role="tabpanel"
+        noValidate
+        onSubmit={submit}
       >
-        {mode === 'signup' && (
+        {isSignup && (
           <label>
             Display name
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+            <input
+              autoComplete="name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+            />
           </label>
         )}
         <label>
           Email
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input
+            autoComplete="email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
         </label>
-      </div>
+        {requiresPassword && (
+          <label>
+            Password
+            <input
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+        )}
+        {requiresPassword && isSignup && (
+          <label>
+            Confirm password
+            <input
+              autoComplete="new-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </label>
+        )}
 
-      {error && <p className="feedback bad">{error}</p>}
+        {error && (
+          <p className="feedback bad" role="alert">
+            {error}
+          </p>
+        )}
 
-      <button className="primary-action" type="button" onClick={submit}>
-        {mode === 'signup' ? 'Create local demo profile' : 'Resume local demo profile'}
-      </button>
-      <button className="secondary-action" type="button" onClick={demo}>
-        Start with a local demo account
-      </button>
-      <p className="fine-print">
-        Local demo mode stores profiles and progress in this browser only and does not collect passwords. Use Firebase
-        Auth before accepting production credentials. Closing the browser can sign you out, but local progress remains
-        on this device until browser storage is cleared.
+        <button className="primary-action" type="submit" disabled={busy}>
+          {busy ? 'Working...' : isSignup ? 'Create account' : 'Log in'}
+        </button>
+      </form>
+
+      <p className="auth-switch">
+        {isSignup ? 'Already have an account?' : 'New here?'}{' '}
+        <button
+          className="link-button"
+          type="button"
+          onClick={() => switchMode(isSignup ? 'login' : 'signup')}
+        >
+          {isSignup ? 'Log in instead' : 'Create an account'}
+        </button>
       </p>
+
+      {requiresPassword ? (
+        <p className="fine-print">
+          Firebase mode uses Firebase Authentication email/password credentials and stores your
+          progress in Firestore under your account. New accounts must verify their email before
+          learning progress can be saved.
+        </p>
+      ) : (
+        <p className="fine-print">
+          Local demo mode keeps your account on this device only and never collects a password.{' '}
+          {isSignup
+            ? 'Creating an account needs just a display name and email.'
+            : 'Log in resumes an account you created in this browser using its email.'}{' '}
+          Set <code>VITE_BACKEND_PROVIDER=firebase</code> with a configured Firebase project to
+          enable password-protected accounts that sync across devices. Sign out before sharing this
+          browser.
+        </p>
+      )}
     </section>
   )
 }
@@ -425,7 +823,7 @@ function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
 type CourseMapProps = {
   user: UserProfile
   activeLesson: Lesson
-  progress: LessonProgress
+  progress: LessonProgress | null
   progressByLesson: ProgressByLesson
   mastery: SkillMastery[]
   onLaunchLesson: (lessonId: LessonId) => void
@@ -509,46 +907,192 @@ function CourseMap({
         )}
       </div>
 
-      <div className="path-list" aria-label="Course path">
-        {algebraCourse.lessons.map((lessonNode, index) => {
-          const lesson = lessons[lessonNode.id]
-          const lessonProgress = lesson.id === progress.lessonId ? progress : progressByLesson[lesson.id]
-          const unlocked = isLessonUnlocked(lesson, progressByLesson)
-          const completed = lessonProgress?.status === 'completed'
-          const comingSoon = lesson.steps.length === 0
-          const recommended = lesson.id === featuredLessonId && !completed && unlocked
-          const status = getPathStatus({ comingSoon, recommended, unlocked, lesson, lessonProgress, mastery })
-          const scoreText = getLessonScoreText(lesson, lessonProgress)
-
-          return (
-            <article className={`path-node ${status.className}`} key={lesson.id}>
-              <span className="node-number">{index + 1}</span>
-              <div>
-                <h2>{lessonNode.title}</h2>
-                <p>{lessonNode.description}</p>
-                {scoreText && <p className="score-line">{scoreText}</p>}
-              </div>
-              <div className="path-actions">
-                <span className="status-pill">{status.label}</span>
-                {unlocked && (
-                  <>
-                    <button type="button" onClick={() => onLaunchLesson(lesson.id)}>
-                      {completed ? 'View summary' : lessonProgress ? 'Continue' : 'Start'}
-                    </button>
-                    {completed && (
-                      <button type="button" onClick={() => onRetakeLesson(lesson.id)}>
-                        Retake
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </article>
-          )
-        })}
-      </div>
+      <CoursePathGraph
+        progress={progress}
+        progressByLesson={progressByLesson}
+        mastery={mastery}
+        featuredLessonId={featuredLessonId}
+        onLaunchLesson={onLaunchLesson}
+        onRetakeLesson={onRetakeLesson}
+      />
     </section>
   )
+}
+
+type CoursePathGraphProps = {
+  progress: LessonProgress | null
+  progressByLesson: ProgressByLesson
+  mastery: SkillMastery[]
+  featuredLessonId: LessonId
+  onLaunchLesson: (lessonId: LessonId) => void
+  onRetakeLesson: (lessonId: LessonId) => void
+}
+
+function CoursePathGraph({
+  progress,
+  progressByLesson,
+  mastery,
+  featuredLessonId,
+  onLaunchLesson,
+  onRetakeLesson,
+}: CoursePathGraphProps) {
+  const graph = buildLessonGraph(algebraCourse, lessons)
+
+  return (
+    <section className="path-graph-section" aria-labelledby="path-graph-heading">
+      <div className="path-graph-head">
+        <h2 id="path-graph-heading">Your learning path</h2>
+        <p className="path-graph-sub">
+          Each lesson unlocks once its prerequisites are complete. After Two-Step Equations the path
+          splits into two parallel branches that merge again at Graphing Lines.
+        </p>
+      </div>
+      <ol className="path-graph">
+        {graph.stages.map((stage) => (
+          <li
+            className={`path-stage connector-stage-${stage.connector} ${stage.nodeIds.length > 1 ? 'is-branch' : ''}`}
+            key={stage.rank}
+          >
+            {stage.connector !== 'start' && <StageConnector connector={stage.connector} />}
+            <div className="stage-nodes">
+              {stage.nodeIds.map((lessonId) => (
+                <CoursePathNode
+                  key={lessonId}
+                  node={graph.nodes[lessonId]}
+                  progress={progress}
+                  progressByLesson={progressByLesson}
+                  mastery={mastery}
+                  featuredLessonId={featuredLessonId}
+                  onLaunchLesson={onLaunchLesson}
+                  onRetakeLesson={onRetakeLesson}
+                />
+              ))}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+function StageConnector({ connector }: { connector: LessonGraphConnector }) {
+  if (connector === 'split') {
+    return (
+      <div className="stage-connector connector-split" aria-hidden="true">
+        <svg viewBox="0 0 200 46" preserveAspectRatio="none" className="connector-art">
+          <path d="M100 0 L100 14 M100 14 L50 46 M100 14 L150 46" pathLength={1} />
+        </svg>
+        <span className="connector-label">Path splits</span>
+      </div>
+    )
+  }
+
+  if (connector === 'merge') {
+    return (
+      <div className="stage-connector connector-merge" aria-hidden="true">
+        <svg viewBox="0 0 200 46" preserveAspectRatio="none" className="connector-art">
+          <path d="M50 0 L100 32 M150 0 L100 32 M100 32 L100 46" pathLength={1} />
+        </svg>
+        <span className="connector-label">Branches merge</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`stage-connector connector-${connector}`} aria-hidden="true">
+      <span className="connector-line" />
+    </div>
+  )
+}
+
+type CoursePathNodeProps = {
+  node: LessonGraphNode
+  progress: LessonProgress | null
+  progressByLesson: ProgressByLesson
+  mastery: SkillMastery[]
+  featuredLessonId: LessonId
+  onLaunchLesson: (lessonId: LessonId) => void
+  onRetakeLesson: (lessonId: LessonId) => void
+}
+
+function CoursePathNode({
+  node,
+  progress,
+  progressByLesson,
+  mastery,
+  featuredLessonId,
+  onLaunchLesson,
+  onRetakeLesson,
+}: CoursePathNodeProps) {
+  const lesson = lessons[node.id]
+  const courseNode = algebraCourse.lessons.find((item) => item.id === node.id)
+  const lessonProgress = progress && node.id === progress.lessonId ? progress : progressByLesson[node.id]
+  const unlocked = isLessonUnlocked(lesson, progressByLesson)
+  const completed = lessonProgress?.status === 'completed'
+  const comingSoon = lesson.steps.length === 0
+  const recommended = node.id === featuredLessonId && !completed && unlocked
+  const status = getPathStatus({ comingSoon, recommended, unlocked, lesson, lessonProgress, mastery })
+  const scoreText = getLessonScoreText(lesson, lessonProgress)
+  const position = algebraCourse.lessonOrder.indexOf(node.id) + 1
+
+  const prerequisiteTitles = node.prerequisites.map((lessonId) => lessons[lessonId].title)
+  const unlockTitles = node.unlocks.map((lessonId) => lessons[lessonId].title)
+  const dependencyLine =
+    prerequisiteTitles.length === 0
+      ? 'Start here, no prerequisites'
+      : `${unlocked ? 'Builds on' : 'Requires'} ${formatList(prerequisiteTitles)}`
+  const dependencyTag = prerequisiteTitles.length === 0 ? 'Start' : unlocked ? 'Open' : 'Locked'
+
+  return (
+    <article
+      className={`path-node graph-node ${status.className} ${recommended ? 'is-recommended' : ''}`}
+      aria-current={recommended ? 'step' : undefined}
+    >
+      <div className="graph-node-head">
+        <span className="node-number" aria-hidden="true">
+          {position}
+        </span>
+        <div className="graph-node-titles">
+          <h3>{courseNode?.title ?? lesson.title}</h3>
+          <span className="status-pill">{status.label}</span>
+        </div>
+      </div>
+      <p className="graph-node-desc">{courseNode?.description ?? lesson.subtitle}</p>
+      <p className="node-deps">
+        <span className="dep-tag">{dependencyTag}</span>
+        <span>{dependencyLine}</span>
+      </p>
+      {unlockTitles.length > 1 && (
+        <p className="node-deps node-deps-branch">
+          <span className="dep-tag">Branches</span>
+          <span>Unlocks {formatList(unlockTitles)} as two parallel paths</span>
+        </p>
+      )}
+      {scoreText && <p className="score-line">{scoreText}</p>}
+      <div className="graph-node-actions">
+        {unlocked ? (
+          <>
+            <button type="button" onClick={() => onLaunchLesson(node.id)}>
+              {completed ? 'View summary' : lessonProgress ? 'Continue' : 'Start'}
+            </button>
+            {completed && (
+              <button type="button" onClick={() => onRetakeLesson(node.id)}>
+                Retake
+              </button>
+            )}
+          </>
+        ) : (
+          <span className="locked-hint">Finish {formatList(prerequisiteTitles)} to unlock</span>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function formatList(items: string[]) {
+  if (items.length <= 1) return items[0] ?? ''
+  if (items.length === 2) return `${items[0]} and ${items[1]}`
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
 }
 
 function getLessonProgressPercent(lesson: Lesson, progress?: LessonProgress) {
@@ -742,6 +1286,22 @@ function StepRenderer({ step, priorResult, onComplete, onAdvance }: StepRenderer
     return <SequenceStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
   }
 
+  if (step.type === 'manipulative') {
+    return <ManipulativeStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+  }
+
+  if (step.type === 'plot') {
+    return <PlotStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+  }
+
+  if (step.type === 'slider') {
+    return <SliderStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+  }
+
+  if (step.type === 'dragTerms') {
+    return <DragTermsStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
+  }
+
   return <BalanceStepView step={step} priorResult={priorResult} onAdvance={onAdvance} onComplete={onComplete} />
 }
 
@@ -795,19 +1355,27 @@ function MultipleChoiceStep({
               onClick={() => {
                 const nextAttempt = attempts + 1
                 const correct = option.id === step.correctId
-                const feedback =
-                  correct
-                    ? step.feedback?.correct ?? option.feedback
-                    : nextAttempt >= 2 && step.feedback?.incorrect
-                      ? step.feedback.incorrect
-                      : option.feedback
+                // A newly selected wrong option always shows ITS OWN authored misconception.
+                // The generic explanation layers into the reveal slot at attempt 2, and the
+                // exact reveal takes over at attempt 3 (mirrors the engine's choice-step
+                // escalation in buildWrongResult so mcq and operation-choice behave alike).
+                const feedback = correct ? step.feedback?.correct ?? option.feedback : option.feedback
+                const explanation = step.feedback?.incorrect
+                const revealText = step.feedback?.reveal
+                const layeredReveal = correct
+                  ? ''
+                  : nextAttempt >= 3 && revealText
+                    ? revealText
+                    : nextAttempt >= 2 && explanation && explanation !== option.feedback
+                      ? explanation
+                      : ''
 
                 setSelectedId(option.id)
                 setAttempts(nextAttempt)
                 setSelectedFeedback(feedback)
-                setReveal(!correct && nextAttempt >= 3 ? step.feedback?.reveal ?? '' : '')
+                setReveal(layeredReveal)
                 setRetryGuidance(
-                  !correct && nextAttempt >= 3 && step.feedback?.reveal
+                  !correct && nextAttempt >= 3 && revealText
                     ? 'Use the reveal, then choose the prediction that matches the totals.'
                     : 'Compare the two totals, then choose another option.',
                 )
@@ -820,7 +1388,7 @@ function MultipleChoiceStep({
           )
         })}
       </div>
-      {selectedFeedback && <FeedbackPanel correct={wasCorrect} message={selectedFeedback} reveal={!wasCorrect ? reveal : undefined} />}
+      {selectedFeedback && <FeedbackPanel key={attempts} correct={wasCorrect} message={selectedFeedback} reveal={!wasCorrect ? reveal : undefined} />}
       {selectedFeedback && !wasCorrect && <RetryPrompt message={retryGuidance || 'Choose another option to try again.'} />}
       {wasCorrect && (
         <button className="primary-action continue-step" type="button" onClick={() => onAdvance(selectedFeedback)}>
@@ -887,7 +1455,13 @@ function NumericInputStep({
   const [reveal, setReveal] = useState('')
   const [retryGuidance, setRetryGuidance] = useState('')
 
+  const hasAnswer = answer.trim().length > 0
+
   const submit = () => {
+    // An empty/whitespace-only submission must not burn an attempt or ding mastery, so we
+    // bail before checking. The Check button is also disabled, this guards the Enter key.
+    if (!hasAnswer) return
+
     const nextAttempt = attempts + 1
     const result = checkInputStep(step, answer, nextAttempt)
     setAttempts(nextAttempt)
@@ -915,10 +1489,10 @@ function NumericInputStep({
           }}
         />
       </label>
-      <button className="primary-action" type="button" disabled={correct} onClick={submit}>
+      <button className="primary-action" type="button" disabled={correct || !hasAnswer} onClick={submit}>
         Check
       </button>
-      {feedback && <FeedbackPanel correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
       {feedback && !correct && <RetryPrompt message={retryGuidance || 'Edit your answer and press Check again.'} />}
       {correct && (
         <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
@@ -985,7 +1559,7 @@ function OperationChoiceStepView({
           )
         })}
       </div>
-      {feedback && <FeedbackPanel correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
       {feedback && !correct && <RetryPrompt message={retryGuidance || 'Choose another operation tile to try again.'} />}
       {correct && (
         <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
@@ -1085,12 +1659,1236 @@ function SequenceStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check order
       </button>
-      {feedback && <FeedbackPanel correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
       {feedback && !correct && (
         <RetryPrompt
           message={retryGuidance || 'Adjust the order, or clear it and rebuild the solution.'}
           actionLabel="Clear order"
           onAction={resetSelection}
+        />
+      )}
+      {correct && (
+        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
+          Continue
+        </button>
+      )}
+    </article>
+  )
+}
+
+type ManipulativeDrag = {
+  x: number
+  y: number
+  offsetX: number
+  offsetY: number
+  width: number
+  height: number
+}
+
+function describeManipulativeGoal(step: ManipulativeStep) {
+  if (step.goal.type === 'equal-groups') {
+    return `Goal: make ${step.goal.groups} equal groups of ${step.goal.perGroup}, using all ${step.total}.`
+  }
+  return `Goal: place exactly ${step.goal.count} into the group.`
+}
+
+function getManipulativeZoneAtPoint(x: number, y: number): number | null {
+  const element = document.elementFromPoint(x, y)
+  const zone = element?.closest<HTMLElement>('[data-zone-index]')
+  if (!zone) return null
+  const index = Number(zone.dataset.zoneIndex)
+  return Number.isInteger(index) ? index : null
+}
+
+function ManipulativeStepView({
+  step,
+  priorResult,
+  onAdvance,
+  onComplete,
+}: {
+  step: ManipulativeStep
+  priorResult?: StepRendererProps['priorResult']
+  onAdvance: (feedback: string) => void
+  onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
+}) {
+  const goal = step.goal
+  const zoneCount = goal.type === 'equal-groups' ? goal.groups : 1
+  const makeEmptyGroups = () => Array.from({ length: zoneCount }, () => 0)
+  const makeSolvedGroups = () =>
+    goal.type === 'equal-groups'
+      ? Array.from({ length: goal.groups }, () => goal.perGroup)
+      : [goal.count]
+
+  const [groups, setGroups] = useState<number[]>(priorResult?.correct ? makeSolvedGroups() : makeEmptyGroups())
+  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
+  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
+  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
+  const [reveal, setReveal] = useState('')
+  const [retryGuidance, setRetryGuidance] = useState('')
+  const [dragging, setDragging] = useState<ManipulativeDrag | null>(null)
+  const [hoverZone, setHoverZone] = useState<number | null>(null)
+  const [lastDropZone, setLastDropZone] = useState<number | null>(null)
+
+  const placed = groups.reduce((total, count) => total + count, 0)
+  const remaining = Math.max(0, step.total - placed)
+  const chipGlyph = step.object.emoji ?? step.object.label.slice(0, 1).toUpperCase()
+  const objectName = step.object.label
+
+  useEffect(() => {
+    if (lastDropZone === null) return
+    const timeoutId = window.setTimeout(() => setLastDropZone(null), 420)
+    return () => window.clearTimeout(timeoutId)
+  }, [lastDropZone])
+
+  const clearStatus = useCallback(() => {
+    setFeedback('')
+    setCorrect(false)
+    setReveal('')
+    setRetryGuidance('')
+  }, [])
+
+  const addToZone = useCallback(
+    (zoneIndex: number) => {
+      setGroups((current) => {
+        const placedNow = current.reduce((total, count) => total + count, 0)
+        if (placedNow >= step.total) return current
+        const next = current.slice()
+        next[zoneIndex] = (next[zoneIndex] ?? 0) + 1
+        return next
+      })
+      setLastDropZone(null)
+      window.requestAnimationFrame(() => setLastDropZone(zoneIndex))
+      clearStatus()
+    },
+    [step.total, clearStatus],
+  )
+
+  const removeFromZone = (zoneIndex: number) => {
+    setGroups((current) => {
+      if ((current[zoneIndex] ?? 0) <= 0) return current
+      const next = current.slice()
+      next[zoneIndex] = next[zoneIndex] - 1
+      return next
+    })
+    clearStatus()
+  }
+
+  const reset = () => {
+    setGroups(makeEmptyGroups())
+    setDragging(null)
+    setHoverZone(null)
+    setLastDropZone(null)
+    clearStatus()
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+
+    const handleMove = (event: PointerEvent) => {
+      setDragging((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current))
+      setHoverZone(getManipulativeZoneAtPoint(event.clientX, event.clientY))
+    }
+    const handleUp = (event: PointerEvent) => {
+      const zoneIndex = getManipulativeZoneAtPoint(event.clientX, event.clientY)
+      if (zoneIndex !== null) addToZone(zoneIndex)
+      setDragging(null)
+      setHoverZone(null)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [dragging, addToZone])
+
+  const startDrag = (event: React.PointerEvent<HTMLSpanElement>) => {
+    if (correct || remaining <= 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    event.preventDefault()
+    setDragging({
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+    })
+  }
+
+  const check = () => {
+    const nextAttempt = attempts + 1
+    const result = checkManipulativeStep(step, groups, nextAttempt)
+    setAttempts(nextAttempt)
+    setFeedback(result.feedback)
+    setCorrect(result.correct)
+    setReveal(result.reveal ?? '')
+    setRetryGuidance(result.retryGuidance ?? '')
+    onComplete(result.correct, result.feedback, { advance: false })
+  }
+
+  return (
+    <article className="lesson-card card manipulative-card">
+      <p className="eyebrow">Build it</p>
+      <h1>{step.prompt}</h1>
+      <p className="manipulative-goal" role="note">
+        {describeManipulativeGoal(step)}
+      </p>
+
+      <div className="manipulative-stage">
+        <div className="manipulative-tray" aria-label={`Tray with ${remaining} ${objectName}`}>
+          <div className="manipulative-tray-head">
+            <span className="tray-title">Tray</span>
+            <span className="tray-count">{remaining} left</span>
+          </div>
+          <div className="object-row" aria-hidden="true">
+            {remaining === 0 && <span className="tray-empty">Tray empty</span>}
+            {Array.from({ length: remaining }, (_, index) => (
+              <span className="object-chip" key={index} onPointerDown={startDrag}>
+                {chipGlyph}
+              </span>
+            ))}
+          </div>
+          <p className="tray-hint">
+            Drag {step.object.emoji ? 'an item' : `a ${objectName}`} onto a group, or use the + buttons.
+          </p>
+        </div>
+
+        <div className="manipulative-zones">
+          {groups.map((count, zoneIndex) => (
+            <div
+              className={`manipulative-zone ${hoverZone === zoneIndex ? 'drop-target' : ''} ${lastDropZone === zoneIndex ? 'zone-bounce' : ''} ${correct ? 'is-correct' : ''}`}
+              data-zone-index={zoneIndex}
+              key={zoneIndex}
+              aria-label={`Group ${zoneIndex + 1}: ${count} ${objectName}`}
+            >
+              <div className="zone-head">
+                <span className="zone-label">{zoneCount > 1 ? `Group ${zoneIndex + 1}` : 'Group'}</span>
+                <span className="zone-count" aria-hidden="true">
+                  {count}
+                </span>
+              </div>
+              <div className="object-row" aria-hidden="true">
+                {Array.from({ length: count }, (_, index) => (
+                  <span className="object-chip placed" key={index}>
+                    {chipGlyph}
+                  </span>
+                ))}
+              </div>
+              <div className="zone-controls">
+                <button
+                  type="button"
+                  aria-label={`Remove one ${objectName} from group ${zoneIndex + 1}`}
+                  disabled={correct || count <= 0}
+                  onClick={() => removeFromZone(zoneIndex)}
+                >
+                  &minus;
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Add one ${objectName} to group ${zoneIndex + 1}`}
+                  disabled={correct || remaining <= 0}
+                  onClick={() => addToZone(zoneIndex)}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {dragging && (
+        <div
+          className="drag-preview object-chip"
+          style={{
+            left: dragging.x - dragging.offsetX,
+            top: dragging.y - dragging.offsetY,
+            width: dragging.width,
+            height: dragging.height,
+          }}
+        >
+          {chipGlyph}
+        </div>
+      )}
+
+      <button className="primary-action" type="button" disabled={correct} onClick={check}>
+        Check
+      </button>
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && !correct && (
+        <RetryPrompt
+          message={retryGuidance || 'Adjust the groups, or reset and try again.'}
+          actionLabel="Reset"
+          onAction={reset}
+        />
+      )}
+      {correct && (
+        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
+          Continue
+        </button>
+      )}
+    </article>
+  )
+}
+
+const PLOT_VIEW_BOX = 360
+const PLOT_PADDING = 34
+const PLOT_AREA = PLOT_VIEW_BOX - PLOT_PADDING * 2
+const PLOT_QUADRANT_LABELS: Record<1 | 2 | 3 | 4, string> = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV' }
+
+const clampToRange = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+
+function describePlotGoal(step: PlotStep): string {
+  if (step.target.kind === 'points') {
+    const count = step.target.points.length
+    return count === 1 ? 'Goal: place 1 point.' : `Goal: place ${count} points.`
+  }
+  const quadrants = step.target.quadrants
+  if (quadrants.length === 1) {
+    return `Goal: place 1 point in Quadrant ${PLOT_QUADRANT_LABELS[quadrants[0]]}.`
+  }
+  return `Goal: place ${quadrants.length} points, one in each quadrant.`
+}
+
+// A representative off-axis point per quadrant so a previously-solved quadrant task can be
+// re-shown as solved on return (mirrors the resume behaviour of the other interactive steps).
+function plotRepresentativePoint(quadrant: 1 | 2 | 3 | 4, range: { min: number; max: number }): PlotPoint {
+  const magnitude = Math.max(1, Math.min(2, Math.min(range.max, Math.abs(range.min))))
+  return {
+    x: quadrant === 1 || quadrant === 4 ? magnitude : -magnitude,
+    y: quadrant === 1 || quadrant === 2 ? magnitude : -magnitude,
+  }
+}
+
+function PlotStepView({
+  step,
+  priorResult,
+  onAdvance,
+  onComplete,
+}: {
+  step: PlotStep
+  priorResult?: StepRendererProps['priorResult']
+  onAdvance: (feedback: string) => void
+  onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
+}) {
+  const { range, target } = step
+  const requiredCount = target.kind === 'points' ? target.points.length : target.quadrants.length
+  const makeSolvedPoints = (): PlotPoint[] =>
+    target.kind === 'points'
+      ? target.points.map((point) => ({ ...point }))
+      : target.quadrants.map((quadrant) => plotRepresentativePoint(quadrant, range))
+
+  const [points, setPoints] = useState<PlotPoint[]>(priorResult?.correct ? makeSolvedPoints() : [])
+  const [cursor, setCursor] = useState<PlotPoint>({ x: 0, y: 0 })
+  const [showCursor, setShowCursor] = useState(false)
+  const [xField, setXField] = useState('0')
+  const [yField, setYField] = useState('0')
+  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
+  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
+  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
+  const [reveal, setReveal] = useState('')
+  const [retryGuidance, setRetryGuidance] = useState('')
+  const svgRef = useRef<SVGSVGElement | null>(null)
+
+  const span = range.max - range.min || 1
+  const midpoint = (range.min + range.max) / 2
+  const ticks = Array.from({ length: span + 1 }, (_, index) => range.min + index)
+  const toSvgX = (x: number) => PLOT_PADDING + ((x - range.min) / span) * PLOT_AREA
+  const toSvgY = (y: number) => PLOT_PADDING + ((range.max - y) / span) * PLOT_AREA
+
+  const clearStatus = () => {
+    setFeedback('')
+    setCorrect(false)
+    setReveal('')
+    setRetryGuidance('')
+  }
+
+  const placePoint = (raw: PlotPoint) => {
+    if (correct) return
+    const x = clampToRange(Math.round(raw.x), range.min, range.max)
+    const y = clampToRange(Math.round(raw.y), range.min, range.max)
+    setPoints((current) => {
+      if (current.some((existing) => existing.x === x && existing.y === y)) return current
+      if (requiredCount <= 1) return [{ x, y }]
+      if (current.length >= requiredCount) return current
+      return [...current, { x, y }]
+    })
+    clearStatus()
+  }
+
+  const togglePoint = (raw: PlotPoint) => {
+    if (correct) return
+    const x = clampToRange(Math.round(raw.x), range.min, range.max)
+    const y = clampToRange(Math.round(raw.y), range.min, range.max)
+    if (points.some((existing) => existing.x === x && existing.y === y)) {
+      setPoints((current) => current.filter((existing) => !(existing.x === x && existing.y === y)))
+      clearStatus()
+      return
+    }
+    placePoint({ x, y })
+  }
+
+  const undo = () => {
+    setPoints((current) => current.slice(0, -1))
+    clearStatus()
+  }
+
+  const clearAll = () => {
+    setPoints([])
+    clearStatus()
+  }
+
+  const dataPointFromEvent = (event: React.PointerEvent<SVGSVGElement>): PlotPoint | null => {
+    const svg = svgRef.current
+    if (!svg) return null
+    const rect = svg.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return null
+    const svgX = ((event.clientX - rect.left) / rect.width) * PLOT_VIEW_BOX
+    const svgY = ((event.clientY - rect.top) / rect.height) * PLOT_VIEW_BOX
+    return {
+      x: ((svgX - PLOT_PADDING) / PLOT_AREA) * span + range.min,
+      y: range.max - ((svgY - PLOT_PADDING) / PLOT_AREA) * span,
+    }
+  }
+
+  const handlePointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (correct) return
+    const point = dataPointFromEvent(event)
+    if (!point) return
+    // Ignore taps that land well outside the plotting area (e.g. on the label gutter).
+    if (
+      point.x < range.min - 0.6 ||
+      point.x > range.max + 0.6 ||
+      point.y < range.min - 0.6 ||
+      point.y > range.max + 0.6
+    ) {
+      return
+    }
+    const rounded = {
+      x: clampToRange(Math.round(point.x), range.min, range.max),
+      y: clampToRange(Math.round(point.y), range.min, range.max),
+    }
+    setCursor(rounded)
+    setXField(String(rounded.x))
+    setYField(String(rounded.y))
+    togglePoint(rounded)
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<SVGSVGElement>) => {
+    if (correct) return
+    const moves: Record<string, PlotPoint> = {
+      ArrowUp: { x: 0, y: 1 },
+      ArrowDown: { x: 0, y: -1 },
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+    }
+    const move = moves[event.key]
+    if (move) {
+      event.preventDefault()
+      setShowCursor(true)
+      setCursor((current) => {
+        const next = {
+          x: clampToRange(current.x + move.x, range.min, range.max),
+          y: clampToRange(current.y + move.y, range.min, range.max),
+        }
+        setXField(String(next.x))
+        setYField(String(next.y))
+        return next
+      })
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setShowCursor(true)
+      togglePoint(cursor)
+    }
+  }
+
+  const placeFromFields = () => {
+    const x = Number(xField)
+    const y = Number(yField)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    const rounded = {
+      x: clampToRange(Math.round(x), range.min, range.max),
+      y: clampToRange(Math.round(y), range.min, range.max),
+    }
+    setCursor(rounded)
+    setShowCursor(true)
+    placePoint(rounded)
+  }
+
+  const check = () => {
+    const nextAttempt = attempts + 1
+    const result = checkPlotStep(step, points, nextAttempt)
+    setAttempts(nextAttempt)
+    setFeedback(result.feedback)
+    setCorrect(result.correct)
+    setReveal(result.reveal ?? '')
+    setRetryGuidance(result.retryGuidance ?? '')
+    onComplete(result.correct, result.feedback, { advance: false })
+  }
+
+  const placedSummary =
+    points.length === 0
+      ? 'No points placed yet.'
+      : `Placed ${points.length} of ${requiredCount}: ${points.map((point) => `(${point.x}, ${point.y})`).join(', ')}`
+
+  return (
+    <article className="lesson-card card plot-card">
+      <p className="eyebrow">Plot it</p>
+      <h1>{step.prompt}</h1>
+      <p className="plot-goal" role="note">
+        {describePlotGoal(step)}
+      </p>
+
+      <div className="plot-stage">
+        <svg
+          ref={svgRef}
+          className="plot-grid"
+          viewBox={`0 0 ${PLOT_VIEW_BOX} ${PLOT_VIEW_BOX}`}
+          role="application"
+          tabIndex={correct ? -1 : 0}
+          aria-label={`Coordinate grid from ${range.min} to ${range.max} on both axes. Use the arrow keys to move the cursor and Enter to place a point. ${placedSummary}`}
+          onPointerDown={handlePointer}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setShowCursor(true)}
+          onBlur={() => setShowCursor(false)}
+        >
+          {ticks.map((tick) => (
+            <g key={`grid-${tick}`}>
+              <line
+                className="plot-gridline"
+                x1={toSvgX(tick)}
+                y1={toSvgY(range.min)}
+                x2={toSvgX(tick)}
+                y2={toSvgY(range.max)}
+              />
+              <line
+                className="plot-gridline"
+                x1={toSvgX(range.min)}
+                y1={toSvgY(tick)}
+                x2={toSvgX(range.max)}
+                y2={toSvgY(tick)}
+              />
+            </g>
+          ))}
+          <line className="plot-axis" x1={toSvgX(range.min)} y1={toSvgY(0)} x2={toSvgX(range.max)} y2={toSvgY(0)} />
+          <line className="plot-axis" x1={toSvgX(0)} y1={toSvgY(range.min)} x2={toSvgX(0)} y2={toSvgY(range.max)} />
+          {ticks
+            .filter((tick) => tick !== 0)
+            .map((tick) => (
+              <text
+                key={`xlabel-${tick}`}
+                className="plot-tick-label"
+                x={toSvgX(tick)}
+                y={toSvgY(0) + 15}
+                textAnchor="middle"
+              >
+                {tick}
+              </text>
+            ))}
+          {ticks
+            .filter((tick) => tick !== 0)
+            .map((tick) => (
+              <text
+                key={`ylabel-${tick}`}
+                className="plot-tick-label"
+                x={toSvgX(0) - 9}
+                y={toSvgY(tick) + 4}
+                textAnchor="end"
+              >
+                {tick}
+              </text>
+            ))}
+          <text className="plot-axis-name" x={toSvgX(range.max) - 2} y={toSvgY(0) - 9} textAnchor="end">
+            x
+          </text>
+          <text className="plot-axis-name" x={toSvgX(0) + 11} y={toSvgY(range.max) + 6} textAnchor="start">
+            y
+          </text>
+          {showCursor && !correct && (
+            <circle className="plot-cursor" cx={toSvgX(cursor.x)} cy={toSvgY(cursor.y)} r={9} aria-hidden="true" />
+          )}
+          {points.map((point, index) => {
+            const onRight = point.x >= midpoint
+            const onTop = point.y >= midpoint
+            return (
+              <g className={`plot-point ${correct ? 'is-correct' : ''}`} key={`${point.x}-${point.y}-${index}`}>
+                <circle cx={toSvgX(point.x)} cy={toSvgY(point.y)} r={7} />
+                <text
+                  className="plot-point-label"
+                  x={toSvgX(point.x) + (onRight ? -11 : 11)}
+                  y={toSvgY(point.y) + (onTop ? 19 : -10)}
+                  textAnchor={onRight ? 'end' : 'start'}
+                >
+                  ({point.x}, {point.y})
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+
+        <div className="plot-controls">
+          <div className="plot-field-row">
+            <label className="plot-field">
+              x
+              <input
+                type="number"
+                inputMode="numeric"
+                value={xField}
+                min={range.min}
+                max={range.max}
+                disabled={correct}
+                onChange={(event) => setXField(event.target.value)}
+              />
+            </label>
+            <label className="plot-field">
+              y
+              <input
+                type="number"
+                inputMode="numeric"
+                value={yField}
+                min={range.min}
+                max={range.max}
+                disabled={correct}
+                onChange={(event) => setYField(event.target.value)}
+              />
+            </label>
+            <button type="button" className="plot-place" disabled={correct} onClick={placeFromFields}>
+              Place point
+            </button>
+          </div>
+          <p className="plot-placed" aria-live="polite">
+            {placedSummary}
+          </p>
+          {points.length > 0 && !correct && (
+            <div className="plot-actions">
+              <button type="button" onClick={undo}>
+                Undo
+              </button>
+              <button type="button" onClick={clearAll}>
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button className="primary-action" type="button" disabled={correct || points.length === 0} onClick={check}>
+        Check
+      </button>
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && !correct && (
+        <RetryPrompt message={retryGuidance || 'Adjust your point, or clear it and try again.'} actionLabel="Clear" onAction={clearAll} />
+      )}
+      {correct && (
+        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
+          Continue
+        </button>
+      )}
+    </article>
+  )
+}
+
+// Formats a slope/intercept pair as a slope-intercept equation, e.g. "y = 3x + 2",
+// "y = -x", "y = 2x", or "y = 5" (a flat line). Used for the live readout and the
+// screen-reader value text on each slider.
+function formatLineEquation(slope: number, intercept: number): string {
+  if (slope === 0) return `y = ${intercept}`
+  const slopePart = slope === 1 ? 'x' : slope === -1 ? '-x' : `${slope}x`
+  if (intercept === 0) return `y = ${slopePart}`
+  return `y = ${slopePart} ${intercept > 0 ? '+' : '-'} ${Math.abs(intercept)}`
+}
+
+// Clips the infinite line y = mx + b to the visible square grid, returning the two points
+// where it enters and leaves the box so the SVG segment never spills past the axes.
+function sliderLineEndpoints(
+  slope: number,
+  intercept: number,
+  range: { min: number; max: number },
+): [PlotPoint, PlotPoint] {
+  const { min, max } = range
+  const within = (value: number) => value >= min - 1e-9 && value <= max + 1e-9
+  const candidates: PlotPoint[] = []
+  const pushUnique = (point: PlotPoint) => {
+    const key = (value: number) => Math.round(value * 1000) / 1000
+    if (candidates.some((existing) => key(existing.x) === key(point.x) && key(existing.y) === key(point.y))) return
+    candidates.push(point)
+  }
+
+  const yAtMin = slope * min + intercept
+  if (within(yAtMin)) pushUnique({ x: min, y: yAtMin })
+  const yAtMax = slope * max + intercept
+  if (within(yAtMax)) pushUnique({ x: max, y: yAtMax })
+  if (slope !== 0) {
+    const xAtMax = (max - intercept) / slope
+    if (within(xAtMax)) pushUnique({ x: xAtMax, y: max })
+    const xAtMin = (min - intercept) / slope
+    if (within(xAtMin)) pushUnique({ x: xAtMin, y: min })
+  }
+
+  if (candidates.length >= 2) return [candidates[0], candidates[1]]
+  // Fallback (line barely grazes the box): draw across the full width.
+  return [
+    { x: min, y: slope * min + intercept },
+    { x: max, y: slope * max + intercept },
+  ]
+}
+
+// Neutral non-target starting values so a fresh task is never pre-solved: a flat line on
+// the x-axis (m = 0, b = 0) when both sit inside the controls, otherwise the low corner.
+function sliderInitialValue(step: SliderStep): { slope: number; intercept: number } {
+  const slope = clampToRange(0, step.slope.min, step.slope.max)
+  const intercept = clampToRange(0, step.intercept.min, step.intercept.max)
+  if (slope === step.target.slope && intercept === step.target.intercept) {
+    return { slope: step.slope.min, intercept: step.intercept.min }
+  }
+  return { slope, intercept }
+}
+
+function SliderStepView({
+  step,
+  priorResult,
+  onAdvance,
+  onComplete,
+}: {
+  step: SliderStep
+  priorResult?: StepRendererProps['priorResult']
+  onAdvance: (feedback: string) => void
+  onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
+}) {
+  const { range } = step
+  const initial = sliderInitialValue(step)
+  const [slope, setSlope] = useState(priorResult?.correct ? step.target.slope : initial.slope)
+  const [intercept, setIntercept] = useState(priorResult?.correct ? step.target.intercept : initial.intercept)
+  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
+  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
+  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
+  const [reveal, setReveal] = useState('')
+  const [retryGuidance, setRetryGuidance] = useState('')
+
+  const span = range.max - range.min || 1
+  const ticks = Array.from({ length: span + 1 }, (_, index) => range.min + index)
+  const toSvgX = (x: number) => PLOT_PADDING + ((x - range.min) / span) * PLOT_AREA
+  const toSvgY = (y: number) => PLOT_PADDING + ((range.max - y) / span) * PLOT_AREA
+
+  const slopeStep = step.slope.step ?? 1
+  const interceptStep = step.intercept.step ?? 1
+  const equation = formatLineEquation(slope, intercept)
+  const [lineStart, lineEnd] = sliderLineEndpoints(slope, intercept, range)
+
+  // The rise-over-run guide (run 1 right, then rise m up from the y-intercept) only renders
+  // when the whole step fits on the grid, so a steep slope hides it instead of overflowing.
+  const interceptInRange = intercept >= range.min && intercept <= range.max
+  const riseEnd = intercept + slope
+  const guideVisible =
+    slope !== 0 &&
+    interceptInRange &&
+    1 >= range.min &&
+    1 <= range.max &&
+    riseEnd >= range.min &&
+    riseEnd <= range.max
+
+  const clearStatus = () => {
+    setFeedback('')
+    setCorrect(false)
+    setReveal('')
+    setRetryGuidance('')
+  }
+
+  const updateSlope = (next: number) => {
+    if (correct) return
+    setSlope(next)
+    clearStatus()
+  }
+
+  const updateIntercept = (next: number) => {
+    if (correct) return
+    setIntercept(next)
+    clearStatus()
+  }
+
+  const check = () => {
+    const nextAttempt = attempts + 1
+    const result = checkSliderStep(step, { slope, intercept }, nextAttempt)
+    setAttempts(nextAttempt)
+    setFeedback(result.feedback)
+    setCorrect(result.correct)
+    setReveal(result.reveal ?? '')
+    setRetryGuidance(result.retryGuidance ?? '')
+    onComplete(result.correct, result.feedback, { advance: false })
+  }
+
+  const reset = () => {
+    setSlope(initial.slope)
+    setIntercept(initial.intercept)
+    clearStatus()
+  }
+
+  return (
+    <article className="lesson-card card slider-card">
+      <p className="eyebrow">Drag it</p>
+      <h1>{step.prompt}</h1>
+      <p className="slider-goal" role="note">
+        Goal: drag the m and b sliders until the live line matches the description.
+      </p>
+
+      <div className="slider-stage">
+        <svg
+          className={`plot-grid slider-grid ${correct ? 'is-correct' : ''}`}
+          viewBox={`0 0 ${PLOT_VIEW_BOX} ${PLOT_VIEW_BOX}`}
+          aria-hidden="true"
+        >
+          {ticks.map((tick) => (
+            <g key={`grid-${tick}`}>
+              <line className="plot-gridline" x1={toSvgX(tick)} y1={toSvgY(range.min)} x2={toSvgX(tick)} y2={toSvgY(range.max)} />
+              <line className="plot-gridline" x1={toSvgX(range.min)} y1={toSvgY(tick)} x2={toSvgX(range.max)} y2={toSvgY(tick)} />
+            </g>
+          ))}
+          <line className="plot-axis" x1={toSvgX(range.min)} y1={toSvgY(0)} x2={toSvgX(range.max)} y2={toSvgY(0)} />
+          <line className="plot-axis" x1={toSvgX(0)} y1={toSvgY(range.min)} x2={toSvgX(0)} y2={toSvgY(range.max)} />
+          {ticks
+            .filter((tick) => tick !== 0)
+            .map((tick) => (
+              <text key={`xlabel-${tick}`} className="plot-tick-label" x={toSvgX(tick)} y={toSvgY(0) + 15} textAnchor="middle">
+                {tick}
+              </text>
+            ))}
+          {ticks
+            .filter((tick) => tick !== 0)
+            .map((tick) => (
+              <text key={`ylabel-${tick}`} className="plot-tick-label" x={toSvgX(0) - 9} y={toSvgY(tick) + 4} textAnchor="end">
+                {tick}
+              </text>
+            ))}
+          <text className="plot-axis-name" x={toSvgX(range.max) - 2} y={toSvgY(0) - 9} textAnchor="end">
+            x
+          </text>
+          <text className="plot-axis-name" x={toSvgX(0) + 11} y={toSvgY(range.max) + 6} textAnchor="start">
+            y
+          </text>
+          {guideVisible && (
+            <g className="slider-guide">
+              <line x1={toSvgX(0)} y1={toSvgY(intercept)} x2={toSvgX(1)} y2={toSvgY(intercept)} />
+              <line x1={toSvgX(1)} y1={toSvgY(intercept)} x2={toSvgX(1)} y2={toSvgY(riseEnd)} />
+              <text className="slider-guide-label" x={toSvgX(0.5)} y={toSvgY(intercept) + 14} textAnchor="middle">
+                run 1
+              </text>
+              <text className="slider-guide-label" x={toSvgX(1) + 6} y={toSvgY((intercept + riseEnd) / 2) + 4} textAnchor="start">
+                rise {slope}
+              </text>
+            </g>
+          )}
+          <line className="slider-line" x1={toSvgX(lineStart.x)} y1={toSvgY(lineStart.y)} x2={toSvgX(lineEnd.x)} y2={toSvgY(lineEnd.y)} />
+          {interceptInRange && (
+            <g className="slider-intercept-point">
+              <circle cx={toSvgX(0)} cy={toSvgY(intercept)} r={6} />
+              <text className="plot-point-label" x={toSvgX(0) + 11} y={toSvgY(intercept) - 10} textAnchor="start">
+                b = {intercept}
+              </text>
+            </g>
+          )}
+        </svg>
+
+        <div className="slider-controls">
+          <p className="slider-equation" aria-live="polite">
+            {equation}
+          </p>
+          <label className="slider-control">
+            <span className="slider-control-head">
+              <span>Slope m</span>
+              <span className="slider-value">{slope}</span>
+            </span>
+            <input
+              type="range"
+              min={step.slope.min}
+              max={step.slope.max}
+              step={slopeStep}
+              value={slope}
+              disabled={correct}
+              aria-label="Slope m"
+              aria-valuetext={`slope ${slope}, line ${equation}`}
+              onChange={(event) => updateSlope(Number(event.target.value))}
+            />
+            <span className="slider-range-ends" aria-hidden="true">
+              <span>{step.slope.min}</span>
+              <span>{step.slope.max}</span>
+            </span>
+          </label>
+          <label className="slider-control">
+            <span className="slider-control-head">
+              <span>Intercept b</span>
+              <span className="slider-value">{intercept}</span>
+            </span>
+            <input
+              type="range"
+              min={step.intercept.min}
+              max={step.intercept.max}
+              step={interceptStep}
+              value={intercept}
+              disabled={correct}
+              aria-label="Intercept b"
+              aria-valuetext={`intercept ${intercept}, line ${equation}`}
+              onChange={(event) => updateIntercept(Number(event.target.value))}
+            />
+            <span className="slider-range-ends" aria-hidden="true">
+              <span>{step.intercept.min}</span>
+              <span>{step.intercept.max}</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <button className="primary-action" type="button" disabled={correct} onClick={check}>
+        Check
+      </button>
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && !correct && (
+        <RetryPrompt message={retryGuidance || 'Adjust the m and b sliders, then check again.'} actionLabel="Reset" onAction={reset} />
+      )}
+      {correct && (
+        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
+          Continue
+        </button>
+      )}
+    </article>
+  )
+}
+
+// A reserved zone id for the tile tray, so the same drop detection that places a tile in a bin
+// can also send it back to the tray (bins use their authored, non-underscored ids).
+const TERM_TRAY_ZONE = '__tray__'
+
+// Detects which sorting zone (a bin id or the tray) sits under a pointer during a drag,
+// mirroring the manipulative puzzle's drop detection so touch and mouse share one code path.
+function getTermZoneAtPoint(x: number, y: number): string | null {
+  const element = document.elementFromPoint(x, y)
+  const zone = element?.closest<HTMLElement>('[data-term-zone]')
+  return zone?.dataset.termZone ?? null
+}
+
+type TermDrag = {
+  tileId: string
+  label: string
+  startX: number
+  startY: number
+  x: number
+  y: number
+  offsetX: number
+  offsetY: number
+  width: number
+  height: number
+  // Whether the pointer has travelled far enough to count as a drag (vs. a tap).
+  moved: boolean
+}
+
+function DragTermsStepView({
+  step,
+  priorResult,
+  onAdvance,
+  onComplete,
+}: {
+  step: DragTermsStep
+  priorResult?: StepRendererProps['priorResult']
+  onAdvance: (feedback: string) => void
+  onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
+}) {
+  const makeSolvedPlacements = () =>
+    step.tiles.reduce<Record<string, string>>((placements, tile) => {
+      placements[tile.id] = tile.bin
+      return placements
+    }, {})
+
+  const [placements, setPlacements] = useState<Record<string, string>>(
+    priorResult?.correct ? makeSolvedPlacements() : {},
+  )
+  const [selectedTileId, setSelectedTileId] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
+  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
+  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
+  const [reveal, setReveal] = useState('')
+  const [retryGuidance, setRetryGuidance] = useState('')
+  const [dragging, setDragging] = useState<TermDrag | null>(null)
+  const [hoverZone, setHoverZone] = useState<string | null>(null)
+  const [lastDropZone, setLastDropZone] = useState<string | null>(null)
+  // The browser fires a click after a pointer interaction; this lets the keyboard-only onClick
+  // path ignore that synthetic click so a pointer tap is not handled twice.
+  const pointerActiveRef = useRef(false)
+
+  const trayTiles = step.tiles.filter((tile) => !placements[tile.id])
+  const selectedTile = step.tiles.find((tile) => tile.id === selectedTileId)
+
+  useEffect(() => {
+    if (lastDropZone === null) return
+    const timeoutId = window.setTimeout(() => setLastDropZone(null), 420)
+    return () => window.clearTimeout(timeoutId)
+  }, [lastDropZone])
+
+  const clearStatus = useCallback(() => {
+    setFeedback('')
+    setCorrect(false)
+    setReveal('')
+    setRetryGuidance('')
+  }, [])
+
+  const assignTile = useCallback(
+    (tileId: string, zone: string) => {
+      setPlacements((current) => {
+        const next = { ...current }
+        if (zone === TERM_TRAY_ZONE) {
+          delete next[tileId]
+        } else {
+          next[tileId] = zone
+        }
+        return next
+      })
+      if (zone !== TERM_TRAY_ZONE) {
+        setLastDropZone(null)
+        window.requestAnimationFrame(() => setLastDropZone(zone))
+      }
+      setSelectedTileId(null)
+      clearStatus()
+    },
+    [clearStatus],
+  )
+
+  const handleTileTap = useCallback(
+    (tileId: string) => {
+      if (correct) return
+      // A placed tile pops back to the tray when tapped; a tray tile toggles selection so the
+      // learner can then choose a bin (the no-drag, fully keyboard-accessible path).
+      if (placements[tileId]) {
+        assignTile(tileId, TERM_TRAY_ZONE)
+        return
+      }
+      setSelectedTileId((current) => (current === tileId ? null : tileId))
+      clearStatus()
+    },
+    [correct, placements, assignTile, clearStatus],
+  )
+
+  useEffect(() => {
+    if (!dragging) return
+
+    const handleMove = (event: PointerEvent) => {
+      setDragging((current) => {
+        if (!current) return current
+        const moved =
+          current.moved ||
+          Math.abs(event.clientX - current.startX) > 6 ||
+          Math.abs(event.clientY - current.startY) > 6
+        return { ...current, x: event.clientX, y: event.clientY, moved }
+      })
+      setHoverZone(getTermZoneAtPoint(event.clientX, event.clientY))
+    }
+    const handleUp = (event: PointerEvent) => {
+      if (dragging.moved) {
+        const zone = getTermZoneAtPoint(event.clientX, event.clientY)
+        if (zone) assignTile(dragging.tileId, zone)
+      } else {
+        // No real movement: treat the press as a tap (select, or return a placed tile).
+        handleTileTap(dragging.tileId)
+      }
+      setDragging(null)
+      setHoverZone(null)
+      window.setTimeout(() => {
+        pointerActiveRef.current = false
+      }, 0)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [dragging, assignTile, handleTileTap])
+
+  const startDrag = (event: React.PointerEvent<HTMLButtonElement>, tile: DragTermsStep['tiles'][number]) => {
+    if (correct) return
+    pointerActiveRef.current = true
+    const rect = event.currentTarget.getBoundingClientRect()
+    event.preventDefault()
+    setDragging({
+      tileId: tile.id,
+      label: tile.label,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      moved: false,
+    })
+  }
+
+  const handleTileClick = (tileId: string) => {
+    // Pointer taps are resolved in the global pointerup handler; only keyboard activations
+    // (no preceding pointer interaction) should fall through to the tap handler here.
+    if (pointerActiveRef.current) return
+    handleTileTap(tileId)
+  }
+
+  const handleBinActivate = (binId: string) => {
+    if (correct || !selectedTileId) return
+    assignTile(selectedTileId, binId)
+  }
+
+  const reset = () => {
+    setPlacements({})
+    setSelectedTileId(null)
+    setDragging(null)
+    setHoverZone(null)
+    setLastDropZone(null)
+    clearStatus()
+  }
+
+  const check = () => {
+    const nextAttempt = attempts + 1
+    const result = checkDragTermsStep(step, placements, nextAttempt)
+    setAttempts(nextAttempt)
+    setFeedback(result.feedback)
+    setCorrect(result.correct)
+    setReveal(result.reveal ?? '')
+    setRetryGuidance(result.retryGuidance ?? '')
+    onComplete(result.correct, result.feedback, { advance: false })
+  }
+
+  const binsSummary = step.bins
+    .map((bin) => {
+      const labels = step.tiles.filter((tile) => placements[tile.id] === bin.id).map((tile) => tile.label)
+      return `${bin.label}: ${labels.length ? labels.join(', ') : 'empty'}`
+    })
+    .join('. ')
+  const traySummary =
+    trayTiles.length === 0 ? 'All tiles sorted.' : `Unsorted: ${trayTiles.map((tile) => tile.label).join(', ')}.`
+  const summary = `${binsSummary}. ${traySummary}`
+
+  return (
+    <article className="lesson-card card drag-terms-card">
+      <p className="eyebrow">Sort it</p>
+      <h1>{step.prompt}</h1>
+      {step.equation && <p className="drag-terms-equation">{step.equation}</p>}
+      <p className="drag-terms-goal" role="note">
+        Goal: drop every term tile into the bin that matches its variable part.
+      </p>
+
+      <div className="drag-terms-stage">
+        <div className="term-tray" data-term-zone={TERM_TRAY_ZONE} aria-label={`Term tile tray, ${trayTiles.length} unsorted`}>
+          <div className="term-tray-head">
+            <span className="tray-title">Term tiles</span>
+            <span className="tray-count">{trayTiles.length} left</span>
+          </div>
+          <div className="term-tile-row">
+            {trayTiles.length === 0 && <span className="tray-empty">All tiles sorted</span>}
+            {trayTiles.map((tile) => (
+              <button
+                key={tile.id}
+                type="button"
+                className={`term-tile ${selectedTileId === tile.id ? 'is-selected' : ''}`}
+                aria-pressed={selectedTileId === tile.id}
+                aria-label={`Term ${tile.label}${selectedTileId === tile.id ? ', selected' : ''}`}
+                disabled={correct}
+                onPointerDown={(event) => startDrag(event, tile)}
+                onClick={() => handleTileClick(tile.id)}
+              >
+                {tile.label}
+              </button>
+            ))}
+          </div>
+          <p className="tray-hint">
+            Drag a tile into a bin, or tap a tile then a bin&rsquo;s &ldquo;Place here&rdquo;. Tap a sorted tile to send it back.
+          </p>
+        </div>
+
+        <div className="term-bins">
+          {step.bins.map((bin) => {
+            const tilesInBin = step.tiles.filter((tile) => placements[tile.id] === bin.id)
+            return (
+              <div
+                key={bin.id}
+                className={`term-bin ${hoverZone === bin.id ? 'drop-target' : ''} ${lastDropZone === bin.id ? 'bin-bounce' : ''} ${correct ? 'is-correct' : ''}`}
+                data-term-zone={bin.id}
+                role="group"
+                aria-label={`${bin.label}: ${tilesInBin.length ? tilesInBin.map((tile) => tile.label).join(', ') : 'empty'}`}
+              >
+                <div className="term-bin-head">
+                  <span className="bin-label">{bin.label}</span>
+                  {bin.detail && <span className="bin-detail">{bin.detail}</span>}
+                  <span className="bin-count" aria-hidden="true">
+                    {tilesInBin.length}
+                  </span>
+                </div>
+                <div className="term-bin-tiles">
+                  {tilesInBin.length === 0 && (
+                    <span className="bin-empty" aria-hidden="true">
+                      Drop here
+                    </span>
+                  )}
+                  {tilesInBin.map((tile) => (
+                    <button
+                      key={tile.id}
+                      type="button"
+                      className="term-tile placed"
+                      aria-label={`Term ${tile.label}, in ${bin.label}. Activate to return it to the tray.`}
+                      disabled={correct}
+                      onPointerDown={(event) => startDrag(event, tile)}
+                      onClick={() => handleTileClick(tile.id)}
+                    >
+                      {tile.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="term-bin-place"
+                  disabled={correct || !selectedTileId}
+                  onClick={() => handleBinActivate(bin.id)}
+                >
+                  {selectedTile ? `Place ${selectedTile.label} here` : 'Place here'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <p className="drag-terms-summary" aria-live="polite">
+        {summary}
+      </p>
+
+      {dragging?.moved && (
+        <div
+          className="drag-preview term-tile"
+          style={{
+            left: dragging.x - dragging.offsetX,
+            top: dragging.y - dragging.offsetY,
+            width: dragging.width,
+            height: dragging.height,
+          }}
+        >
+          {dragging.label}
+        </div>
+      )}
+
+      <button className="primary-action" type="button" disabled={correct} onClick={check}>
+        Check
+      </button>
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && !correct && (
+        <RetryPrompt
+          message={retryGuidance || 'Move the tiles into the right bins, or reset and try again.'}
+          actionLabel="Reset"
+          onAction={reset}
         />
       )}
       {correct && (
@@ -1113,12 +2911,22 @@ function BalanceStepView({
   onAdvance: (feedback: string) => void
   onComplete: (correct: boolean, feedback: string, options?: CompleteOptions) => void
 }) {
-  const [state, setState] = useState<BalanceState>(() => cloneBalanceState(step.state))
+  const [resume] = useState(() => {
+    // If this step was already solved on a previous visit (correct, but the learner never
+    // pressed Continue), rebuild a genuinely solved scale so it matches the "Correct"
+    // banner instead of showing the original unsolved setup. If it cannot be
+    // reconstructed, fall back to the start state with no banner so nothing is misleading.
+    const solvedState = priorResult?.correct ? reconstructSolvedBalanceState(step) : null
+    return solvedState
+      ? { state: solvedState, correct: true, feedback: priorResult?.feedback ?? '' }
+      : { state: cloneBalanceState(step.state), correct: false, feedback: '' }
+  })
+  const [state, setState] = useState<BalanceState>(resume.state)
   const [dragging, setDragging] = useState<DraggingTile | null>(null)
-  const [hoverSide, setHoverSide] = useState<BalanceSide | null>(null)
+  const [hoverTarget, setHoverTarget] = useState<DropTarget | null>(null)
   const [lastDropSide, setLastDropSide] = useState<BalanceSide | null>(null)
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
+  const [feedback, setFeedback] = useState(resume.feedback)
+  const [correct, setCorrect] = useState(resume.correct)
   const [meta, setMeta] = useState<BalanceCheckMeta>({})
   const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
   const [reveal, setReveal] = useState('')
@@ -1130,6 +2938,20 @@ function BalanceStepView({
   const balanceCue = getBalanceCue(leftTotal, rightTotal)
   const tilt = Math.max(-11, Math.min(11, (rightTotal - leftTotal) * 3))
   const isPhysicalDrag = step.layout === 'physical-drag'
+  // A tray-backed step lets the learner drag weights on/off the pans, so re-dragging
+  // (between pans, or back to the tray) is the recovery path. Operation-based steps
+  // transform the scale instead, so they still need an explicit reset.
+  const hasTray = step.state.bank !== undefined
+  const usesOperations = Boolean(step.operations && step.operations.length > 0)
+  const bankItems = state.bank ?? []
+  // Every block the learner can still move, with where it currently sits. Drives the
+  // keyboard/tap placement fallback for physical-drag steps (which otherwise only respond
+  // to pointer drag). Locked weights (the fixed equation) are excluded.
+  const movableItems: { item: BalanceItem; location: DropTarget }[] = [
+    ...bankItems.map((item) => ({ item, location: 'bank' as const })),
+    ...state.left.filter((item) => !item.locked).map((item) => ({ item, location: 'left' as const })),
+    ...state.right.filter((item) => !item.locked).map((item) => ({ item, location: 'right' as const })),
+  ]
 
   useEffect(() => {
     if (!lastDropSide) return
@@ -1140,26 +2962,41 @@ function BalanceStepView({
 
   const activeDragItem = dragging?.item
 
-  const dropItem = useCallback((item: BalanceItem, side: BalanceSide) => {
-    const nextState = {
-      ...state,
-      [side]: [...state[side], item],
-      bank: state.bank?.filter((candidate) => candidate.id !== item.id),
-    }
+  // Moves a weight to any drop target: a pan or back to the tray. The item is first
+  // removed from wherever it currently sits, so a block dropped on the wrong side can
+  // simply be dragged again to the correct side (or to the tray) with no reset needed.
+  const moveItem = useCallback(
+    (item: BalanceItem, target: DropTarget) => {
+      const without = (items: BalanceItem[] | undefined) =>
+        (items ?? []).filter((candidate) => candidate.id !== item.id)
 
-    setState(nextState)
-    setLastDropSide(null)
-    window.requestAnimationFrame(() => setLastDropSide(side))
-    setLastChange(
-      isPhysicalDrag
-        ? describePhysicalBalanceChange(item, side, nextState)
-        : describeBalanceChange(state, nextState, `Added ${item.label} to the ${side} pan.`),
-    )
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
-  }, [isPhysicalDrag, state])
+      const nextState: BalanceState = {
+        ...state,
+        left: without(state.left),
+        right: without(state.right),
+        bank: without(state.bank),
+      }
+
+      if (target === 'bank') {
+        nextState.bank = [...(nextState.bank ?? []), item]
+      } else {
+        nextState[target] = [...nextState[target], item]
+      }
+
+      setState(nextState)
+      setMeta({})
+      setLastDropSide(null)
+      if (target !== 'bank') {
+        window.requestAnimationFrame(() => setLastDropSide(target))
+      }
+      setLastChange(describeMove(item, target, state, nextState, isPhysicalDrag))
+      setFeedback('')
+      setCorrect(false)
+      setReveal('')
+      setRetryGuidance('')
+    },
+    [isPhysicalDrag, state],
+  )
 
   useEffect(() => {
     if (!activeDragItem) return
@@ -1168,28 +3005,33 @@ function BalanceStepView({
 
     const handlePointerMove = (event: PointerEvent) => {
       setDragging((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current))
-      setHoverSide(getPanSideAtPoint(event.clientX, event.clientY))
+      setHoverTarget(getDropTargetAtPoint(event.clientX, event.clientY))
     }
 
     const handlePointerUp = (event: PointerEvent) => {
-      const side = getPanSideAtPoint(event.clientX, event.clientY)
-      if (side) {
-        dropItem(activeItem, side)
+      const target = getDropTargetAtPoint(event.clientX, event.clientY)
+      if (target) {
+        moveItem(activeItem, target)
       }
       setDragging(null)
-      setHoverSide(null)
+      setHoverTarget(null)
+    }
+
+    const handlePointerCancel = () => {
+      setDragging(null)
+      setHoverTarget(null)
     }
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
-    window.addEventListener('pointercancel', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerCancel)
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
-      window.removeEventListener('pointercancel', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerCancel)
     }
-  }, [activeDragItem, dropItem])
+  }, [activeDragItem, moveItem])
 
   const startDrag = (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -1207,13 +3049,13 @@ function BalanceStepView({
   }
 
   const quickDrop = (item: BalanceItem, side: BalanceSide) => {
-    dropItem(item, side)
+    moveItem(item, side)
   }
 
   const resetAttempt = () => {
     setState(cloneBalanceState(step.state))
     setDragging(null)
-    setHoverSide(null)
+    setHoverTarget(null)
     setLastDropSide(null)
     setLastChange('Scale reset to the starting equation.')
     setFeedback('')
@@ -1257,9 +3099,12 @@ function BalanceStepView({
           rightTotal={rightTotal}
           balanceCue={balanceCue}
           tilt={tilt}
-          hoverSide={hoverSide}
+          hoverTarget={hoverTarget}
           lastDropSide={lastDropSide}
           lastChange={lastChange}
+          onTilePointerDown={startDrag}
+          draggingId={dragging?.item.id}
+          tilesDisabled={correct}
         />
       ) : (
         <div className="scale-stage" aria-label="Interactive balance scale">
@@ -1306,55 +3151,126 @@ function BalanceStepView({
               side="left"
               items={state.left}
               total={leftTotal}
-              active={hoverSide === 'left'}
+              active={hoverTarget === 'left'}
               bounced={lastDropSide === 'left'}
+              onTilePointerDown={hasTray ? startDrag : undefined}
+              draggingId={dragging?.item.id}
+              tilesDisabled={correct}
             />
             <Pan
               title="Right pan"
               side="right"
               items={state.right}
               total={rightTotal}
-              active={hoverSide === 'right'}
+              active={hoverTarget === 'right'}
               bounced={lastDropSide === 'right'}
+              onTilePointerDown={hasTray ? startDrag : undefined}
+              draggingId={dragging?.item.id}
+              tilesDisabled={correct}
             />
           </div>
           {lastChange && <p className="change-note" aria-live="polite">{lastChange}</p>}
         </div>
       )}
 
-      {state.bank && state.bank.length > 0 && (
-        <div className={`item-bank ${isPhysicalDrag ? 'physical-bank' : ''}`}>
+      {isPhysicalDrag && (
+        <div className="accessible-balance-controls" role="group" aria-label="Place blocks without dragging">
+          <p id={`${step.id}-place-instructions`}>
+            Prefer keyboard or tap? Use these buttons to place each block. Pointer drag still works as an
+            enhancement.
+          </p>
+          {movableItems.length === 0 ? (
+            <p className="tray-empty" aria-live="polite">
+              Every movable block is placed. Check the scale when you are ready.
+            </p>
+          ) : (
+            <ul className="placement-list">
+              {movableItems.map(({ item, location }) => (
+                <li className="placement-row" key={item.id}>
+                  <span className="placement-label">
+                    {item.label} block — {describeBalanceLocation(location)}
+                  </span>
+                  <span className="placement-buttons">
+                    {location !== 'left' && (
+                      <button
+                        type="button"
+                        disabled={correct}
+                        aria-describedby={`${step.id}-place-instructions`}
+                        onClick={() => quickDrop(item, 'left')}
+                      >
+                        Place {item.label} on left pan
+                      </button>
+                    )}
+                    {location !== 'right' && (
+                      <button
+                        type="button"
+                        disabled={correct}
+                        aria-describedby={`${step.id}-place-instructions`}
+                        onClick={() => quickDrop(item, 'right')}
+                      >
+                        Place {item.label} on right pan
+                      </button>
+                    )}
+                    {location !== 'bank' && (
+                      <button
+                        type="button"
+                        disabled={correct}
+                        aria-describedby={`${step.id}-place-instructions`}
+                        onClick={() => moveItem(item, 'bank')}
+                      >
+                        Return {item.label} to tray
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {hasTray && (
+        <div
+          className={`item-bank ${isPhysicalDrag ? 'physical-bank' : ''} ${hoverTarget === 'bank' ? 'drop-target' : ''}`}
+          data-drop-zone="bank"
+        >
           <p id={`${step.id}-bank-instructions`}>
             {dragging
-              ? 'Release over a glowing pan to drop it.'
+              ? 'Release over a glowing pan, or drop here to send the block back to the tray.'
               : isPhysicalDrag
-                ? 'Drag the loose block onto the pan that makes the scale level.'
-                : 'Drag a tile to a pan, or tap where it should go.'}
+                ? 'Drag a block onto the pan that makes the scale level. Dropped it on the wrong side? Just drag it again.'
+                : 'Drag a tile to a pan or back to the tray, or tap where it should go.'}
           </p>
-          {state.bank.map((item) => (
-            <div className="bank-item" key={item.id}>
-              <button
-                className={`tile bank-tile ${dragging?.item.id === item.id ? 'dragging-source' : ''}`}
-                type="button"
-                aria-describedby={`${step.id}-bank-instructions`}
-                aria-label={`Drag ${item.label} block to a pan`}
-                disabled={correct}
-                onPointerDown={(event) => startDrag(event, item)}
-              >
-                {item.label}
-              </button>
-              {!isPhysicalDrag && (
-                <>
-                  <button type="button" disabled={correct} onClick={() => quickDrop(item, 'left')}>
-                    Place {item.label} on left pan
-                  </button>
-                  <button type="button" disabled={correct} onClick={() => quickDrop(item, 'right')}>
-                    Place {item.label} on right pan
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
+          {bankItems.length > 0 ? (
+            bankItems.map((item) => (
+              <div className="bank-item" key={item.id}>
+                <button
+                  className={`tile bank-tile movable-tile ${dragging?.item.id === item.id ? 'dragging-source' : ''}`}
+                  type="button"
+                  aria-describedby={`${step.id}-bank-instructions`}
+                  aria-label={`Drag ${item.label} block to a pan`}
+                  disabled={correct}
+                  onPointerDown={(event) => startDrag(event, item)}
+                >
+                  {item.label}
+                </button>
+                {!isPhysicalDrag && (
+                  <>
+                    <button type="button" disabled={correct} onClick={() => quickDrop(item, 'left')}>
+                      Place {item.label} on left pan
+                    </button>
+                    <button type="button" disabled={correct} onClick={() => quickDrop(item, 'right')}>
+                      Place {item.label} on right pan
+                    </button>
+                  </>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="tray-empty" aria-live="polite">
+              Tray is empty. Drag a block back here to take it off a pan.
+            </p>
+          )}
         </div>
       )}
 
@@ -1385,14 +3301,21 @@ function BalanceStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check scale
       </button>
-      {feedback && <FeedbackPanel correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && (
-        <RetryPrompt
-          message={retryGuidance || 'Reset the scale if your move used up a tile, then try again.'}
-          actionLabel="Reset scale"
-          onAction={resetAttempt}
-        />
-      )}
+      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
+      {feedback && !correct &&
+        (usesOperations ? (
+          <RetryPrompt
+            message={retryGuidance || 'Reset the scale if your move used up a tile, then try again.'}
+            actionLabel="Reset scale"
+            onAction={resetAttempt}
+          />
+        ) : (
+          <RetryPrompt
+            message={
+              retryGuidance || 'Drag the block to the other pan, or back to the tray, then check the scale again.'
+            }
+          />
+        ))}
       {correct && (
         <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
           Continue
@@ -1401,6 +3324,8 @@ function BalanceStepView({
     </article>
   )
 }
+
+type DropTarget = BalanceSide | 'bank'
 
 type DraggingTile = {
   item: BalanceItem
@@ -1418,18 +3343,24 @@ function PhysicalScaleStage({
   rightTotal,
   balanceCue,
   tilt,
-  hoverSide,
+  hoverTarget,
   lastDropSide,
   lastChange,
+  onTilePointerDown,
+  draggingId,
+  tilesDisabled,
 }: {
   state: BalanceState
   leftTotal: number
   rightTotal: number
   balanceCue: ReturnType<typeof getBalanceCue>
   tilt: number
-  hoverSide: BalanceSide | null
+  hoverTarget: DropTarget | null
   lastDropSide: BalanceSide | null
   lastChange: string
+  onTilePointerDown: (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => void
+  draggingId?: string
+  tilesDisabled?: boolean
 }) {
   return (
     <div className="scale-stage physical-scale-stage" aria-label="Interactive balance scale">
@@ -1446,16 +3377,22 @@ function PhysicalScaleStage({
             side="left"
             items={state.left}
             total={leftTotal}
-            active={hoverSide === 'left'}
+            active={hoverTarget === 'left'}
             bounced={lastDropSide === 'left'}
+            onTilePointerDown={onTilePointerDown}
+            draggingId={draggingId}
+            tilesDisabled={tilesDisabled}
           />
           <PhysicalPan
             title="Right pan"
             side="right"
             items={state.right}
             total={rightTotal}
-            active={hoverSide === 'right'}
+            active={hoverTarget === 'right'}
             bounced={lastDropSide === 'right'}
+            onTilePointerDown={onTilePointerDown}
+            draggingId={draggingId}
+            tilesDisabled={tilesDisabled}
           />
         </div>
       </div>
@@ -1472,6 +3409,9 @@ function PhysicalPan({
   total,
   active,
   bounced,
+  onTilePointerDown,
+  draggingId,
+  tilesDisabled,
 }: {
   title: string
   side: BalanceSide
@@ -1479,11 +3419,14 @@ function PhysicalPan({
   total: number
   active: boolean
   bounced: boolean
+  onTilePointerDown?: (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => void
+  draggingId?: string
+  tilesDisabled?: boolean
 }) {
   return (
     <div
       className={`physical-pan ${side} ${active ? 'drop-target' : ''} ${bounced ? 'pan-bounce' : ''}`}
-      data-pan-side={side}
+      data-drop-zone={side}
       aria-label={`${title}: ${formatSide(items)}, total ${total}`}
     >
       <span className="physical-pan-cables" aria-hidden="true" />
@@ -1491,9 +3434,14 @@ function PhysicalPan({
         <span className="physical-pan-label">{title}</span>
         <div className="physical-tile-row">
           {items.map((item) => (
-            <span className={`tile ${item.kind}`} key={item.id}>
-              {item.label}
-            </span>
+            <BalanceTile
+              key={item.id}
+              item={item}
+              location={title}
+              movable={Boolean(onTilePointerDown) && !item.locked && !tilesDisabled}
+              dragging={draggingId === item.id}
+              onTilePointerDown={onTilePointerDown}
+            />
           ))}
         </div>
       </div>
@@ -1508,6 +3456,9 @@ function Pan({
   total,
   active,
   bounced,
+  onTilePointerDown,
+  draggingId,
+  tilesDisabled,
 }: {
   title: string
   side: BalanceSide
@@ -1515,22 +3466,62 @@ function Pan({
   total: number
   active: boolean
   bounced: boolean
+  onTilePointerDown?: (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => void
+  draggingId?: string
+  tilesDisabled?: boolean
 }) {
   return (
-    <div className={`pan ${active ? 'drop-target' : ''} ${bounced ? 'pan-bounce' : ''}`} data-pan-side={side}>
+    <div className={`pan ${active ? 'drop-target' : ''} ${bounced ? 'pan-bounce' : ''}`} data-drop-zone={side}>
       <span className="pan-heading">
         <strong>{title}</strong>
         <small>Total {total}</small>
       </span>
       <div className="tile-row">
         {items.map((item) => (
-          <span className={`tile ${item.kind}`} key={item.id}>
-            {item.label}
-          </span>
+          <BalanceTile
+            key={item.id}
+            item={item}
+            location={title}
+            movable={Boolean(onTilePointerDown) && !item.locked && !tilesDisabled}
+            dragging={draggingId === item.id}
+            onTilePointerDown={onTilePointerDown}
+          />
         ))}
       </div>
     </div>
   )
+}
+
+// A single weight on a pan. Locked weights (the fixed equation) render as static text;
+// unlocked weights render as a draggable button so the learner can pick them back up and
+// move them between pans or to the tray.
+function BalanceTile({
+  item,
+  location,
+  movable,
+  dragging,
+  onTilePointerDown,
+}: {
+  item: BalanceItem
+  location: string
+  movable: boolean
+  dragging: boolean
+  onTilePointerDown?: (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => void
+}) {
+  if (movable && onTilePointerDown) {
+    return (
+      <button
+        type="button"
+        className={`tile ${item.kind} movable-tile ${dragging ? 'dragging-source' : ''}`}
+        aria-label={`Move the ${item.label} block. Currently on ${location}. Drag it to another pan or back to the tray.`}
+        onPointerDown={(event) => onTilePointerDown(event, item)}
+      >
+        {item.label}
+      </button>
+    )
+  }
+
+  return <span className={`tile ${item.kind}`}>{item.label}</span>
 }
 
 function FeedbackPanel({ correct, message, reveal }: { correct: boolean; message: string; reveal?: string }) {
@@ -1588,6 +3579,68 @@ function ProgressBar({ value, label }: { value: number; label: string }) {
   )
 }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false,
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const handleChange = (event: MediaQueryListEvent) => setReduced(event.matches)
+    query.addEventListener('change', handleChange)
+    return () => query.removeEventListener('change', handleChange)
+  }, [])
+
+  return reduced
+}
+
+// Animates from 0 up to `target`, snapping straight to the final value when the user
+// prefers reduced motion so the score never visibly counts. The reduced-motion value is
+// derived during render (not via setState) so it stays out of the effect body.
+function useCountUp(target: number, durationMs = 950) {
+  const reducedMotion = usePrefersReducedMotion()
+  const [animatedValue, setAnimatedValue] = useState(0)
+
+  useEffect(() => {
+    if (reducedMotion) return
+
+    let frame = 0
+    const startedAt = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / durationMs)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setAnimatedValue(Math.round(target * eased))
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick)
+      } else {
+        setAnimatedValue(target)
+      }
+    }
+
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [target, durationMs, reducedMotion])
+
+  return reducedMotion ? target : animatedValue
+}
+
+const SCORE_RING_RADIUS = 54
+const SCORE_RING_CIRCUMFERENCE = 2 * Math.PI * SCORE_RING_RADIUS
+
+const CELEBRATION_PIECES: { x: string; delay: string; color: string }[] = [
+  { x: '-48px', delay: '0ms', color: '#2563eb' },
+  { x: '-26px', delay: '110ms', color: '#22c55e' },
+  { x: '-8px', delay: '40ms', color: '#f59e0b' },
+  { x: '12px', delay: '150ms', color: '#ec4899' },
+  { x: '30px', delay: '70ms', color: '#8b5cf6' },
+  { x: '48px', delay: '190ms', color: '#22c55e' },
+  { x: '-38px', delay: '220ms', color: '#f59e0b' },
+  { x: '40px', delay: '20ms', color: '#2563eb' },
+]
+
 function CompleteScreen({
   lesson,
   progress,
@@ -1604,6 +3657,8 @@ function CompleteScreen({
   const copy = getCompletionCopy(lesson)
   const latestScore = getLatestLessonScore(lesson, progress)
   const bestScore = getBestLessonScore(lesson, progress)
+  const displayScore = useCountUp(latestScore?.scorePercent ?? 0)
+  const ringOffset = SCORE_RING_CIRCUMFERENCE * (1 - Math.max(0, Math.min(100, displayScore)) / 100)
 
   return (
     <section className="complete-card card">
@@ -1613,7 +3668,43 @@ function CompleteScreen({
       {latestScore && (
         <div className="score-card">
           <span>First-try score</span>
-          <strong>{latestScore.scorePercent}%</strong>
+          <div className="score-figure">
+            <div
+              className="score-ring"
+              role="img"
+              aria-label={`First-try score ${latestScore.scorePercent} percent`}
+            >
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle className="score-ring-track" cx="60" cy="60" r={SCORE_RING_RADIUS} />
+                <circle
+                  className="score-ring-value"
+                  cx="60"
+                  cy="60"
+                  r={SCORE_RING_RADIUS}
+                  transform="rotate(-90 60 60)"
+                  style={{
+                    strokeDasharray: SCORE_RING_CIRCUMFERENCE,
+                    strokeDashoffset: ringOffset,
+                  }}
+                />
+              </svg>
+              <strong aria-hidden="true">{displayScore}%</strong>
+            </div>
+            <span className="score-celebrate" aria-hidden="true">
+              {CELEBRATION_PIECES.map((piece, index) => (
+                <i
+                  key={index}
+                  style={
+                    {
+                      '--cx': piece.x,
+                      '--cd': piece.delay,
+                      '--cc': piece.color,
+                    } as React.CSSProperties
+                  }
+                />
+              ))}
+            </span>
+          </div>
           <p>{getLessonScoreDetail(lesson, progress)}</p>
           {bestScore && bestScore.scorePercent !== latestScore.scorePercent && <small>Best score: {bestScore.scorePercent}%</small>}
         </div>
@@ -1681,20 +3772,28 @@ function ProfileScreen({
   user,
   mastery,
   attempts,
+  backendProvider,
 }: {
   user: UserProfile
   mastery: { skillId: string; score: number; attempts: number; correct: number }[]
   attempts: { id: string }[]
+  backendProvider: Backend['provider']
 }) {
+  const providerLabel = backendProvider === 'firebase' ? 'Firebase user ID' : 'Local demo profile ID'
+
   return (
     <section className="screen-stack">
       <div className="profile-card card">
         <p className="eyebrow">Profile</p>
         <h1>{user.displayName}</h1>
         <p>{user.email}</p>
-        <p className="fine-print">Local demo profile ID: {user.id}</p>
         <p className="fine-print">
-          Sign out before sharing this browser. This demo keeps progress on this device until browser storage is cleared.
+          {providerLabel}: {user.id}
+        </p>
+        <p className="fine-print">
+          {backendProvider === 'firebase'
+            ? 'Firebase mode syncs progress through Firestore for this authenticated account. Sign out before sharing this browser.'
+            : 'Sign out before sharing this browser. This demo keeps progress on this device until browser storage is cleared.'}
         </p>
       </div>
 
@@ -1715,7 +3814,7 @@ function ProfileScreen({
         })}
       </div>
 
-      <p className="fine-print">Recorded local attempt events: {attempts.length}</p>
+      <p className="fine-print">Recorded {backendProvider} attempt events: {attempts.length}</p>
     </section>
   )
 }
@@ -1737,6 +3836,41 @@ function cloneBalanceState(state: BalanceState): BalanceState {
     right: state.right.map((item) => ({ ...item })),
     bank: state.bank?.map((item) => ({ ...item })),
   }
+}
+
+// Rebuilds a balance state that genuinely satisfies the step's goal, used when resuming a
+// step the learner already solved. Each candidate is verified with the real checker, so we
+// only return a state that is actually correct (or null when none can be derived). It tries
+// the start state, then each single operation, then placing each tray block on a pan, which
+// covers the authored "level" and "isolate" steps without hard-coding lesson data.
+function reconstructSolvedBalanceState(step: BalanceStep): BalanceState | null {
+  const base = cloneBalanceState(step.state)
+  if (checkBalanceStep(step, base, {}).correct) return base
+
+  for (const operation of step.operations ?? []) {
+    const candidate = applyBalanceOperation(base, operation)
+    if (checkBalanceStep(step, candidate, {}).correct) return candidate
+  }
+
+  const bank = base.bank ?? []
+  for (const item of bank) {
+    for (const side of ['left', 'right'] as BalanceSide[]) {
+      const candidate: BalanceState = {
+        ...base,
+        left: side === 'left' ? [...base.left, item] : [...base.left],
+        right: side === 'right' ? [...base.right, item] : [...base.right],
+        bank: bank.filter((candidateItem) => candidateItem.id !== item.id),
+      }
+      if (checkBalanceStep(step, candidate, {}).correct) return candidate
+    }
+  }
+
+  return null
+}
+
+function describeBalanceLocation(location: DropTarget) {
+  if (location === 'bank') return 'in the tray'
+  return location === 'left' ? 'on the left pan' : 'on the right pan'
 }
 
 function formatSide(items: BalanceItem[]) {
@@ -1786,6 +3920,23 @@ function describePhysicalBalanceChange(item: BalanceItem, side: BalanceSide, sta
   return `${item.label} landed on the ${side} pan. ${getPhysicalBalanceCue(getBalanceCue(sideTotal(state.left), sideTotal(state.right)).kind)}`
 }
 
+function describeMove(
+  item: BalanceItem,
+  target: DropTarget,
+  before: BalanceState,
+  after: BalanceState,
+  isPhysicalDrag: boolean,
+) {
+  if (target === 'bank') {
+    const cue = getBalanceCue(sideTotal(after.left), sideTotal(after.right))
+    return `${item.label} returned to the tray. ${isPhysicalDrag ? getPhysicalBalanceCue(cue.kind) : cue.label}`
+  }
+
+  return isPhysicalDrag
+    ? describePhysicalBalanceChange(item, target, after)
+    : describeBalanceChange(before, after, `Moved ${item.label} to the ${target} pan.`)
+}
+
 function describeBalanceChange(before: BalanceState, after: BalanceState, action: string) {
   const beforeLeft = sideTotal(before.left)
   const beforeRight = sideTotal(before.right)
@@ -1795,11 +3946,10 @@ function describeBalanceChange(before: BalanceState, after: BalanceState, action
   return `${action} Totals changed from left ${beforeLeft}, right ${beforeRight} to left ${afterLeft}, right ${afterRight}. ${getBalanceCue(afterLeft, afterRight).label}`
 }
 
-function getPanSideAtPoint(x: number, y: number): BalanceSide | null {
+function getDropTargetAtPoint(x: number, y: number): DropTarget | null {
   const element = document.elementFromPoint(x, y)
-  const pan = element?.closest<HTMLElement>('[data-pan-side]')
-  const side = pan?.dataset.panSide
-  return side === 'left' || side === 'right' ? side : null
+  const zone = element?.closest<HTMLElement>('[data-drop-zone]')?.dataset.dropZone
+  return zone === 'left' || zone === 'right' || zone === 'bank' ? zone : null
 }
 
 export default App

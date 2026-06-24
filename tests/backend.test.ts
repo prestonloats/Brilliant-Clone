@@ -1,13 +1,27 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
-import { createAttemptEvent, createBackend, LocalBackend } from '../src/backend'
+import { createAttemptEvent, createBackend, LocalBackend, type Backend } from '../src/backend'
 import type { AttemptEvent, LessonProgress, LessonScore, SkillMastery } from '../src/domain'
 import {
   getBackendProviderFromEnv,
   getFirebaseConfigFromEnv,
   getMissingFirebaseEnvKeysFromEnv,
 } from '../src/firebaseConfigCore'
+import {
+  assertVerifiedEmailForWrite,
+  EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+  firebaseAttemptPath,
+  firebaseMasteryPath,
+  firebaseProgressPath,
+  firebaseUserPath,
+  isEmailVerificationRequired,
+  requireMatchingUserId,
+  toFirestoreAttemptEvent,
+  toFirestoreLessonProgress,
+  toFirestoreSkillMastery,
+  toFirestoreUserProfile,
+} from '../src/firebaseBackendCore'
 
 const STORAGE_KEY = 'balance-local-backend-v1'
 const SESSION_KEY = 'balance-local-session-v1'
@@ -207,11 +221,25 @@ test('local auth rejects missing demo profiles without changing session', () => 
 })
 
 test('backend provider selection fails closed for firebase mode', () => {
+  const localBackend = new LocalBackend()
+  const fakeFirebaseBackend: Backend = {
+    provider: 'firebase',
+    auth: localBackend.auth,
+    progress: localBackend.progress,
+    mastery: localBackend.mastery,
+    attempts: localBackend.attempts,
+  }
+
   assert.equal(getBackendProviderFromEnv(undefined), 'local')
   assert.equal(getBackendProviderFromEnv('local'), 'local')
   assert.equal(getBackendProviderFromEnv('firebase'), 'firebase')
   assert.throws(() => getBackendProviderFromEnv('supabase'), /local.*firebase/i)
   assert.throws(() => createBackend('firebase'), /refused to fall back to local mode/i)
+  assert.throws(
+    () => createBackend('firebase', { firebaseBackend: localBackend }),
+    /refused to fall back to local mode/i,
+  )
+  assert.equal(createBackend('firebase', { firebaseBackend: fakeFirebaseBackend }).provider, 'firebase')
 })
 
 test('firebase config validation reports missing keys without live Firebase', () => {
@@ -235,6 +263,88 @@ test('firebase config validation reports missing keys without live Firebase', ()
     'project-id',
   )
   assert.equal(getFirebaseConfigFromEnv({ VITE_FIREBASE_PROJECT_ID: 'project-id' }), null)
+})
+
+test('firebase path helpers derive user-scoped Firestore document paths', () => {
+  assert.equal(firebaseUserPath('uid-1'), 'users/uid-1')
+  assert.equal(
+    firebaseProgressPath('uid-1', 'balancing-equations'),
+    'progress/uid-1/lessons/balancing-equations',
+  )
+  assert.equal(firebaseMasteryPath('uid-1', 'equality'), 'mastery/uid-1/skills/equality')
+  assert.equal(firebaseAttemptPath('uid-1', 'attempt-1'), 'attempts/uid-1/events/attempt-1')
+  assert.throws(() => firebaseUserPath('bad/uid'), /document id segment/i)
+  assert.throws(() => firebaseAttemptPath('uid-1', 'bad/attempt'), /document id segment/i)
+})
+
+test('firebase serializers overwrite payload user ids with authenticated uid', () => {
+  const uid = 'auth-uid'
+
+  assert.equal(toFirestoreUserProfile(uid, {
+    id: 'payload-user',
+    email: 'learner@example.com',
+    displayName: 'Learner',
+    createdAt: '2026-06-23T00:00:00.000Z',
+  }).id, uid)
+  assert.equal(toFirestoreLessonProgress(uid, lessonProgress('payload-user')).userId, uid)
+  assert.equal(toFirestoreSkillMastery(uid, skillMastery('payload-user')).userId, uid)
+  assert.equal(toFirestoreAttemptEvent(uid, attemptEvent('payload-user')).userId, uid)
+})
+
+test('firebase user guard rejects cross-user repository requests', () => {
+  assert.equal(requireMatchingUserId('uid-1', 'uid-1'), 'uid-1')
+  assert.throws(() => requireMatchingUserId(null, 'uid-1'), /sign in/i)
+  assert.throws(() => requireMatchingUserId('uid-1', 'uid-2'), /different authenticated user/i)
+})
+
+test('firebase write guard requires a verified email', () => {
+  assert.doesNotThrow(() => assertVerifiedEmailForWrite(true))
+  assert.throws(() => assertVerifiedEmailForWrite(false), /verify your email/i)
+  assert.throws(() => assertVerifiedEmailForWrite(undefined), /verify your email/i)
+  assert.match(EMAIL_VERIFICATION_REQUIRED_MESSAGE, /verify/i)
+})
+
+test('email verification gating only applies to unverified firebase users', () => {
+  assert.equal(isEmailVerificationRequired('firebase', false), true)
+  assert.equal(isEmailVerificationRequired('firebase', undefined), true)
+  assert.equal(isEmailVerificationRequired('firebase', true), false)
+  assert.equal(isEmailVerificationRequired('local', false), false)
+  assert.equal(isEmailVerificationRequired('local', undefined), false)
+  assert.equal(isEmailVerificationRequired('local', true), false)
+})
+
+test('firebase user serializer drops transient email verification state', () => {
+  const stored = toFirestoreUserProfile('auth-uid', {
+    id: 'payload-user',
+    email: 'learner@example.com',
+    displayName: 'Learner',
+    emailVerified: true,
+    createdAt: '2026-06-23T00:00:00.000Z',
+  })
+
+  assert.equal(stored.id, 'auth-uid')
+  assert.equal('emailVerified' in stored, false)
+})
+
+test('local demo accounts are always verified so local writes are never gated', () => {
+  const backend = new LocalBackend()
+
+  const user = backend.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' })
+
+  assert.equal(user.emailVerified, true)
+  assert.equal(backend.auth.getCurrentUser()?.emailVerified, true)
+  assert.equal(isEmailVerificationRequired(backend.provider, user.emailVerified), false)
+})
+
+test('local resend verification is a no-op and reload mirrors the active profile', () => {
+  const backend = new LocalBackend()
+  const user = backend.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' })
+
+  assert.doesNotThrow(() => backend.auth.resendEmailVerification())
+  assert.equal(backend.auth.reloadCurrentUser()?.id, user.id)
+
+  backend.auth.signOut()
+  assert.equal(backend.auth.reloadCurrentUser(), null)
 })
 
 test('local progress saves and resumes by user and lesson', () => {

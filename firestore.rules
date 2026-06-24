@@ -10,20 +10,43 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    function writesUserId(uid) {
+      return owns(uid) && request.resource.data.userId == uid;
+    }
+
     match /users/{uid} {
-      allow read, create, update, delete: if owns(uid);
+      allow read: if owns(uid);
+      // Profile bootstrap is intentionally allowed before email verification so a freshly
+      // created account can write its own user document immediately after sign-up.
+      allow create, update: if owns(uid) && request.resource.data.id == uid;
+      allow delete: if false;
     }
 
     match /progress/{uid}/lessons/{lessonId} {
-      allow read, write: if owns(uid);
+      allow read: if owns(uid);
+      // The stored lessonId must match the document path so a write cannot mislabel
+      // progress for a different lesson.
+      allow create, update: if writesUserId(uid) && verifiedEmail()
+        && request.resource.data.lessonId == lessonId;
+      allow delete: if false;
     }
 
     match /mastery/{uid}/skills/{skillId} {
-      allow read, write: if owns(uid);
+      allow read: if owns(uid);
+      // The stored skillId must match the document path so a write cannot mislabel
+      // mastery for a different skill.
+      allow create, update: if writesUserId(uid) && verifiedEmail()
+        && request.resource.data.skillId == skillId;
+      allow delete: if false;
     }
 
     match /attempts/{uid}/events/{eventId} {
-      allow read, create: if owns(uid);
+      allow read: if owns(uid);
+      allow create: if writesUserId(uid) && verifiedEmail() && request.resource.data.id == eventId;
       allow update, delete: if false;
     }
 
