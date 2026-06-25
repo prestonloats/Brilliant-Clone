@@ -53,7 +53,7 @@ test('validateAuthForm requires a display name only when creating an account', (
   )
 })
 
-test('local (passwordless) auth never requires or validates a password', () => {
+test('a credential-free provider (requiresPassword: false) never requires or validates a password', () => {
   assert.equal(
     validateAuthForm(values({ displayName: 'Maya', email: 'learner@example.com' }), {
       mode: 'signup',
@@ -68,7 +68,7 @@ test('local (passwordless) auth never requires or validates a password', () => {
     }),
     null,
   )
-  // A stray password value must not change local-mode validation: local mode never stores it.
+  // A stray password value must not change validation when the provider does not require one.
   assert.equal(
     validateAuthForm(values({ displayName: 'Maya', email: 'learner@example.com', password: 'x' }), {
       mode: 'signup',

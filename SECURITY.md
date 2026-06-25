@@ -51,18 +51,24 @@ The following behaviors are **intentional** for the current local MVP and are
 **not** considered vulnerabilities. Reports about them will likely be closed
 as by-design, so please review this list first.
 
-- **Local demo authentication is not real authentication.** The default
-  `LocalBackend` does not collect, store, or verify passwords. Local profile
-  resume is email-only and intended for a single-device demo. Do not use real
-  credentials with the local demo.
+- **Local demo authentication is not server-side authentication.** The default
+  `LocalBackend` collects a password and verifies it on log in, but everything
+  happens in the browser: the password is kept only as a salted, key-stretched
+  SHA-256 hash in `localStorage` (never as plaintext), so there is no server-side
+  credential boundary. It is intended for a single-device demo. Accounts created
+  before passwords were added migrate to the default password `123456` on first
+  log in. Do not reuse a real-world password with the local demo.
 - **Client-side storage.** Local profiles and progress live in the browser's
   `localStorage`, and the active session lives in tab-scoped `sessionStorage`.
   This data is not encrypted and is not synced to any server. Sign out before
   sharing a device or browser profile.
-- **No hosted backend yet.** Firebase and Supabase adapters are not wired into
-  the runtime. Selecting `VITE_BACKEND_PROVIDER=firebase` before the adapter is
-  complete causes the app to fail closed with a setup error rather than fall
-  back to local mode.
+- **Hosted backend is optional and off by default.** The Firebase adapter is
+  implemented and wired into startup, but it stays inert unless
+  `VITE_BACKEND_PROVIDER=firebase` is set together with a complete Firebase web
+  config; the default build runs the browser-only `LocalBackend`. Selecting
+  firebase mode before the config is complete causes the app to fail closed with
+  a setup error rather than fall back to local mode. (Supabase is documented as a
+  future adapter and is not implemented.)
 
 The following areas **are** in scope and we appreciate reports about them:
 
@@ -74,8 +80,8 @@ The following areas **are** in scope and we appreciate reports about them:
 - Gaps in `firestore.rules`. The intended posture is per-user ownership keyed
   to `request.auth.uid`, append-only attempt events, read-only published
   content, and default-deny for everything else.
-- Authentication, session, or authorization flaws in the hosted backend once
-  the Firebase adapter is wired in.
+- Authentication, session, or authorization flaws in the Firebase-backed
+  hosted mode (`VITE_BACKEND_PROVIDER=firebase`).
 - Vulnerable or malicious dependencies, and supply-chain or build-pipeline
   weaknesses. `npm audit` is expected to report zero vulnerabilities.
 
