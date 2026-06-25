@@ -303,7 +303,7 @@ export const likeTermsVariablesBothSidesLesson: Lesson = {
       type: 'concept',
       title: 'You gathered before solving',
       body: 'You classified variable and constant terms, combined like terms, caught a wrong sign move, and solved equations by moving variables to one side before using inverse operations.',
-      visual: 'balanced-scale',
+      visual: { left: '5x + 7', right: '2x + 19' },
     },
   ],
 }

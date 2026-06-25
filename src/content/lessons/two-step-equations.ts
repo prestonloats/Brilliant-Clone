@@ -321,7 +321,7 @@ export const twoStepEquationsLesson: Lesson = {
       type: 'concept',
       title: 'You solved in reverse order',
       body: 'Two-step equations are one-step equations chained together: undo the outside operation, keep both sides balanced, then undo what is attached to x.',
-      visual: 'balanced-scale',
+      visual: { left: '4x - 5', right: '19' },
     },
   ],
 }

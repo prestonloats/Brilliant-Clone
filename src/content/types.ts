@@ -34,7 +34,8 @@ export type ConceptStep = {
   type: 'concept'
   title: string
   body: string
-  visual?: 'balanced-scale' | 'unknown-box'
+  // A mini balance scale: a named preset, or an explicit { left, right } equation tuned to the concept.
+  visual?: 'balanced-scale' | 'unknown-box' | { left: string; right: string }
   // Optional example input-output tables shown to illustrate the concept (e.g. the tables lesson).
   tables?: { x: number[]; y: number[]; caption?: string }[]
 }

@@ -124,7 +124,7 @@ export const oneStepEquationsLesson: Lesson = {
       type: 'concept',
       title: 'Multiplication and division undo each other',
       body: 'If x is multiplied by 3, divide both sides by 3. If x is divided by 4, multiply both sides by 4.',
-      visual: 'balanced-scale',
+      visual: { left: '3x', right: '12' },
     },
     {
       id: 'model-division-jars',
