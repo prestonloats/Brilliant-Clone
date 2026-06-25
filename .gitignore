@@ -13,10 +13,61 @@ dist-tests
 dist-ssr
 *.local
 
-# Environment files
+# Environment files and local secret material
 .env
 .env.*
 !.env.example
+*.env
+*.env.*
+.envrc
+
+# Private keys and credential exports
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*service-account*.json
+*service_account*.json
+*credentials*.json
+*credentials*.yml
+*credentials*.yaml
+*credential*.json
+*credential*.yml
+*credential*.yaml
+*secret*.json
+*secret*.yml
+*secret*.yaml
+*secret*.txt
+*password*.json
+*password*.yml
+*password*.yaml
+*password*.txt
+*passwd*.json
+*passwd*.yml
+*passwd*.yaml
+*passwd*.txt
+*token*.json
+*token*.yml
+*token*.yaml
+*token*.txt
+*api-key*.json
+*api-key*.yml
+*api-key*.yaml
+*api-key*.txt
+*api_key*.json
+*api_key*.yml
+*api_key*.yaml
+*api_key*.txt
+*apikey*.json
+*apikey*.yml
+*apikey*.yaml
+*apikey*.txt
 
 # Editor directories and files
 .vscode/*
