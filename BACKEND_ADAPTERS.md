@@ -15,8 +15,9 @@ account**, and adapts its fields to the active provider:
 
 - Firebase mode renders email + password (and display name + confirm password on Create
   account) and calls Firebase Auth. It is the real credential provider.
-- Local mode renders only display name + email (Create account) or email (Log in) and stays
-  passwordless.
+- Local mode also renders email + password (and display name + confirm password on Create
+  account). It authenticates against an on-device salted-hash credential; plaintext passwords
+  are never stored.
 
 Form validation is centralized in `src/authValidation.ts` (`validateAuthForm`, `isValidEmail`,
 `PASSWORD_MIN_LENGTH`). These helpers are pure (no React/Firebase/browser APIs) so the UI and
@@ -25,18 +26,22 @@ password minimum stays in sync with `firebaseBackend.ts`.
 
 ## Current Local Demo Backend
 
-- `auth`: local account create/resume (passwordless), sign out, current user
+- `auth`: local account create (email + password), password-verified log in, sign out, current user
 - `progress`: exact lesson step resume
 - `mastery`: per-skill EWMA score
 - `attempts`: per-attempt event log
 
-Local demo auth deliberately does not collect or persist passwords, even though the shared
-`SignUpInput` type carries an optional `password` (used only by Firebase). The local adapter
-ignores any password value, so plaintext passwords are never written to browser storage. It
-resumes accounts by email in the same browser profile and keeps the active user in tab-scoped
-session storage to reduce shared-browser persistence risk. Repository methods guard user-owned
-reads and writes by the active local user, but this remains client-side demo storage and is not
-a production security boundary. Use Firebase mode for real, password-protected accounts.
+Local demo auth now collects a password on Create account and verifies it on Log in. It stores
+only a salted hash (`passwordHash` + `passwordSalt` on the stored local user) using the pure,
+synchronous credential helper in `src/auth/passwordCredential.ts`; the plaintext password is
+never written to browser storage and never leaks into the public `UserProfile`. Accounts that
+were persisted before passwords existed (no stored credential) are lazily migrated on their next
+sign-in to the default password `123456` (`DEFAULT_LEGACY_PASSWORD`). The local minimum password
+length matches `PASSWORD_MIN_LENGTH` (shared with Firebase). It keeps the active user in
+tab-scoped session storage to reduce shared-browser persistence risk. Repository methods guard
+user-owned reads and writes by the active local user, but this remains client-side demo storage
+(a salted hash in `localStorage`, not a server-side credential boundary) and is not a production
+security boundary. Use Firebase mode for real, password-protected accounts that sync across devices.
 
 ## Runtime Selection
 

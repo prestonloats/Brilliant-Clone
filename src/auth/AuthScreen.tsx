@@ -9,9 +9,9 @@ type AuthScreenProps = {
 }
 
 export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
-  // Firebase is the real credential provider (email + password). Local demo mode stays
-  // passwordless on purpose so no plaintext password is ever stored in the browser.
-  const requiresPassword = backend.provider === 'firebase'
+  // Both providers now require a password: Firebase via Firebase Authentication, and local
+  // mode via an on-device salted-hash credential (no plaintext password is ever stored).
+  const requiresPassword = true
   const [mode, setMode] = useState<AuthMode>('login')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -169,7 +169,7 @@ export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
         </button>
       </p>
 
-      {requiresPassword ? (
+      {backend.provider === 'firebase' ? (
         <p className="fine-print">
           Firebase mode uses Firebase Authentication email/password credentials and stores your
           progress in Firestore under your account. New accounts must verify their email before
@@ -177,12 +177,11 @@ export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
         </p>
       ) : (
         <p className="fine-print">
-          Local demo mode keeps your account on this device only and never collects a password.{' '}
-          {isSignup
-            ? 'Creating an account needs just a display name and email.'
-            : 'Log in resumes an account you created in this browser using its email.'}{' '}
-          Set <code>VITE_BACKEND_PROVIDER=firebase</code> with a configured Firebase project to
-          enable password-protected accounts that sync across devices. Sign out before sharing this
+          Local mode keeps your account on this device only, now protected by a password stored
+          only as a salted hash (never in plaintext). Accounts created before passwords were added
+          use the default password <code>123456</code> for now. Set{' '}
+          <code>VITE_BACKEND_PROVIDER=firebase</code> with a configured Firebase project to enable
+          password-protected accounts that sync across devices. Sign out before sharing this
           browser.
         </p>
       )}

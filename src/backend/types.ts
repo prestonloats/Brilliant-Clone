@@ -16,7 +16,7 @@ export type LocalDatabase = {
   attempts: AttemptEvent[]
 }
 
-export type LocalUser = UserProfile
+export type LocalUser = UserProfile & { passwordHash?: string; passwordSalt?: string }
 
 export type SignUpInput = {
   email: string
@@ -63,7 +63,7 @@ export type Backend = {
 export type LocalAuthRepository = {
   getCurrentUser(): UserProfile | null
   signUp(input: SignUpInput): UserProfile
-  signIn(email: string): UserProfile
+  signIn(email: string, password?: string): UserProfile
   signOut(): void
   resendEmailVerification(): void
   reloadCurrentUser(): UserProfile | null

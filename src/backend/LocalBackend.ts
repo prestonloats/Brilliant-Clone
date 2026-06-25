@@ -11,6 +11,8 @@ import type {
   LocalUser,
 } from './types'
 import { emptyDatabase, normalizeDatabase, validateSignUpInput } from './validation'
+import { DEFAULT_LEGACY_PASSWORD, hashPassword, verifyPassword } from '../auth/passwordCredential'
+import { PASSWORD_MIN_LENGTH } from '../authValidation'
 
 export const STORAGE_KEY = 'balance-local-backend-v1'
 export const SESSION_KEY = 'balance-local-session-v1'
@@ -63,16 +65,22 @@ export class LocalBackend implements Backend {
       signUp: (input) => {
         const db = this.read()
         const { email: normalizedEmail, displayName } = validateSignUpInput(input)
+        if (!input.password || input.password.length < PASSWORD_MIN_LENGTH) {
+          throw new Error('A password with at least 6 characters is required.')
+        }
         const existing = Object.values(db.users).find((user) => user.email === normalizedEmail)
         if (existing) {
           throw new Error('An account with that email already exists.')
         }
 
-        const user: UserProfile = {
+        const credential = hashPassword(input.password)
+        const user: LocalUser = {
           id: createId('user'),
           email: normalizedEmail,
           displayName,
           createdAt: new Date().toISOString(),
+          passwordHash: credential.hash,
+          passwordSalt: credential.salt,
         }
 
         db.users[user.id] = user
@@ -80,12 +88,29 @@ export class LocalBackend implements Backend {
         this.write(db)
         return toPublicUser(user)
       },
-      signIn: (email) => {
+      signIn: (email, password) => {
         const db = this.read()
         const normalizedEmail = email.trim().toLowerCase()
         const user = Object.values(db.users).find((candidate) => candidate.email === normalizedEmail)
         if (!user) {
           throw new Error('No local demo profile was found for that email.')
+        }
+
+        if (!password) {
+          throw new Error('Password is required.')
+        }
+
+        // Lazy migration: accounts persisted before per-user passwords are treated as having the
+        // default legacy password, so the stored credential is created on first sign-in.
+        if (!user.passwordHash || !user.passwordSalt) {
+          const migrated = hashPassword(DEFAULT_LEGACY_PASSWORD)
+          user.passwordHash = migrated.hash
+          user.passwordSalt = migrated.salt
+          this.write(db)
+        }
+
+        if (!verifyPassword(password, { hash: user.passwordHash!, salt: user.passwordSalt! })) {
+          throw new Error('Incorrect password.')
         }
 
         this.setCurrentUserId(user.id)

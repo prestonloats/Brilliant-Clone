@@ -44,13 +44,15 @@
   padding: 16px;
 }
 
-.continue-panel div {
+.continue-panel > div:not(.continue-actions) {
   display: grid;
   gap: 4px;
   text-align: left;
 }
 
 .continue-actions {
+  display: grid;
+  gap: 10px;
   justify-items: end;
 }
 
@@ -470,7 +472,7 @@
 .graph-node-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   margin-top: 2px;
 }
 

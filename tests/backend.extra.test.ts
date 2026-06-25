@@ -14,7 +14,7 @@ test('createBackend("local") returns a working in-memory backend', () => {
   const backend = createBackend('local')
   assert.ok(backend instanceof LocalBackend)
 
-  const user = backend.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' })
+  const user = backend.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
   assert.equal(backend.auth.getCurrentUser()?.id, user.id)
   assert.equal(user.avatarUrl, undefined)
   assert.equal(typeof user.createdAt, 'string')
@@ -49,7 +49,7 @@ test('signing out without an active session is a safe no-op', () => {
 
 test('local backend instances share the same window-backed storage and session', () => {
   const first = new LocalBackend()
-  const user = first.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' })
+  const user = first.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
 
   const second = new LocalBackend()
   assert.equal(second.auth.getCurrentUser()?.id, user.id)
@@ -70,9 +70,9 @@ test('read repositories also reject access for non-active users', () => {
 test('distinct profiles get separate ids and resume independently', () => {
   const backend = new LocalBackend()
 
-  const learner = backend.auth.signUp({ email: 'a@example.com', displayName: 'Aaa' })
+  const learner = backend.auth.signUp({ email: 'a@example.com', password: 'secret1', displayName: 'Aaa' })
   backend.auth.signOut()
-  const coach = backend.auth.signUp({ email: 'b@example.com', displayName: 'Bbb' })
+  const coach = backend.auth.signUp({ email: 'b@example.com', password: 'secret1', displayName: 'Bbb' })
 
   assert.notEqual(learner.id, coach.id)
   assert.equal(backend.auth.getCurrentUser()?.email, 'b@example.com')
@@ -82,7 +82,7 @@ test('distinct profiles get separate ids and resume independently', () => {
   assert.equal(Object.keys((JSON.parse(raw) as { users: Record<string, unknown> }).users).length, 2)
 
   backend.auth.signOut()
-  assert.equal(backend.auth.signIn('a@example.com').displayName, 'Aaa')
+  assert.equal(backend.auth.signIn('a@example.com', 'secret1').displayName, 'Aaa')
 })
 
 test('fresh users have empty mastery, attempt, and progress collections', () => {

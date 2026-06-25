@@ -11,7 +11,7 @@ import type {
 } from '../domain'
 import { lessons } from '../domain'
 import { isValidEmail } from '../authValidation'
-import type { LocalDatabase, SignUpInput } from './types'
+import type { LocalDatabase, LocalUser, SignUpInput } from './types'
 
 export const emptyDatabase = (): LocalDatabase => ({
   users: {},
@@ -101,6 +101,19 @@ export const normalizeUserProfile = (value: unknown): UserProfile | null => {
   }
 }
 
+// Local-only variant of normalizeUserProfile that additionally preserves the salted password
+// credential so stored hashes survive a reload. Plaintext `password` is intentionally never copied.
+export const normalizeLocalUser = (value: unknown): LocalUser | null => {
+  const profile = normalizeUserProfile(value)
+  if (!profile || !isRecord(value)) return null
+
+  return {
+    ...profile,
+    ...(typeof value.passwordHash === 'string' ? { passwordHash: value.passwordHash } : {}),
+    ...(typeof value.passwordSalt === 'string' ? { passwordSalt: value.passwordSalt } : {}),
+  }
+}
+
 const normalizeStepResults = (
   value: unknown,
   lessonId: LessonId,
@@ -185,7 +198,7 @@ export const normalizeDatabase = (value: unknown): LocalDatabase => {
   if (!isRecord(value)) return emptyDatabase()
 
   return {
-    users: normalizeRecordWith(value.users, normalizeUserProfile),
+    users: normalizeRecordWith(value.users, normalizeLocalUser),
     progress: normalizeRecordWith(value.progress, normalizeLessonProgress),
     mastery: normalizeRecordWith(value.mastery, (candidate) =>
       isSkillMastery(candidate) ? candidate : null,

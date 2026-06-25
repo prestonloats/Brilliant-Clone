@@ -70,6 +70,7 @@ test('local auth signs up, logs in, and logs out', () => {
 
   const user = backend.auth.signUp({
     email: ' learner@example.com ',
+    password: 'secret1',
     displayName: ' Learner One ',
   })
 
@@ -80,7 +81,7 @@ test('local auth signs up, logs in, and logs out', () => {
   backend.auth.signOut()
   assert.equal(backend.auth.getCurrentUser(), null)
 
-  const signedIn = backend.auth.signIn('learner@example.com')
+  const signedIn = backend.auth.signIn('learner@example.com', 'secret1')
   assert.equal(signedIn.id, user.id)
 })
 
@@ -104,6 +105,7 @@ test('local auth keeps the active session out of persistent storage', () => {
 
   const user = backend.auth.signUp({
     email: 'learner@example.com',
+    password: 'secret1',
     displayName: 'Learner',
   })
 
@@ -120,16 +122,18 @@ test('local auth normalizes email for resume and duplicate checks', () => {
 
   const user = backend.auth.signUp({
     email: ' Learner@Example.COM ',
+    password: 'secret1',
     displayName: 'Learner',
   })
 
   backend.auth.signOut()
 
-  assert.equal(backend.auth.signIn(' LEARNER@example.com ').id, user.id)
+  assert.equal(backend.auth.signIn(' LEARNER@example.com ', 'secret1').id, user.id)
   assert.throws(
     () =>
       backend.auth.signUp({
         email: 'learner@EXAMPLE.com',
+        password: 'secret1',
         displayName: 'Duplicate',
       }),
     /already exists/i,
@@ -159,15 +163,120 @@ test('local auth rejects missing demo profiles without changing session', () => 
   const backend = new LocalBackend()
   const user = backend.auth.signUp({
     email: 'learner@example.com',
+    password: 'secret1',
     displayName: 'Learner',
   })
 
-  assert.throws(() => backend.auth.signIn('missing@example.com'), /no local demo profile/i)
+  assert.throws(() => backend.auth.signIn('missing@example.com', 'secret1'), /no local demo profile/i)
   assert.equal(backend.auth.getCurrentUser()?.id, user.id)
 
   backend.auth.signOut()
 
-  assert.throws(() => backend.auth.signIn('missing@example.com'), /no local demo profile/i)
+  assert.throws(() => backend.auth.signIn('missing@example.com', 'secret1'), /no local demo profile/i)
+  assert.equal(backend.auth.getCurrentUser(), null)
+})
+
+test('local auth requires a password to sign up', () => {
+  const backend = new LocalBackend()
+
+  assert.throws(
+    () => backend.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' }),
+    /password/i,
+  )
+  assert.equal(backend.auth.getCurrentUser(), null)
+})
+
+test('local auth rejects a too-short password on sign up', () => {
+  const backend = new LocalBackend()
+
+  assert.throws(
+    () =>
+      backend.auth.signUp({ email: 'learner@example.com', password: '12345', displayName: 'Learner' }),
+    /password/i,
+  )
+  assert.equal(backend.auth.getCurrentUser(), null)
+})
+
+test('local auth signs in with the correct password', () => {
+  const backend = new LocalBackend()
+  const user = backend.auth.signUp({
+    email: 'learner@example.com',
+    password: 'secret1',
+    displayName: 'Learner',
+  })
+
+  backend.auth.signOut()
+
+  assert.equal(backend.auth.signIn('learner@example.com', 'secret1').id, user.id)
+})
+
+test('local auth rejects sign-in with an incorrect password without changing session', () => {
+  const backend = new LocalBackend()
+  backend.auth.signUp({
+    email: 'learner@example.com',
+    password: 'secret1',
+    displayName: 'Learner',
+  })
+  backend.auth.signOut()
+
+  assert.throws(
+    () => backend.auth.signIn('learner@example.com', 'wrong-password'),
+    /incorrect password/i,
+  )
+  assert.equal(backend.auth.getCurrentUser(), null)
+})
+
+test('local auth migrates legacy passwordless accounts to the default password', () => {
+  storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      users: {
+        'user-1': {
+          id: 'user-1',
+          email: 'legacy@example.com',
+          displayName: 'Legacy',
+          createdAt: '2026-06-23T00:00:00.000Z',
+        },
+      },
+      progress: {},
+      mastery: {},
+      attempts: [],
+    }),
+  )
+
+  const backend = new LocalBackend()
+
+  assert.equal(backend.auth.signIn('legacy@example.com', '123456').id, 'user-1')
+
+  const raw = storage.getItem(STORAGE_KEY) ?? ''
+  assert.match(raw, /passwordHash/)
+  assert.doesNotMatch(raw, /"password"/)
+})
+
+test('local auth rejects a legacy account sign-in with the wrong password', () => {
+  storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      users: {
+        'user-1': {
+          id: 'user-1',
+          email: 'legacy@example.com',
+          displayName: 'Legacy',
+          createdAt: '2026-06-23T00:00:00.000Z',
+        },
+      },
+      progress: {},
+      mastery: {},
+      attempts: [],
+    }),
+  )
+
+  const backend = new LocalBackend()
+
+  assert.throws(
+    () => backend.auth.signIn('legacy@example.com', 'not-the-default'),
+    /incorrect password/i,
+  )
   assert.equal(backend.auth.getCurrentUser(), null)
 })
 
@@ -280,7 +389,7 @@ test('firebase user serializer drops transient email verification state', () => 
 test('local demo accounts are always verified so local writes are never gated', () => {
   const backend = new LocalBackend()
 
-  const user = backend.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' })
+  const user = backend.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
 
   assert.equal(user.emailVerified, true)
   assert.equal(backend.auth.getCurrentUser()?.emailVerified, true)
@@ -289,7 +398,7 @@ test('local demo accounts are always verified so local writes are never gated', 
 
 test('local resend verification is a no-op and reload mirrors the active profile', () => {
   const backend = new LocalBackend()
-  const user = backend.auth.signUp({ email: 'learner@example.com', displayName: 'Learner' })
+  const user = backend.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
 
   assert.doesNotThrow(() => backend.auth.resendEmailVerification())
   assert.equal(backend.auth.reloadCurrentUser()?.id, user.id)
@@ -459,11 +568,12 @@ test('local backend ignores malformed persisted collections', () => {
   const backend = new LocalBackend()
 
   assert.equal(backend.auth.getCurrentUser(), null)
-  assert.equal(backend.auth.signIn('learner@example.com').id, 'user-1')
+  assert.equal(backend.auth.signIn('learner@example.com', '123456').id, 'user-1')
   assert.deepEqual(backend.progress.getLessonProgress('user-1', 'balancing-equations'), progress)
   assert.deepEqual(backend.mastery.getUserMastery('user-1'), [mastery])
   assert.deepEqual(backend.attempts.getAttempts('user-1'), [attempt])
   assert.doesNotMatch(storage.getItem(STORAGE_KEY) ?? '', /"password"/)
+  assert.doesNotMatch(storage.getItem(STORAGE_KEY) ?? '', /secret/)
 })
 
 test('local backend ignores malformed persisted progress records', () => {

@@ -69,8 +69,8 @@ test('sequential writes stay consistent through the cache', () => {
 
 test('generated identifiers are unique and use crypto.randomUUID when available', () => {
   const backend = new LocalBackend()
-  const first = backend.auth.signUp({ email: 'a@example.com', displayName: 'A' })
-  const second = backend.auth.signUp({ email: 'b@example.com', displayName: 'B' })
+  const first = backend.auth.signUp({ email: 'a@example.com', password: 'secret1', displayName: 'A' })
+  const second = backend.auth.signUp({ email: 'b@example.com', password: 'secret1', displayName: 'B' })
 
   assert.notEqual(first.id, second.id)
 

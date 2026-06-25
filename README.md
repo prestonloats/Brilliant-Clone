@@ -25,7 +25,7 @@ Vite prints the local URL in the terminal, usually `http://localhost:5173/`. If 
 The auth screen has two modes, **Log in** and **Create account**. What they ask for depends on the active backend provider (`VITE_BACKEND_PROVIDER`):
 
 - **Firebase mode (`firebase`) is the real credential provider.** Create account collects display name, email, password, and confirm password; Log in collects email and password. These map to Firebase Authentication email/password. New accounts must verify their email (via the "Verify your email" screen) before any learning progress is saved.
-- **Local mode (`local`, the default) is an intentionally passwordless on-device demo.** Create account needs only a display name and email; Log in resumes an account previously created in the same browser by its email. No password is collected or stored, so local mode never reintroduces plaintext password storage. To get real, password-protected accounts that sync across devices, configure Firebase and set `VITE_BACKEND_PROVIDER=firebase`.
+- **Local mode (`local`, the default) is a password-protected on-device demo.** Create account collects display name, email, password, and confirm password; Log in collects email and password. Passwords are stored only as a salted hash in browser storage (never plaintext). Accounts created before passwords were added default to the password `123456` on their next log in (there is no change-password screen yet). Local accounts and progress stay on this device only; to get accounts that sync across devices, configure Firebase and set `VITE_BACKEND_PROVIDER=firebase`.
 
 The app never silently falls back from Firebase to local: if Firebase mode is selected with incomplete config, startup fails closed with a setup error.
 
@@ -33,7 +33,7 @@ The app never silently falls back from Firebase to local: if Firebase mode is se
 
 Use this checklist after local changes to confirm the core learning loop still works:
 
-- Use **Create account** (display name + email) or **Log in** (email) on the local-mode auth screen. Do not use real credentials in local mode; it is passwordless by design.
+- Use **Create account** (display name + email + password) or **Log in** (email + password) on the local-mode auth screen. Do not reuse a real-world password in local mode; it is stored only as a salted hash on this device.
 - Start `Balancing Equations`, complete it end to end, and confirm `One-Step Equations` unlocks.
 - Complete `One-Step Equations`, confirm `Two-Step Equations` unlocks, then complete it and confirm the Lesson 4 shell unlocks.
 - Confirm the path shows all six Algebra Foundations parts, with Lessons 4-6 kept as lightweight content shells.
@@ -47,8 +47,8 @@ The MVP backend is browser-local only. Local demo profiles and learning progress
 
 Local demo mode is not production authentication:
 
-- It does not collect, store, or verify passwords. The auth screen hides the password fields entirely in local mode.
-- Log in (resume) is email-only and is intended for a single-device demo.
+- It collects a password and verifies it on log in, but stores only a salted hash (no plaintext) in browser storage; this is not a server-side credential boundary. Preexisting passwordless accounts default to the password `123456`.
+- Log in is email + password and is intended for a single-device demo.
 - The active session is kept in tab-scoped browser session storage, so closing the browser can sign the learner out.
 - Progress remains in browser local storage until that storage is cleared.
 - Sign out before sharing a device or browser profile.
@@ -82,7 +82,7 @@ Firebase email/password sign-up verifies email ownership before any course data 
 - On sign-up the app calls `sendEmailVerification` for the new account.
 - Until the email is verified, Firebase users land on a "Verify your email" screen with a resend action and an "I verified my email" button that reloads the live verification state.
 - Learning-data writes (progress, mastery, attempts) are blocked for unverified accounts both client-side (a clear in-app error) and in `firestore.rules` (`request.auth.token.email_verified == true`). Profile bootstrap (`users/{uid}`) and all reads, including lesson content, remain allowed so a new account can be created and the app stays usable.
-- Local demo mode is unaffected: local accounts have no password and are always treated as verified, so they never see the verification gate.
+- Local demo mode is unaffected: local accounts have no email-ownership step and are always treated as verified, so they never see the verification gate (even though local mode now uses a password).
 
 Current Firebase files:
 
