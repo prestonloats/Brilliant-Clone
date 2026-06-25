@@ -28,6 +28,7 @@
 
 .physical-balance-card {
   max-width: 900px;
+  justify-self: center;
 }
 
 .lesson-card h1 {
