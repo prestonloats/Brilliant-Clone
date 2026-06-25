@@ -12,8 +12,8 @@ import type {
 } from './types'
 import { emptyDatabase, normalizeDatabase, validateSignUpInput } from './validation'
 
-const STORAGE_KEY = 'balance-local-backend-v1'
-const SESSION_KEY = 'balance-local-session-v1'
+export const STORAGE_KEY = 'balance-local-backend-v1'
+export const SESSION_KEY = 'balance-local-session-v1'
 
 export const createId = (prefix: string) => {
   const cryptoApi = globalThis.crypto
@@ -94,7 +94,6 @@ export class LocalBackend implements Backend {
       },
       signOut: () => {
         this.clearCurrentUserId()
-        this.write(this.read())
       },
       resendEmailVerification: () => {
         // Local demo accounts have no email to verify, so this is intentionally a no-op.

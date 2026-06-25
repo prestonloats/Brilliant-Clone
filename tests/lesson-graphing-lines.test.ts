@@ -2,12 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { graphingLinesLesson } from '../src/domain'
-import type { LessonStep, SliderHintWhen } from '../src/domain'
+import type { SliderHintWhen } from '../src/domain'
 import { checkInputStep, checkOperationChoiceStep, checkSliderStep } from '../src/engine'
-import { findHintText, findStep as findLessonStep } from './helpers/findStep'
+import { findHintText, findStepIn } from './helpers/findStep'
 
-const findStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
-  findLessonStep(graphingLinesLesson, id, type)
+const findStep = findStepIn(graphingLinesLesson)
 
 test('graphing-lines match-line slider accepts the described slope and intercept', () => {
   const matchLine = findStep('match-slope-intercept-line', 'slider')

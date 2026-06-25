@@ -1,9 +1,4 @@
-// Public backend barrel.
-//
-// The backend (shared types, runtime validation/normalization, the local-storage backend, and
-// the provider factory) now lives under `src/backend/*`, split so each concern can be edited in
-// isolation. This file re-exports the same public API so every existing import from './backend'
-// keeps working unchanged.
+// Public backend barrel: re-exports the split `src/backend/*` modules as the stable `./backend` API.
 
 export type { Backend, SignUpInput } from './backend/types'
 

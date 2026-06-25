@@ -24,7 +24,6 @@ export const twoStepEquationsLesson: Lesson = {
           { id: 'left-minus-5', label: '-5', value: -5, kind: 'weight', locked: true },
         ],
         right: [{ id: 'right-19', label: '19', value: 19, kind: 'weight', locked: true }],
-        unknownValue: 24,
       },
       operations: [
         { id: 'add-five-both', label: '+5 to both sides', amount: 5, sides: 'both' },

@@ -24,11 +24,13 @@ export function LessonPlayer({ lesson, step, progress, onBack, onStepComplete }:
   // browse already-completed steps (read-only) without disturbing their saved progress.
   const [viewIndex, setViewIndex] = useState(progress.currentStepIndex)
 
-  // Whenever real progress advances (the learner answers the live step), follow it forward so
-  // a review detour always returns them to where they left off.
-  useEffect(() => {
+  // Follow real progress forward (the learner answered the live step) so a review detour always
+  // returns them to where they left off. Adjusting during render avoids a flash of the prior step.
+  const [trackedStepIndex, setTrackedStepIndex] = useState(progress.currentStepIndex)
+  if (trackedStepIndex !== progress.currentStepIndex) {
+    setTrackedStepIndex(progress.currentStepIndex)
     setViewIndex(progress.currentStepIndex)
-  }, [progress.currentStepIndex])
+  }
 
   const isReviewing = viewIndex < progress.currentStepIndex
   const viewedStep = isReviewing ? lesson.steps[viewIndex] : step

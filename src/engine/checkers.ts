@@ -5,7 +5,7 @@
 // (hint -> explanation -> reveal) through the shared `buildWrongResult` helper. The balance
 // checker reuses the `sideTotal`/`isLevel` predicates from the balance module.
 
-import type { BalanceState, LessonStep, PlotPoint } from '../domain'
+import type { BalanceHintWhen, BalanceState, LessonStep, PlotPoint } from '../domain'
 import type { BalanceCheckMeta, CheckResult } from './types'
 import { isLevel, sideTotal } from './balance'
 
@@ -102,7 +102,7 @@ const makeHintHelpers = <W extends string>(
       explanation: step.feedback.incorrect,
       reveal: step.feedback.reveal,
     })
-  return { hintFor, wrong }
+  return { wrong }
 }
 
 const safeEvaluateNumber = (value: string) => {
@@ -412,8 +412,6 @@ export const checkDragTermsStep = (
   return wrong('incomplete')
 }
 
-type BalanceHintWhen = 'not-level' | 'missing-item' | 'one-side-only' | 'not-isolated' | 'default'
-
 export const checkBalanceStep = (
   step: Extract<LessonStep, { type: 'balance' }>,
   state: BalanceState,
@@ -434,18 +432,6 @@ export const checkBalanceStep = (
   }
 
   if (step.goal.type === 'level') {
-    // Combine the single-block shorthand and the multi-block list, then require EVERY listed
-    // block to sit on its named pan. With a full required list this rejects the trivially
-    // empty scale (0 = 0) and any mirrored/decoy arrangement that happens to be level but
-    // does not place each block where it belongs.
-    const required = [
-      ...(step.goal.requireItemOnSide ? [step.goal.requireItemOnSide] : []),
-      ...(step.goal.requireItemsOnSide ?? []),
-    ]
-    const requiredMet = required.every((placement) =>
-      state[placement.side].some((item) => item.id === placement.itemId),
-    )
-
     // Side-agnostic requirement: every listed block must sit on EITHER pan (not the tray).
     // This rejects the empty 0 = 0 start without pinning blocks to a side, so both mirror
     // arrangements that are level (e.g. {3,2} vs {5}) count as solved.
@@ -453,7 +439,7 @@ export const checkBalanceStep = (
       [...state.left, ...state.right].some((item) => item.id === itemId),
     )
 
-    if (!requiredMet || !placedMet) {
+    if (!placedMet) {
       return wrong('missing-item')
     }
 

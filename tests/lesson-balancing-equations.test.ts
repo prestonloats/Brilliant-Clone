@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { balancingEquationsLesson, type BalanceState, type LessonStep } from '../src/domain'
+import { balancingEquationsLesson, type BalanceState } from '../src/domain'
 import { applyBalanceOperation, checkBalanceStep, checkInputStep, checkSequenceStep, isLevel } from '../src/engine'
-import { findStep } from './helpers/findStep'
+import { findStepIn } from './helpers/findStep'
 
-const lessonStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
-  findStep(balancingEquationsLesson, id, type)
+const lessonStep = findStepIn(balancingEquationsLesson)
 
 // --- Task A: the "make it level" drag interaction ---------------------------------
 

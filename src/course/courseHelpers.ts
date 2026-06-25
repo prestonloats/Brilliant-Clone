@@ -7,7 +7,7 @@ import {
   type ProgressByLesson,
 } from '../engine'
 
-export type LessonCompletionState = 'not-completed' | 'review-suggested' | 'completed' | 'mastered'
+type LessonCompletionState = 'not-completed' | 'review-suggested' | 'completed' | 'mastered'
 
 export function formatList(items: string[]) {
   if (items.length <= 1) return items[0] ?? ''
@@ -94,7 +94,12 @@ export function getCompletionState(
 function hasMasteryGradeCompletion(lesson: Lesson, progress: LessonProgress) {
   const best = getBestLessonScore(lesson, progress)
   if (!best) return isCleanCompletion(lesson, progress)
-  return best.assessedStepCount === 0 || best.correctFirstTryCount === best.assessedStepCount
+  return isPerfectScore(best)
+}
+
+// A perfect run: no assessed steps, or every assessed step right on the first try (100%).
+export function isPerfectScore(score: LessonScore): boolean {
+  return score.assessedStepCount === 0 || score.correctFirstTryCount === score.assessedStepCount
 }
 
 export function getAverageLessonMastery(lesson: Lesson, mastery: SkillMastery[]) {

@@ -9,12 +9,11 @@ import {
   checkSequenceStep,
   isAssessedLessonStep,
 } from '../src/engine'
-import { findHintText, findStep } from './helpers/findStep'
+import { findHintText, findStepIn } from './helpers/findStep'
 
 const lesson = likeTermsVariablesBothSidesLesson
 
-const getStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
-  findStep(lesson, id, type)
+const getStep = findStepIn(lesson)
 
 const dragTermsHintText = (
   step: Extract<LessonStep, { type: 'dragTerms' }>,

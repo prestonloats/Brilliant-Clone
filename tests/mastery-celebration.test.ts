@@ -68,7 +68,6 @@ test('a mastered lesson produces a full node celebration', () => {
 
   const celebration = getNodeMasteryCelebration(sampleLesson, progress, fullMastery)
   assert.equal(celebration.isMastered, true)
-  assert.equal(celebration.badgeLabel, 'Mastered')
   assert.equal(celebration.className, 'is-mastered')
   assert.ok(celebration.icon.length > 0)
 })
@@ -88,7 +87,6 @@ test('a completed-but-not-clean run is "completed", not mastered', () => {
 
   const celebration = getNodeMasteryCelebration(sampleLesson, dirty, fullMastery)
   assert.equal(celebration.isMastered, false)
-  assert.equal(celebration.badgeLabel, '')
   assert.equal(celebration.icon, '')
   assert.equal(celebration.className, '')
 })
@@ -146,7 +144,6 @@ test('a retake of a mastered lesson keeps the mastered node visuals', () => {
   const celebration = getNodeMasteryCelebration(sampleLesson, retake, fullMastery)
   assert.equal(celebration.isMastered, true)
   assert.equal(celebration.className, 'is-mastered')
-  assert.equal(celebration.badgeLabel, 'Mastered')
   assert.ok(celebration.icon.length > 0)
 })
 
@@ -181,14 +178,11 @@ test('course summary keeps mastered subjects counted while they are being retake
 
   const summary = getCourseMasterySummary(algebraCourse, lessons, progressByLesson, fullMastery)
   assert.equal(summary.masteredCount, 1)
-  assert.deepEqual(summary.masteredLessonIds, [id])
-  assert.equal(summary.completedCount, 1)
 })
 
 test('a lesson with no progress is not mastered', () => {
   const celebration = getNodeMasteryCelebration(sampleLesson, undefined, fullMastery)
   assert.equal(celebration.isMastered, false)
-  assert.equal(celebration.badgeLabel, '')
   assert.equal(celebration.icon, '')
   assert.equal(celebration.className, '')
 })
@@ -197,10 +191,8 @@ test('course summary with no progress is all zeros but still has copy', () => {
   const summary = getCourseMasterySummary(algebraCourse, lessons, {}, [])
   assert.equal(summary.totalLessons, 6)
   assert.equal(summary.masteredCount, 0)
-  assert.equal(summary.completedCount, 0)
   assert.equal(summary.percentMastered, 0)
   assert.equal(summary.allMastered, false)
-  assert.deepEqual(summary.masteredLessonIds, [])
   assert.ok(summary.headline.length > 0)
   assert.ok(summary.message.length > 0)
 })
@@ -210,10 +202,7 @@ test('course summary reflects exactly two mastered subjects', () => {
   const summary = getCourseMasterySummary(algebraCourse, lessons, masterLessons(ids), fullMastery)
 
   assert.equal(summary.masteredCount, 2)
-  assert.equal(summary.completedCount, 2)
   assert.equal(summary.allMastered, false)
-  assert.equal(summary.masteredLessonIds.length, 2)
-  assert.deepEqual(summary.masteredLessonIds, ids)
   assert.equal(summary.percentMastered, Math.round((2 / 6) * 100))
   assert.ok(summary.headline.includes('2'))
   assert.ok(summary.headline.includes('6'))
@@ -229,10 +218,8 @@ test('course summary celebrates a fully mastered course', () => {
   )
 
   assert.equal(summary.masteredCount, 6)
-  assert.equal(summary.completedCount, 6)
   assert.equal(summary.allMastered, true)
   assert.equal(summary.percentMastered, 100)
-  assert.deepEqual(summary.masteredLessonIds, algebraCourse.lessonOrder)
   assert.ok(summary.headline.includes(algebraCourse.title))
   assert.ok(summary.message.length > 0)
 })
@@ -243,10 +230,8 @@ test('an empty course yields a safe, zeroed summary (no divide-by-zero)', () => 
 
   assert.equal(summary.totalLessons, 0)
   assert.equal(summary.masteredCount, 0)
-  assert.equal(summary.completedCount, 0)
   assert.equal(summary.percentMastered, 0)
   assert.equal(summary.allMastered, false)
-  assert.deepEqual(summary.masteredLessonIds, [])
   assert.ok(summary.headline.length > 0)
   assert.ok(summary.message.length > 0)
 })

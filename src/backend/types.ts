@@ -1,9 +1,4 @@
-// Shared backend types.
-//
-// Leaf module for the backend: it owns the local-store shapes, the sign-up input, the async
-// repository interfaces (and their synchronous local variants), and the top-level Backend and
-// factory-option types. It only imports content-model types from the domain barrel so the
-// other backend modules can build on it without creating cycles.
+// Shared backend types: local-store shapes, sign-up input, and the async repository / Backend contracts (plus their sync local variants).
 
 import type {
   AttemptEvent,

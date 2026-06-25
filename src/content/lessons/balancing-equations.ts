@@ -115,7 +115,6 @@ export const balancingEquationsLesson: Lesson = {
           { id: 'left-2', label: '2', value: 2, kind: 'weight', locked: true },
         ],
         right: [{ id: 'right-5', label: '5', value: 5, kind: 'weight', locked: true }],
-        unknownValue: 3,
       },
       operations: [
         { id: 'remove-two-both', label: '-2 from both sides', amount: -2, sides: 'both' },
@@ -153,7 +152,6 @@ export const balancingEquationsLesson: Lesson = {
           { id: 'left-4', label: '4', value: 4, kind: 'weight', locked: true },
         ],
         right: [{ id: 'right-9', label: '9', value: 9, kind: 'weight', locked: true }],
-        unknownValue: 5,
       },
       operations: [
         { id: 'subtract-four-both', label: '-4 from both sides', amount: -4, sides: 'both' },

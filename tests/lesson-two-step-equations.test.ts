@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { lessons, type LessonStep } from '../src/domain'
+import { lessons } from '../src/domain'
 import { checkInputStep, checkManipulativeStep, checkSequenceStep } from '../src/engine'
-import { findHintText, findStep } from './helpers/findStep'
+import { findHintText, findStepIn } from './helpers/findStep'
 
 const twoStep = lessons['two-step-equations']
 
-const step = <Type extends LessonStep['type']>(id: string, type: Type) =>
-  findStep(twoStep, id, type)
+const step = findStepIn(twoStep)
 
 test('two-step lesson keeps a concept summary last and the new content before it', () => {
   const steps = twoStep.steps

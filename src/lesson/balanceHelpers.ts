@@ -30,31 +30,9 @@ export function reconstructSolvedBalanceState(step: BalanceStep): BalanceState |
     if (checkBalanceStep(step, candidate, {}).correct) return candidate
   }
 
-  // Level goals with required placements: move every required block onto its target pan
-  // (pulled from the tray or whichever pan it currently sits on), then verify the result is
-  // genuinely solved. This rebuilds multi-block "build the scale" steps where no single
-  // bank placement alone solves the goal.
+  // Level goals: no single bank placement solves multi-block "build the scale" steps, so
+  // rebuild the solved state from the side-agnostic required placements below.
   if (step.goal.type === 'level') {
-    const required = [
-      ...(step.goal.requireItemOnSide ? [step.goal.requireItemOnSide] : []),
-      ...(step.goal.requireItemsOnSide ?? []),
-    ]
-    if (required.length > 0) {
-      const allItems = [...base.left, ...base.right, ...(base.bank ?? [])]
-      const isRequired = (item: BalanceItem) => required.some((placement) => placement.itemId === item.id)
-      const candidate: BalanceState = {
-        ...base,
-        left: base.left.filter((item) => !isRequired(item)),
-        right: base.right.filter((item) => !isRequired(item)),
-        bank: (base.bank ?? []).filter((item) => !isRequired(item)),
-      }
-      required.forEach((placement) => {
-        const item = allItems.find((candidateItem) => candidateItem.id === placement.itemId)
-        if (item) candidate[placement.side] = [...candidate[placement.side], item]
-      })
-      if (checkBalanceStep(step, candidate, {}).correct) return candidate
-    }
-
     // Side-agnostic placements: every listed block must end up on a pan, but either pan is
     // valid, so search all left/right assignments of those blocks for one the checker accepts
     // as a genuinely level scale. Other (non-required) items keep their current placement.

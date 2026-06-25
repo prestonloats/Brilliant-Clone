@@ -1,9 +1,4 @@
-// Backend factory and attempt-event builder.
-//
-// `createBackend` selects the provider: for `'firebase'` it returns the pre-built adapter the
-// caller passes in via `options.firebaseBackend` (refusing to silently fall back to local),
-// otherwise it constructs a fresh `LocalBackend`. `createAttemptEvent` stamps a new attempt
-// record, reusing the local backend's `createId` for a consistent id scheme.
+// Backend provider factory (`createBackend`, which refuses to fall back to local) and attempt-event builder.
 
 import type { AttemptEvent, LessonId } from '../domain'
 import type { Backend, BackendProvider, CreateBackendOptions } from './types'

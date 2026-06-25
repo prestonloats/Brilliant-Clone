@@ -124,22 +124,15 @@ export type BalanceState = {
   left: BalanceItem[]
   right: BalanceItem[]
   bank?: BalanceItem[]
-  unknownValue?: number
 }
 
 type BalanceGoal =
   | {
       type: 'level'
-      // A single required placement, kept as a shorthand for the simple one-block case.
-      requireItemOnSide?: { itemId: string; side: BalanceSide }
-      // Multiple required placements: every listed block must sit on its named pan for the
-      // step to count as solved. This forces the learner to build the whole balanced scale
-      // from the tray instead of leaving the pans trivially empty (0 = 0).
-      requireItemsOnSide?: { itemId: string; side: BalanceSide }[]
       // Side-agnostic placement: every listed block id must sit on EITHER pan (i.e. not be
-      // left in the tray). Like requireItemsOnSide this rejects the trivially empty 0 = 0
-      // scale, but without pinning any block to a particular side, so mirror-image
-      // arrangements that are equally level both count as solved.
+      // left in the tray). This rejects the trivially empty 0 = 0 scale without pinning any
+      // block to a particular side, so mirror-image arrangements that are equally level both
+      // count as solved.
       requirePlacedItems?: string[]
     }
   | { type: 'isolate'; unknownId: string; value: number }
@@ -150,6 +143,9 @@ export type BalanceOperation = {
   amount: number
   sides: 'both' | BalanceSide
 }
+
+// Escalating, situation-specific balance hints. `default` is the fallback.
+export type BalanceHintWhen = 'not-level' | 'missing-item' | 'one-side-only' | 'not-isolated' | 'default'
 
 export type BalanceStep = {
   id: string
@@ -163,7 +159,7 @@ export type BalanceStep = {
     correct: string
     explanation?: string
     hints: {
-      when: 'not-level' | 'missing-item' | 'one-side-only' | 'not-isolated' | 'default'
+      when: BalanceHintWhen
       text: string
     }[]
     reveal: string

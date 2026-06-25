@@ -2,12 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { oneStepEquationsLesson } from '../src/domain'
-import type { LessonStep, ManipulativeHintWhen } from '../src/domain'
+import type { ManipulativeHintWhen } from '../src/domain'
 import { checkInputStep, checkManipulativeStep } from '../src/engine'
-import { findHintText, findStep as findLessonStep } from './helpers/findStep'
+import { findHintText, findStepIn } from './helpers/findStep'
 
-const findStep = <Type extends LessonStep['type']>(id: string, type: Type) =>
-  findLessonStep(oneStepEquationsLesson, id, type)
+const findStep = findStepIn(oneStepEquationsLesson)
 
 test('one-step division manipulative discovers x by building the product, not pre-counting it', () => {
   const jars = findStep('model-division-jars', 'manipulative')

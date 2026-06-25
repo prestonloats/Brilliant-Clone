@@ -24,7 +24,6 @@ export const oneStepEquationsLesson: Lesson = {
           { id: 'left-minus-3', label: '-3', value: -3, kind: 'weight', locked: true },
         ],
         right: [{ id: 'right-4', label: '4', value: 4, kind: 'weight', locked: true }],
-        unknownValue: 7,
       },
       operations: [
         { id: 'add-three-both', label: '+3 to both sides', amount: 3, sides: 'both' },

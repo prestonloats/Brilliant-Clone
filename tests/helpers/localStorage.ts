@@ -1,5 +1,6 @@
-export const STORAGE_KEY = 'balance-local-backend-v1'
-export const SESSION_KEY = 'balance-local-session-v1'
+import { SESSION_KEY, STORAGE_KEY } from '../../src/backend/LocalBackend'
+
+export { SESSION_KEY, STORAGE_KEY }
 
 export class MemoryStorage {
   private values = new Map<string, string>()

@@ -3,24 +3,9 @@ import { beforeEach, test } from 'node:test'
 
 import { createAttemptEvent, LocalBackend } from '../src/backend'
 import { applyBalanceOperation } from '../src/engine'
-import type { BalanceOperation, BalanceState, LessonProgress } from '../src/domain'
+import type { BalanceOperation, BalanceState } from '../src/domain'
 import { installLocalStorage, MemoryStorage, setActiveUser, STORAGE_KEY } from './helpers/localStorage'
-
-const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
-  userId,
-  lessonId: 'balancing-equations',
-  status: 'inProgress',
-  currentStepIndex,
-  stepResults: {
-    'input-box-value': {
-      correct: true,
-      attempts: 1,
-      feedback: 'Yes.',
-    },
-  },
-  startedAt: '2026-06-23T00:00:00.000Z',
-  updatedAt: '2026-06-23T00:01:00.000Z',
-})
+import { lessonProgress } from './helpers/fixtures'
 
 const uuidSuffix = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 

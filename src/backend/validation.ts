@@ -1,10 +1,4 @@
-// Runtime guards, normalizers, and input validation.
-//
-// Everything that defends the local store against untrusted JSON lives here: the small
-// primitive guards, the per-shape type guards (used by both the local and Firebase backends),
-// the normalizers that rebuild a clean `LocalDatabase` from parsed storage, and the sign-up
-// validator. `emptyDatabase` lives alongside `normalizeDatabase` (its only callers are here and
-// in `LocalBackend`) so this module stays a self-contained, dependency-free-of-siblings leaf.
+// Runtime guards, normalizers, and sign-up validation that defend the local store against untrusted JSON.
 
 import type {
   AttemptEvent,

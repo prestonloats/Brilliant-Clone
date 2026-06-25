@@ -30,24 +30,9 @@ import {
   setActiveUser,
   STORAGE_KEY,
 } from './helpers/localStorage'
+import { lessonProgress } from './helpers/fixtures'
 
 let storage: MemoryStorage
-
-const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
-  userId,
-  lessonId: 'balancing-equations',
-  status: 'inProgress',
-  currentStepIndex,
-  stepResults: {
-    'input-box-value': {
-      correct: true,
-      attempts: 1,
-      feedback: 'Yes.',
-    },
-  },
-  startedAt: '2026-06-23T00:00:00.000Z',
-  updatedAt: '2026-06-23T00:01:00.000Z',
-})
 
 const lessonScore = (scorePercent = 80): LessonScore => ({
   scorePercent,

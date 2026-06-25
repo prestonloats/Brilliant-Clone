@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { checkManipulativeStep } from '../../engine'
 import type { ManipulativeStep, StepResult } from '../../domain'
 import type { CompleteOptions } from '../types'
+import { MAX_POOL_CHIPS } from './constants'
 import { describeManipulativeGoal } from './manipulativeHelpers'
 import { StepFeedback } from './StepFeedback'
 import { useCheckableStep } from './useCheckableStep'
@@ -37,7 +38,7 @@ export function ManipulativeBuildView({
   const chipGlyph = step.object.emoji ?? step.object.label.slice(0, 1).toUpperCase()
   const objectName = step.object.label
   const plural = (count: number) => `${objectName}${count === 1 ? '' : 's'}`
-  const poolChips = Math.min(remaining, 12)
+  const poolChips = Math.min(remaining, MAX_POOL_CHIPS)
 
   const adjustGroups = (delta: number) => {
     setNumGroups((current) => {

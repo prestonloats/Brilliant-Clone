@@ -20,11 +20,6 @@
     grid-template-columns: 1fr;
   }
 
-  .path-actions {
-    align-items: start;
-    justify-items: start;
-  }
-
   .continue-panel {
     flex-direction: column;
   }

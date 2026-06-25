@@ -171,22 +171,6 @@
   margin-top: 8px;
 }
 
-.path-actions {
-  align-items: end;
-  display: grid;
-  gap: 8px;
-  justify-items: end;
-}
-
-.path-actions button {
-  background: var(--surface-strong);
-  color: var(--accent-strong);
-  font-size: 13px;
-  font-weight: 700;
-  min-height: 44px;
-  padding: 8px 12px;
-}
-
 .node-number,
 .status-pill {
   border-radius: 999px;

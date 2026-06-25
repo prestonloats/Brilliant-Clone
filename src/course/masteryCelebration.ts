@@ -7,19 +7,15 @@
 
 import type { Course, Lesson, LessonId, LessonProgress, SkillMastery } from '../domain'
 import { getBestLessonScore, hasCompletedLesson, MASTERY_READY_THRESHOLD, type ProgressByLesson } from '../engine'
-import { getAverageLessonMastery, getCompletionState } from './courseHelpers'
+import { getAverageLessonMastery, getCompletionState, isPerfectScore } from './courseHelpers'
 
 export type NodeMasteryCelebration = {
   isMastered: boolean
-  // 'Mastered' when mastered, '' otherwise.
-  badgeLabel: string
   // A short celebratory glyph when mastered, '' otherwise.
   icon: string
-  // 'is-mastered' when mastered, '' otherwise.
   className: string
 }
 
-const MASTERY_BADGE_LABEL = 'Mastered'
 const MASTERY_ICON = '🏆'
 const MASTERY_CLASS_NAME = 'is-mastered'
 
@@ -28,14 +24,14 @@ const MASTERY_CLASS_NAME = 'is-mastered'
 function hasCleanCompletion(lesson: Lesson, progress: LessonProgress | undefined): boolean {
   const best = getBestLessonScore(lesson, progress)
   if (!best) return false
-  return best.assessedStepCount === 0 || best.correctFirstTryCount === best.assessedStepCount
+  return isPerfectScore(best)
 }
 
 // True when a subject should wear its mastered visuals on the Path page: either it is
 // mastered right now, OR it is being retaken after a previous mastered completion. A retake
 // resets the live run to `inProgress`, so without this the gold/trophy/sparkle treatment
 // would vanish the moment a learner reopens a subject they already mastered.
-export function isLessonMasteredForDisplay(
+function isLessonMasteredForDisplay(
   lesson: Lesson,
   progress: LessonProgress | undefined,
   mastery: SkillMastery[],
@@ -56,12 +52,11 @@ export function getNodeMasteryCelebration(
   const isMastered = isLessonMasteredForDisplay(lesson, progress, mastery)
 
   if (!isMastered) {
-    return { isMastered: false, badgeLabel: '', icon: '', className: '' }
+    return { isMastered: false, icon: '', className: '' }
   }
 
   return {
     isMastered: true,
-    badgeLabel: MASTERY_BADGE_LABEL,
     icon: MASTERY_ICON,
     className: MASTERY_CLASS_NAME,
   }
@@ -70,13 +65,8 @@ export function getNodeMasteryCelebration(
 export type CourseMasterySummary = {
   totalLessons: number
   masteredCount: number
-  // Lessons whose completion state is not 'not-completed'.
-  completedCount: number
-  // Math.round(masteredCount / totalLessons * 100), 0 when totalLessons is 0.
   percentMastered: number
   allMastered: boolean
-  // Mastered lesson ids in course.lessonOrder order.
-  masteredLessonIds: LessonId[]
   headline: string
   message: string
 }
@@ -89,15 +79,12 @@ export function getCourseMasterySummary(
 ): CourseMasterySummary {
   const totalLessons = course.lessonOrder.length
   const masteredLessonIds: LessonId[] = []
-  let completedCount = 0
 
   for (const lessonId of course.lessonOrder) {
     const lesson = lessonsById[lessonId]
     if (!lesson) continue
 
     const progress = progressByLesson[lessonId]
-    // Count "ever completed" so an in-progress retake of a finished subject still counts.
-    if (hasCompletedLesson(progress)) completedCount += 1
     if (isLessonMasteredForDisplay(lesson, progress, mastery)) masteredLessonIds.push(lessonId)
   }
 
@@ -109,10 +96,8 @@ export function getCourseMasterySummary(
   return {
     totalLessons,
     masteredCount,
-    completedCount,
     percentMastered,
     allMastered,
-    masteredLessonIds,
     headline: copy.headline,
     message: copy.message,
   }

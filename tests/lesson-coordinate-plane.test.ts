@@ -4,10 +4,9 @@ import { test } from 'node:test'
 import { coordinatePlaneLesson } from '../src/content/lessons/coordinate-plane'
 import type { LessonStep, PlotHintWhen } from '../src/content/types'
 import { checkInputStep, checkPlotStep } from '../src/engine'
-import { findHintText, findStep } from './helpers/findStep'
+import { findHintText, findStepIn } from './helpers/findStep'
 
-const step = <Type extends LessonStep['type']>(id: string, type: Type) =>
-  findStep(coordinatePlaneLesson, id, type)
+const step = findStepIn(coordinatePlaneLesson)
 
 const plotHint = (plot: Extract<LessonStep, { type: 'plot' }>, when: PlotHintWhen) =>
   findHintText(plot, when)

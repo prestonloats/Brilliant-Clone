@@ -5,7 +5,7 @@ import type { CompleteOptions } from '../types'
 // The shape a checker returns that the feedback states care about. Engine check results are
 // structurally compatible (they carry extra fields), and views that compute a result inline
 // (e.g. the multiple-choice step) can pass a matching object literal.
-export type StepCheckResult = {
+type StepCheckResult = {
   correct: boolean
   feedback: string
   reveal?: string

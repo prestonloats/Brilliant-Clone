@@ -26,7 +26,7 @@ export function CoursePathGraph({
       <ol className="path-graph">
         {graph.stages.map((stage) => (
           <li
-            className={`path-stage connector-stage-${stage.connector} ${stage.nodeIds.length > 1 ? 'is-branch' : ''}`}
+            className={`path-stage ${stage.nodeIds.length > 1 ? 'is-branch' : ''}`}
             key={stage.rank}
           >
             {stage.connector !== 'start' && (
