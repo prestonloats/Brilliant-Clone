@@ -18,8 +18,10 @@ export type AuthFormValues = {
 
 type AuthFormContext = {
   mode: AuthMode
-  // Firebase authenticates with a password. Local demo mode is intentionally passwordless,
-  // so password rules are skipped to avoid implying a credential that is never stored.
+  // Both providers authenticate with a password today (Firebase Auth, or the local
+  // salted-hash credential), so the auth UI passes `requiresPassword: true`. The flag is
+  // kept configurable so the password rules can still be skipped for any future
+  // credential-free provider without forking this validation logic.
   requiresPassword: boolean
 }
 
