@@ -3,7 +3,7 @@ import {
   checkBalanceStep,
   sideTotal,
 } from '../engine'
-import type { BalanceItem, BalanceSide, BalanceState, BalanceStep } from '../domain'
+import type { BalanceItem, BalanceOperation, BalanceSide, BalanceState, BalanceStep } from '../domain'
 
 export type DropTarget = BalanceSide | 'bank'
 
@@ -14,6 +14,15 @@ export function cloneBalanceState(state: BalanceState): BalanceState {
     right: state.right.map((item) => ({ ...item })),
     bank: state.bank?.map((item) => ({ ...item })),
   }
+}
+
+// Applies an operation to the step's ORIGINAL equation (a fresh clone of step.state) rather
+// than any accumulated state, so the operation buttons can never stack: tapping the same
+// operation N times always yields the same scale as tapping it once, and switching between
+// the two operation choices leaves no residue. Every operation-based balance step is solvable
+// in exactly one move, so deriving from the base is the correct interaction.
+export function applyOperationFromStart(step: BalanceStep, operation: BalanceOperation): BalanceState {
+  return applyBalanceOperation(cloneBalanceState(step.state), operation)
 }
 
 // Rebuilds a balance state that genuinely satisfies the step's goal, used when resuming a

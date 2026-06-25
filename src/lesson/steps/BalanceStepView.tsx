@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { MathText } from '../../MathText'
 import {
-  applyBalanceOperation,
   checkBalanceStep,
   isLevel,
   sideTotal,
@@ -13,6 +12,7 @@ import { FeedbackPanel } from '../../components/FeedbackPanel'
 import { RetryPrompt } from '../../components/RetryPrompt'
 import type { CompleteOptions } from '../types'
 import {
+  applyOperationFromStart,
   cloneBalanceState,
   describeBalanceChange,
   describeMove,
@@ -198,10 +198,13 @@ export function BalanceStepView({
   }
 
   const applyOperation = (operation: BalanceOperation) => {
-    const nextState = applyBalanceOperation(state, operation)
+    // Always derive from the step's original equation, never the accumulated state, so tapping
+    // the same operation repeatedly cannot stack and switching choices leaves no residue.
+    const baseState = cloneBalanceState(step.state)
+    const nextState = applyOperationFromStart(step, operation)
     setState(nextState)
     setMeta({ movedOneSideOnly: operation.sides !== 'both' })
-    setLastChange(describeBalanceChange(state, nextState, `Applied ${operation.label}.`))
+    setLastChange(describeBalanceChange(baseState, nextState, `Applied ${operation.label}.`))
     setFeedback('')
     setCorrect(false)
     setReveal('')
