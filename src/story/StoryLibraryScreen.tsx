@@ -1,5 +1,5 @@
 import type { StorySession } from '../domain'
-import { summarizeStorySession } from './storyLibrary'
+import { capitalizeFirst, summarizeStorySession } from './storyLibrary'
 
 type StoryLibraryScreenProps = {
   sessions: StorySession[]
@@ -75,6 +75,9 @@ export function StoryLibraryScreen({
               const summary = summarizeStorySession(session)
               const isActive = session.id === activeSessionId
               const lastPlayed = formatLastPlayed(summary.updatedAt)
+              // Capitalize the leading word for the TITLE/heading display only (e.g. a fallback
+              // role like "the Chef" -> "The Chef"); the stored protagonist value is untouched.
+              const title = capitalizeFirst(summary.title)
               return (
                 <li key={summary.id}>
                   <article className={`story-library-item ${isActive ? 'is-active' : ''}`}>
@@ -83,7 +86,7 @@ export function StoryLibraryScreen({
                     </span>
                     <div className="story-library-copy">
                       <div className="story-library-titlerow">
-                        <h2 className="story-library-title">{summary.title}</h2>
+                        <h2 className="story-library-title">{title}</h2>
                         {isActive && <span className="story-library-badge">Active</span>}
                       </div>
                       {summary.premise && <p className="story-library-premise">{summary.premise}</p>}
@@ -106,7 +109,7 @@ export function StoryLibraryScreen({
                         className="story-library-delete"
                         type="button"
                         disabled={busy}
-                        aria-label={`Delete ${summary.title}`}
+                        aria-label={`Delete ${title}`}
                         onClick={() => onDelete(summary.id)}
                       >
                         Delete

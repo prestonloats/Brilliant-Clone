@@ -37,7 +37,7 @@ import { applyRetheme } from './applyRetheme'
 import { questionKey, rehydrateQuestion, toThemedQuestion } from './rehydrateQuestion'
 import { createStoryAI, type StoryAiEnv } from './createStoryAI'
 import { resolveProtagonist } from './resolveMainCharacter'
-import { defaultSceneForInterests, getSceneLabel, pickRandomOffInterestScene } from './scenery'
+import { defaultSceneForInterests, getSceneLabel, pickRandomOffInterestScene, scenesForInterests } from './scenery'
 import type { RethemeRequest, RethemeResult, StoryAI } from './storyAi'
 import { RETHEME_FALLBACK, fallbackProtagonist, storyFallbackBeat, type StoryBeatKind } from './storyPrompts'
 import { isOutputSafe, moderateUserInput } from './safety'
@@ -196,6 +196,23 @@ const isProviderConfigured = (env: StoryAiEnv): boolean => {
   return Boolean(env.VITE_GEMINI_API_KEY)
 }
 
+// The image shown on the immediately-previous beat (if any), so a new beat can avoid repeating the
+// same background back-to-back — the visual analogue of resolveBeatText's previous-text de-dupe.
+const previousSceneId = (session: StorySession): SceneId | undefined =>
+  session.segments[session.segments.length - 1]?.sceneId
+
+// Pick a DISTRIBUTED on-theme default scene for a beat that, when possible, is NOT the immediately-
+// previous beat's image (the scene anti-repeat). Draws from the interest pool (scenesForInterests)
+// MINUS that previous scene; only if avoiding it would leave nothing does it relax to the normal
+// distributed default (which, as a genuine last resort, may repeat).
+const defaultSceneAvoiding = (theme: StoryTheme, avoidSceneId: SceneId | undefined): SceneId => {
+  if (avoidSceneId) {
+    const pool = scenesForInterests(theme).filter((id) => id !== avoidSceneId)
+    if (pool.length > 0) return pool[Math.floor(Math.random() * pool.length)]
+  }
+  return defaultSceneForInterests(theme)
+}
+
 // Ask the LLM to match a pre-generated background image to a freshly-written (AI) beat. Best-effort
 // and non-blocking: no provider, an empty beat, or ANY failure/timeout/unknown id resolves to
 // `undefined`, and the caller (`sceneForBeat`) then substitutes an interest-aware default so the beat
@@ -203,35 +220,55 @@ const isProviderConfigured = (env: StoryAiEnv): boolean => {
 // so resume re-shows the same image without asking the model again. FALLBACK beats do NOT call this
 // (the provider is usually degraded then, so it would just waste a slow timeout) — the caller uses a
 // theme-appropriate default scene (`sceneForBeat`) instead so a fallback chapter is still illustrated.
+//
+// The on-interest shortlist (scenesForInterests) and the previous beat's image are forwarded to the
+// prompt so the model spreads across on-interest scenes and steers AWAY from repeating the last one.
 const pickSceneForBeat = async (
   ai: StoryAI | null,
   theme: StoryTheme,
   text: string,
+  avoidSceneId: SceneId | undefined,
 ): Promise<SceneId | undefined> => {
   const trimmed = text.trim()
   if (!ai || !trimmed) return undefined
   try {
-    return (await ai.pickScene({ theme, sceneText: trimmed })) ?? undefined
+    const picked = await ai.pickScene({
+      theme,
+      sceneText: trimmed,
+      interestScenes: scenesForInterests(theme),
+      ...(avoidSceneId ? { previousSceneId: avoidSceneId } : {}),
+    })
+    return picked ?? undefined
   } catch {
     return undefined
   }
 }
 
-// Resolve a scene image for a beat. A FALLBACK beat uses an interest-SET-aware DEFAULT scene
-// (without calling the possibly-degraded provider). A real AI beat asks the model to match one, but
-// if the matcher returns nothing (no provider, empty beat, failure, timeout, or an unknown id) it
+// Resolve a scene image for a beat. A FALLBACK beat uses an interest-SET-aware DISTRIBUTED default
+// scene (without calling the possibly-degraded provider). A real AI beat asks the model to match one,
+// but if the matcher returns nothing (no provider, empty beat, failure, timeout, or an unknown id) it
 // falls back to the SAME interest-aware default — so a beat is always illustrated on-theme (e.g. a
 // dragon+bakery scene) instead of rendering image-less. The whole theme (presets + freeform) is
 // passed so a combo interest can win, not just the first preset.
+//
+// SCENE ANTI-REPEAT: the immediately-previous beat's image (`avoidSceneId`) is threaded in so
+// consecutive beats don't show the same background. The offline/fallback path draws from the pool
+// MINUS that scene; the AI path re-rolls a DIFFERENT pool scene when the model echoes the last image
+// (or returns nothing). Mirrors the spirit of resolveBeatText's text de-dupe.
 const sceneForBeat = async (
   ai: StoryAI | null,
   theme: StoryTheme,
   text: string,
   isFallback: boolean,
-): Promise<SceneId | undefined> =>
-  isFallback
-    ? defaultSceneForInterests(theme)
-    : (await pickSceneForBeat(ai, theme, text)) ?? defaultSceneForInterests(theme)
+  avoidSceneId: SceneId | undefined,
+): Promise<SceneId | undefined> => {
+  if (isFallback) return defaultSceneAvoiding(theme, avoidSceneId)
+  const picked = await pickSceneForBeat(ai, theme, text, avoidSceneId)
+  // Trust the model's pick unless it is missing or simply repeats the previous beat's image; in
+  // those cases derive a DIFFERENT on-theme scene from the pool.
+  if (picked && picked !== avoidSceneId) return picked
+  return defaultSceneAvoiding(theme, avoidSceneId)
+}
 
 // Build the re-theme request from a bundled step: display text + option/tile labels only, never
 // the answer key (accept/correctId/correctOrder stay in the original object).
@@ -731,7 +768,9 @@ export function useStorySession({
         const { text: openingText, isFallback: openingIsFallback } = resolveBeatText(next, openingGenerated, 'opening')
         // When seeded from the off-interest pool, force that scene as the opening image; otherwise
         // match/derive one as usual.
-        const openingScene = forcedOpeningScene ?? (await sceneForBeat(ai, fullTheme, openingText, openingIsFallback))
+        const openingScene =
+          forcedOpeningScene ??
+          (await sceneForBeat(ai, fullTheme, openingText, openingIsFallback, previousSceneId(next)))
         next = appendSegment(next, { text: openingText, sceneId: openingScene })
         await persist(next)
         await backend.story.setActiveStorySessionId(user.id, id)
@@ -787,7 +826,7 @@ export function useStorySession({
           }
         }
         const { text: beat, isFallback } = resolveBeatText(next, written, 'bridge')
-        const beatScene = await sceneForBeat(ai, next.theme, beat, isFallback)
+        const beatScene = await sceneForBeat(ai, next.theme, beat, isFallback, previousSceneId(next))
         next = appendSegment(next, { text: beat, sceneId: beatScene })
         next = await maybeCompact(next)
         await persist(next)
@@ -861,7 +900,7 @@ export function useStorySession({
           }
         }
         const { text: continuation, isFallback } = resolveBeatText(next, written, 'outcome')
-        const outcomeScene = await sceneForBeat(ai, next.theme, continuation, isFallback)
+        const outcomeScene = await sceneForBeat(ai, next.theme, continuation, isFallback, previousSceneId(next))
         next = appendSegment(next, { text: continuation, sceneId: outcomeScene })
         next = await maybeCompact(next)
         await persist(next)

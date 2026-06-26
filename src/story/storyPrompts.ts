@@ -473,9 +473,17 @@ export function buildSummarizePrompt(input: { narrative: string }): string {
 // answer with exactly one catalog id or the literal NO_SCENE. The strict "answer with only the
 // id" instruction keeps the output trivially parseable by `parseSceneId`; the caller still
 // validates the result against the catalog, so a stray answer just yields "no image".
-export function buildScenePrompt(input: { theme: StoryTheme; sceneText: string }): string {
+export function buildScenePrompt(input: {
+  theme: StoryTheme
+  sceneText: string
+  // The on-interest shortlist (from `scenesForInterests`) the model should spread its picks across,
+  // and the immediately-previous beat's image to steer AWAY from. Both OPTIONAL + back-compatible:
+  // when absent the prompt reads exactly as before.
+  interestScenes?: readonly SceneId[]
+  previousSceneId?: SceneId
+}): string {
   const catalog = SCENERY_CATALOG.map((entry) => `- ${entry.id}: ${entry.description}`).join('\n')
-  return [
+  const lines: string[] = [
     'You are choosing ONE background image for the current scene of a story, from a fixed library of images. This is a matching task — do not write any story.',
     `STORY PREMISE: ${input.theme.premise || '(none)'}`,
     // The interests (presets + the learner's freeform text, e.g. "dragon, bakery") are what make a
@@ -486,15 +494,44 @@ export function buildScenePrompt(input: { theme: StoryTheme; sceneText: string }
     '',
     'AVAILABLE IMAGES (id: what the image shows):',
     catalog,
-    '',
-    // Place is still the primary signal, but a strongly-themed element central to the scene/interests
-    // (a dragon, a fairy, a pirate ship) must NOT be discarded as a "small detail" the way the old
-    // place-only instruction caused.
+  ]
+
+  // On-interest shortlist: the catalog scenes tied to the chosen interests (for a SINGLE interest
+  // these are the PURE single-topic scenes — the blend/combo tiles are dropped upstream). Steer the
+  // model to SPREAD its picks across them so a single interest doesn't keep showing the same image.
+  // It is a soft preference, not a hard filter: the model may still pick outside it when the scene
+  // clearly fits a different setting better.
+  if (input.interestScenes && input.interestScenes.length > 0) {
+    lines.push('')
+    lines.push(
+      `IMAGES THAT FIT THE READER'S INTERESTS (prefer one of these when it suits the scene, and spread your choices across them rather than repeatedly picking the same one): ${input.interestScenes.join(', ')}`,
+    )
+  }
+
+  lines.push('')
+  // Place is still the primary signal, but a strongly-themed element central to the scene/interests
+  // (a dragon, a fairy, a pirate ship) must NOT be discarded as a "small detail" the way the old
+  // place-only instruction caused.
+  lines.push(
     'Pick the SINGLE image id whose setting best matches WHERE this scene takes place. Judge mainly by the place/setting, but a strongly themed element that is central to this scene or to the interests above (for example a dragon, a fairy, or a pirate ship) DOES count — do not throw it away as a small detail.',
+  )
+  lines.push(
     'When two or more images fit the place, prefer the one that reflects the MOST of the listed interests and the scene — for example pick a dragon + bakery scene over a plain bakery when the story features a dragon, or a space farm over a plain farm in a space story.',
-    `If none of the images reasonably fit the setting of this scene, answer with exactly "${NO_SCENE}".`,
+  )
+
+  // Variety hint: avoid repeating the immediately-previous beat's image so consecutive beats don't
+  // show the same background (the visual analogue of the beat-text de-dupe in resolveBeatText).
+  if (input.previousSceneId) {
+    lines.push(
+      `VARIETY — prefer an image you have not just shown; do not repeat the previous scene "${input.previousSceneId}" — pick a different fitting image.`,
+    )
+  }
+
+  lines.push(`If none of the images reasonably fit the setting of this scene, answer with exactly "${NO_SCENE}".`)
+  lines.push(
     `Answer with ONLY the chosen id (or "${NO_SCENE}") on its own — no quotes, no punctuation, no explanation, no other words.`,
-  ].join('\n')
+  )
+  return lines.join('\n')
 }
 
 // Parse a scene-match response into a known SceneId, or null (no image). Accepts a little model

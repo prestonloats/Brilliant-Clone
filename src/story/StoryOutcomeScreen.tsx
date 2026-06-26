@@ -1,4 +1,5 @@
 import type { StorySession } from '../domain'
+import { capitalizeFirst } from './storyLibrary'
 import { StorySceneImage } from './StorySceneImage'
 import { StoryScreenNav } from './StoryScreenNav'
 import { CHECKPOINT_INTERVAL } from './storySessionReducer'
@@ -44,7 +45,7 @@ export function StoryOutcomeScreen({
       <article className="card story-segment-card">
         <StoryScreenNav busy={busy} onBackToPath={onBackToPath} onOpenLibrary={onOpenLibrary} onNewStory={onNewStory} />
         <header className="story-chapter-head">
-          <p className="eyebrow">{session.theme.protagonist}</p>
+          <p className="eyebrow">{capitalizeFirst(session.theme.protagonist)}</p>
           <h1 className="story-chapter-title">Chapter {chapterNumber}</h1>
           <p className="story-outcome-kicker">What happens next…</p>
         </header>

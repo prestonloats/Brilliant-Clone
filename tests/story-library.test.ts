@@ -4,6 +4,7 @@ import { beforeEach, test } from 'node:test'
 import { LocalBackend, legacyStorySessionId, normalizeStoryLibrary } from '../src/backend'
 import type { StorySession, StoryTheme } from '../src/domain'
 import {
+  capitalizeFirst,
   sortStorySessionsByRecent,
   storyChapterCount,
   storyInterestsLabel,
@@ -70,6 +71,17 @@ const legacyStored = (userId: string) => ({
 })
 
 // --- Library display helpers ----------------------------------------------------------------
+
+test('capitalizeFirst uppercases only the leading character for title display', () => {
+  // A lowercase-led fallback role reads as a proper title heading.
+  assert.equal(capitalizeFirst('the Chef'), 'The Chef')
+  assert.equal(capitalizeFirst('the Explorer'), 'The Explorer')
+  // Empty string is safe and unchanged.
+  assert.equal(capitalizeFirst(''), '')
+  // Already-capitalized custom names are left exactly as-is (no lower-casing the rest).
+  assert.equal(capitalizeFirst('Luna the Brave'), 'Luna the Brave')
+  assert.equal(capitalizeFirst('Captain Vega'), 'Captain Vega')
+})
 
 test('summarizeStorySession derives card metadata', () => {
   const summary = summarizeStorySession(session())

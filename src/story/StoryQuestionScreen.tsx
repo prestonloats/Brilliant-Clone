@@ -2,6 +2,7 @@ import type { LessonStep, StorySession } from '../domain'
 import { MathText } from '../MathText'
 import { ProgressBar } from '../components/ProgressBar'
 import { StepRenderer } from '../lesson/StepRenderer'
+import { capitalizeFirst } from './storyLibrary'
 import { StoryScreenNav } from './StoryScreenNav'
 import { CHECKPOINT_INTERVAL } from './storySessionReducer'
 
@@ -106,7 +107,7 @@ export function StoryQuestionScreen({
           📖
         </span>
         <div className="story-banner-copy">
-          <p className="eyebrow">{session.theme.protagonist}</p>
+          <p className="eyebrow">{capitalizeFirst(session.theme.protagonist)}</p>
           <p className="story-banner-premise">{session.theme.premise}</p>
         </div>
       </div>

@@ -40,7 +40,17 @@ export type StoryAI = {
   // Pick the pre-generated background image whose SETTING best fits a story beat, from the fixed
   // scenery catalog. Returns the chosen `SceneId`, or null when nothing fits / matching is
   // unavailable (so the caller simply shows no image). Pure classification — never authors text.
-  pickScene(input: { theme: StoryTheme; sceneText: string }): Promise<SceneId | null>
+  //
+  // `interestScenes` (the on-interest shortlist from `scenesForInterests`) and `previousSceneId`
+  // (the immediately-previous beat's image) are OPTIONAL hints the controller threads through so the
+  // picker spreads across on-interest scenes and avoids repeating the last image. They are forwarded
+  // verbatim to `buildScenePrompt`, so the concrete adapters need no change to support them.
+  pickScene(input: {
+    theme: StoryTheme
+    sceneText: string
+    interestScenes?: readonly SceneId[]
+    previousSceneId?: SceneId
+  }): Promise<SceneId | null>
   // Context-window compaction (plan section 8).
   summarize(input: { narrative: string }): Promise<string>
 }

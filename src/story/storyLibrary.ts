@@ -45,6 +45,14 @@ export const storyInterestsLabel = (session: StorySession): string => {
   return labels.join(', ')
 }
 
+// Capitalize ONLY the first character of a string, leaving the rest untouched. Used at TITLE /
+// HEADING render sites so a lowercase-led protagonist role like "the Chef" displays as "The Chef",
+// while an already-capitalized custom name ("Luna the Brave") and an empty string are unchanged.
+// This is PURELY for display: it must NOT be applied to narrative prose (a mid-sentence "the Chef"
+// has to stay lowercase) and it never mutates the stored protagonist value.
+export const capitalizeFirst = (value: string): string =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : value
+
 // A robust, never-empty heading: prefer a real protagonist name, then the interests, then a
 // generic fallback (so even a fallback-only/legacy session reads sensibly in the library).
 export const storySessionTitle = (session: StorySession): string => {

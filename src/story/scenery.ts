@@ -52,6 +52,7 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'basketball-court', label: 'Basketball court', description: 'An indoor basketball court with polished floors and hoops' },
   { id: 'bowling-alley', label: 'Bowling alley', description: 'An indoor bowling alley with polished lanes and pins' },
   { id: 'butterfly-garden', label: 'Butterfly garden', description: 'A glass greenhouse full of butterflies and blooming flowers' },
+  { id: 'cake-shop', label: 'Cake shop', description: 'A fancy cake and pastry bakery with tiered decorated cakes in glass cases' },
   { id: 'candy-castle', label: 'Candy castle', description: 'A fairytale castle built from candy, frosting, and lollipops' },
   { id: 'candy-forest', label: 'Candy forest', description: 'A whimsical forest of giant candy canes and gumdrop trees' },
   { id: 'candy-shop', label: 'Candy shop', description: 'A colorful candy shop with jars of bright sweets' },
@@ -65,8 +66,11 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'cloud-kingdom', label: 'Cloud kingdom', description: 'A kingdom of floating palaces perched on the clouds' },
   { id: 'cloud-stadium', label: 'Cloud stadium', description: 'A sports stadium built on a kingdom of fluffy clouds high in the sky' },
   { id: 'construction-site', label: 'Construction site', description: 'A busy construction site with cranes and steel frames' },
+  { id: 'cooking-class', label: 'Cooking class', description: 'A bright cooking class kitchen with prep stations, mixing bowls, and fresh ingredients' },
   { id: 'cooking-fashion', label: 'Cooking & Fashion', description: 'A blend of the cooking and fashion themes' },
   { id: 'coral-skyline', label: 'Coral skyline', description: 'A city skyline of living coral towers rising above the ocean waves' },
+  { id: 'costume-workshop', label: 'Costume workshop', description: 'A fashion costume workshop full of elaborate gowns and outfits on racks' },
+  { id: 'couture-house', label: 'Couture house', description: 'A high-fashion couture house showroom with designer gowns on display' },
   { id: 'cozy-kitchen', label: 'Cozy kitchen', description: 'A warm home kitchen with food cooking on the stove' },
   { id: 'crystal-cavern', label: 'Crystal cavern', description: 'A glowing underground cavern full of crystals' },
   { id: 'crystal-farm', label: 'Crystal farm', description: 'Farm fields and barns growing among giant glowing crystals' },
@@ -80,11 +84,13 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'desert-train-station', label: 'Desert train station', description: 'A lonely train station and tracks among tall desert sand dunes' },
   { id: 'design-studio', label: 'Design studio', description: 'A fashion design studio with sketches, fabrics, and mannequins' },
   { id: 'detective-office', label: 'Detective office', description: 'A dim noir detective office with case files and rain on the window' },
+  { id: 'detective-study', label: 'Detective\'s study', description: 'A noir detective\'s study with a clue board of pinned photos and red string, a desk, and a lamp' },
   { id: 'dino-lagoon', label: 'Dino lagoon', description: 'Long-necked sea dinosaurs swimming in a prehistoric lagoon' },
   { id: 'dino-snow', label: 'Dino snowland', description: 'Woolly dinosaurs and mammoths in a snowy ice-age landscape' },
   { id: 'dino-volcano', label: 'Dino volcano', description: 'Dinosaurs roaming a prehistoric valley near a smoking volcano' },
   { id: 'dinosaur-jungle', label: 'Dinosaur jungle', description: 'Friendly dinosaurs roaming a steamy prehistoric jungle' },
   { id: 'dog-park', label: 'Dog park', description: 'A sunny green park with agility ramps and tennis balls' },
+  { id: 'donut-shop', label: 'Donut shop', description: 'A cheerful donut bakery with racks of glazed, sprinkled, and frosted pastries' },
   { id: 'dragon-bakery', label: 'Dragon bakery', description: 'A cozy bakery where a friendly dragon heats the ovens with fire' },
   { id: 'dragon-harbor', label: 'Dragon harbor', description: 'Dragons perched above the docks of a busy seaside harbor' },
   { id: 'dragon-lair', label: 'Dragon lair', description: 'A cavernous dragon lair piled with gold treasure' },
@@ -125,12 +131,15 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'fantasy-sports-pirates', label: 'Fantasy, Sports & Pirates', description: 'A blend of the fantasy, sports, and pirates themes' },
   { id: 'farm-barnyard', label: 'Farm barnyard', description: 'A farm barnyard with a red barn and farm animals' },
   { id: 'farmers-market', label: 'Farmers market', description: 'An outdoor farmers market with produce and flower stalls' },
+  { id: 'fashion-boutique', label: 'Fashion boutique', description: 'A chic fashion boutique with racks of stylish outfits, tall mirrors, and elegant displays' },
+  { id: 'fashion-photoshoot', label: 'Fashion photoshoot', description: 'A bright fashion photo studio with backdrops, softbox lights, and cameras' },
   { id: 'fashion-runway', label: 'Fashion runway', description: 'A bright fashion runway with a long catwalk and bold lights' },
   { id: 'ferris-wheel', label: 'Ferris wheel', description: 'A giant glowing ferris wheel at a fair at sunset' },
   { id: 'fire-station', label: 'Fire station', description: 'A fire station garage with a shiny red fire truck' },
   { id: 'floating-islands', label: 'Floating islands', description: 'Islands floating in the sky among the clouds' },
   { id: 'floating-market', label: 'Floating market', description: 'A market of stalls spread across islands floating in the sky' },
   { id: 'flower-meadow', label: 'Flower meadow', description: 'A bright open meadow full of wildflowers' },
+  { id: 'foggy-alley', label: 'Foggy alley', description: 'A foggy noir mystery city alley at night under a flickering streetlamp on wet cobblestones' },
   { id: 'foggy-graveyard', label: 'Foggy graveyard', description: 'A foggy graveyard at night with old tombstones' },
   { id: 'forest-clearing', label: 'Forest clearing', description: 'A peaceful clearing in a green forest' },
   { id: 'frozen-bazaar', label: 'Frozen bazaar', description: 'A busy market of stalls built on a frozen lake of ice' },
@@ -140,6 +149,7 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'greek-temple', label: 'Greek temple', description: 'The white marble columns of an ancient Greek temple' },
   { id: 'greek-underwater-temple', label: 'Greek underwater temple', description: 'Sunken Greek temple columns and statues deep underwater on a reef' },
   { id: 'harbor-docks', label: 'Harbor docks', description: 'A coastal harbor with wooden docks and moored boats' },
+  { id: 'hat-boutique', label: 'Hat boutique', description: 'A quaint fashion hat boutique full of stylish hats on stands and mirrors' },
   { id: 'haunted-aquarium', label: 'Haunted aquarium', description: 'A dark, eerie aquarium with glowing tanks in an abandoned haunted hall' },
   { id: 'haunted-bakery', label: 'Haunted bakery', description: 'A spooky old bakery shop inside a creaky haunted house' },
   { id: 'haunted-circus', label: 'Haunted circus', description: 'A spooky abandoned circus tent under a full moon' },
@@ -153,6 +163,7 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'ice-palace', label: 'Ice palace', description: 'A glittering palace with tall spires carved from blue ice and snow' },
   { id: 'ice-rink', label: 'Ice rink', description: 'An indoor ice skating rink with smooth glossy ice' },
   { id: 'icy-fjord', label: 'Icy fjord', description: 'A narrow icy fjord between steep snow-covered cliffs' },
+  { id: 'jewelry-boutique', label: 'Jewelry boutique', description: 'A sparkling fashion jewelry boutique with glass cases of necklaces, rings, and gems' },
   { id: 'jungle-aquarium', label: 'Jungle aquarium', description: 'A massive aquarium tank overgrown with plants inside a green jungle' },
   { id: 'jungle-skyscrapers', label: 'Jungle skyscrapers', description: 'Overgrown skyscrapers wrapped in jungle vines and trees' },
   { id: 'jungle-temple', label: 'Jungle temple', description: 'An overgrown ancient temple deep in the jungle' },
@@ -162,6 +173,8 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'lava-fortress', label: 'Lava fortress', description: 'A dark obsidian fortress beside flowing rivers of lava' },
   { id: 'library-hall', label: 'Library hall', description: 'A grand public library reading hall with tall bookshelves' },
   { id: 'lighthouse-coast', label: 'Lighthouse coast', description: 'A lighthouse on a rocky ocean coast' },
+  { id: 'lunar-base', label: 'Lunar base', description: 'A domed lunar base with rovers on the gray cratered moon surface under a starry sky' },
+  { id: 'makeup-studio', label: 'Makeup studio', description: 'A glamorous fashion makeup and styling studio with lit vanity mirrors and cosmetics' },
   { id: 'mansion-library', label: 'Mansion library', description: 'A grand manor library of tall bookshelves with a hidden door' },
   { id: 'market-bazaar', label: 'Market bazaar', description: 'A busy outdoor market bazaar full of stalls' },
   { id: 'medieval-aquarium', label: 'Medieval aquarium', description: 'A great stone hall with huge fish tanks inside a medieval castle' },
@@ -197,9 +210,15 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'ocean-shore', label: 'Ocean shore', description: 'A sandy beach along the ocean shore' },
   { id: 'outer-space', label: 'Outer space', description: 'Deep outer space with stars and planets' },
   { id: 'pirate-asteroid-port', label: 'Pirate asteroid port', description: 'A pirate ship docked at a port on a floating asteroid in space' },
+  { id: 'pirate-captain-cabin', label: 'Pirate captain\'s cabin', description: 'A pirate captain\'s cabin with sea charts, a lantern, a spyglass, and a treasure chest' },
+  { id: 'pirate-cove', label: 'Pirate cove', description: 'A hidden pirate cove with an anchored galleon, palm trees, and barrels' },
+  { id: 'pirate-fort', label: 'Pirate fort', description: 'A stone island fort flying pirate flags above the crashing sea' },
   { id: 'pirate-island-market', label: 'Pirate island market', description: 'A bustling pirate port market on a tropical island' },
   { id: 'pirate-jungle-camp', label: 'Pirate jungle camp', description: 'A hidden pirate camp of tents and torches deep in the jungle' },
+  { id: 'pirate-lagoon', label: 'Pirate lagoon', description: 'A calm tropical lagoon with a pirate ship anchored near jungle cliffs' },
   { id: 'pirate-ship-deck', label: 'Pirate ship deck', description: 'The wooden deck of a sailing pirate ship' },
+  { id: 'pirate-shipwreck', label: 'Pirate shipwreck', description: 'A weathered pirate galleon shipwreck half-buried on a sandy beach' },
+  { id: 'pirate-tavern', label: 'Pirate tavern', description: 'A lively seaside pirate tavern with hanging lanterns, barrels, and wooden tables' },
   { id: 'pirate-treasure-cave', label: 'Pirate treasure cave', description: 'A pirate cave piled with gold coins and jeweled chests by the sea' },
   { id: 'pirate-volcano-cove', label: 'Pirate volcano cove', description: 'A pirate ship anchored in a cove beside a smoking volcano' },
   { id: 'pirates-cooking', label: 'Pirates & Cooking', description: 'A blend of the pirates and cooking themes' },
@@ -210,6 +229,7 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'race-track', label: 'Race track', description: 'A motor racing track with curves, grandstands, and start lights' },
   { id: 'rainbow-falls', label: 'Rainbow falls', description: 'A magical waterfall cascading in shimmering rainbow colors' },
   { id: 'recording-studio', label: 'Recording studio', description: 'A cozy music recording studio with a mixing board and mics' },
+  { id: 'restaurant-kitchen', label: 'Restaurant kitchen', description: 'A busy restaurant kitchen with gleaming steel cooking stations, hanging pots, and cookware' },
   { id: 'river-bank', label: 'River bank', description: 'The grassy bank of a flowing river' },
   { id: 'robot-city', label: 'Robot city', description: 'A sleek city of robots and glowing neon skyscrapers' },
   { id: 'robot-farm', label: 'Robot farm', description: 'Friendly robots tending rows of crops on a sunny farm' },
@@ -220,6 +240,8 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'savanna-plains', label: 'Savanna plains', description: 'A wide golden savanna with scattered acacia trees' },
   { id: 'savanna-spaceport', label: 'Savanna spaceport', description: 'A rocket launch pad on the open African savanna at dusk' },
   { id: 'science-lab', label: 'Science lab', description: 'A science laboratory with beakers, flasks, and microscopes' },
+  { id: 'sewing-studio', label: 'Sewing studio', description: 'A fashion design sewing studio with dress forms, patterns, fabric, and outfits' },
+  { id: 'shoe-boutique', label: 'Shoe boutique', description: 'A stylish fashion shoe boutique with shelves of designer shoes and handbags' },
   { id: 'skate-park', label: 'Skate park', description: 'A concrete skate park with ramps, rails, and a half-pipe' },
   { id: 'ski-slope', label: 'Ski slope', description: 'A snowy ski slope with chairlifts and pine trees' },
   { id: 'sky-ruins', label: 'Sky ruins', description: 'Crumbling ancient ruins on green islands floating in the clouds' },
@@ -262,7 +284,11 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'space-sports-fashion', label: 'Space, Sports & Fashion', description: 'A blend of the space, sports, and fashion themes' },
   { id: 'space-sports-pirates', label: 'Space, Sports & Pirates', description: 'A blend of the space, sports, and pirates themes' },
   { id: 'space-station', label: 'Space station', description: 'The interior of a futuristic space station' },
+  { id: 'space-station-exterior', label: 'Space station exterior', description: 'The exterior of a space station with solar panels orbiting a planet among the stars' },
   { id: 'space-zoo', label: 'Space zoo', description: 'A zoo of alien creatures in glowing glass habitats on a space station' },
+  { id: 'spaceship-bridge', label: 'Spaceship bridge', description: 'The command bridge of a futuristic spaceship with glowing control panels and a viewscreen of stars' },
+  { id: 'spaceship-corridor', label: 'Spaceship corridor', description: 'A sleek sci-fi spaceship corridor lined with glowing panels and round airlock doors' },
+  { id: 'spooky-attic', label: 'Spooky attic', description: 'A spooky dusty attic full of old trunks, cobwebs, draped sheets, and moonlight' },
   { id: 'sports-animals', label: 'Sports & Animals', description: 'A blend of the sports and animals themes' },
   { id: 'sports-animals-cooking', label: 'Sports, Animals & Cooking', description: 'A blend of the sports, animals, and cooking themes' },
   { id: 'sports-animals-fashion', label: 'Sports, Animals & Fashion', description: 'A blend of the sports, animals, and fashion themes' },
@@ -277,12 +303,15 @@ export const SCENERY_CATALOG: readonly SceneEntry[] = [
   { id: 'starry-campsite', label: 'Starry campsite', description: 'A campsite under a starry night sky' },
   { id: 'steampunk-city', label: 'Steampunk city', description: 'A brass-and-gear steampunk city with flying airships' },
   { id: 'stormy-sea', label: 'Stormy sea', description: 'A rough stormy sea with tall crashing waves under dark clouds' },
+  { id: 'sushi-bar', label: 'Sushi bar', description: 'A sushi restaurant counter with bamboo mats, fresh ingredients, and plates of sushi' },
   { id: 'swamp-marsh', label: 'Swamp marsh', description: 'A misty swamp marsh with murky water' },
   { id: 'swimming-pool', label: 'Swimming pool', description: 'An indoor competition swimming pool with marked lanes' },
+  { id: 'tailor-shop', label: 'Tailor shop', description: 'A cozy tailor\'s shop with sewing machines, bolts of fabric, and a dress form' },
   { id: 'tennis-court', label: 'Tennis court', description: 'An outdoor tennis court with a net and green clay surface' },
   { id: 'toy-store', label: 'Toy store', description: 'A bright toy store with shelves full of colorful toys' },
   { id: 'train-station', label: 'Train station', description: 'The grand interior of an old train station' },
   { id: 'train-yard', label: 'Train yard', description: 'A railway yard full of colorful trains and tracks' },
+  { id: 'treasure-island', label: 'Treasure island', description: 'A sandy pirate treasure island with palm trees, a rocky cove, and a buried treasure map' },
   { id: 'treehouse-village', label: 'Treehouse village', description: 'A village of treehouses linked by rope bridges in tall trees' },
   { id: 'tropical-beach', label: 'Tropical beach', description: 'A palm-lined tropical beach with turquoise water and white sand' },
   { id: 'underwater-castle', label: 'Underwater castle', description: 'A grand castle deep beneath the sea surrounded by fish' },
@@ -385,19 +414,98 @@ const interestTermsForTheme = (theme: Pick<StoryTheme, 'interestIds' | 'freeform
   return [...terms]
 }
 
+// --- Interest scene pools (the IN-interest sets the distribution draws from) -----------------
+
+// Keyword fingerprints for each SUGGESTED (preset) interest — a curated, BROADER vocabulary than the
+// bare id/label terms, so a scene that is THEMATICALLY tied to an interest (e.g. "alien-planet" ->
+// space, "dragon-lair" -> fantasy, "soccer-field" -> sports, "bakery-shop" -> cooking) is recognized
+// as reachable from that interest even when it does not literally contain the interest's name. Each
+// entry is a lowercased substring matched against a scene's id + label + description. Shared by BOTH
+// the in-interest pool (scenesForInterests) and the off-interest pool (OFF_INTEREST_SCENES below).
+const SUGGESTED_INTEREST_KEYWORDS: Record<StoryInterestId, readonly string[]> = {
+  space: ['space', 'sci-fi', 'alien', 'planet', 'moon', 'asteroid', 'rocket', 'spaceship', 'spaceport', 'galaxy', 'cosmic', 'orbit', 'robot', 'android', 'futuristic', 'cyber', 'neon', 'steampunk', 'observatory', 'planetarium', 'zero-gravity'],
+  fantasy: ['fantasy', 'dragon', 'wizard', 'witch', 'fairy', 'magic', 'enchant', 'castle', 'crystal', 'mushroom', 'unicorn', 'mermaid', 'knight', 'rune', 'spell', 'floating', 'cloud', 'palace', 'rainbow', 'fortress', 'goblin', 'gnome', 'troll'],
+  mystery: ['mystery', 'detective', 'haunted', 'ghost', 'graveyard', 'spooky', 'foggy', 'eerie', 'creepy', 'abandoned', 'dungeon', 'noir', 'clue'],
+  sports: ['sport', 'stadium', 'soccer', 'basketball', 'baseball', 'tennis', 'bowling', 'skate', 'ski-', 'ski ', 'racing', 'race-track', 'race track', 'arena', 'rink', 'hockey', 'olympic', 'court'],
+  animals: ['animal', 'wildlife', 'safari', 'zoo', 'dog', 'horse', 'stable', 'butterfly', 'dino', 'dinosaur', 'farm', 'barn', 'aquarium', 'reef', 'fish', 'puppy', 'kitten'],
+  pirates: ['pirate', 'treasure', 'galleon', 'buccaneer'],
+  cooking: ['cooking', 'baking', 'bakery', 'kitchen', 'candy', 'pizza', 'ice cream', 'ice-cream', 'chef', 'pastry', 'treat', 'bread', 'dessert', 'cafe', 'restaurant', 'sweets', 'farmers'],
+  fashion: ['fashion', 'design', 'runway', 'outfit', 'gown', 'couture', 'boutique', 'catwalk', 'tailor'],
+}
+
+// The BROAD keyword fingerprint for a theme: every SUGGESTED_INTEREST_KEYWORDS keyword for each
+// chosen preset interest, PLUS the learner's freeform words (with the SAME crude singular stem used
+// by interestTermsForTheme, so "dragons" still matches a "dragon" scene). Deduped. Used to gather the
+// POOL of scenes thematically tied to the chosen interests — a richer match than the literal id/label
+// scoring in interestTermsForTheme (e.g. "fantasy" reaches dragon/wizard/fairy scenes here, but 0 of
+// them literally). Pure + deterministic.
+const interestKeywordsForTheme = (theme: Pick<StoryTheme, 'interestIds' | 'freeformInterest'>): string[] => {
+  const terms = new Set<string>()
+  const add = (word: string): void => {
+    if (word.length < 3) return
+    terms.add(word)
+    if (word.length > 3 && word.endsWith('s')) terms.add(word.slice(0, -1))
+  }
+  for (const word of toSceneTerms(theme.freeformInterest ?? '')) add(word)
+  for (const id of theme.interestIds) {
+    for (const keyword of SUGGESTED_INTEREST_KEYWORDS[id] ?? []) terms.add(keyword)
+  }
+  return [...terms]
+}
+
+// The generic "blend-combo" tiles depict MULTIPLE interests at once (their description begins with
+// "A blend of ...", e.g. `cooking-fashion`). They are excluded from a SINGLE chosen interest's pool
+// so one interest prefers PURE single-topic scenes instead of combo art mixing in interests the
+// learner did not pick. (For a set of 2+ interests the combos ARE on-theme and stay in the pool.)
+const BLEND_COMBO_DESCRIPTION_PREFIX = 'a blend of'
+const isBlendComboScene = (entry: SceneEntry): boolean =>
+  entry.description.trim().toLowerCase().startsWith(BLEND_COMBO_DESCRIPTION_PREFIX)
+
+// The POOL of catalog scenes thematically associated with the chosen interests, matched by the BROAD
+// SUGGESTED_INTEREST_KEYWORDS fingerprint (against each scene's id + label + description) plus the
+// learner's freeform words. When EXACTLY ONE interest is chosen, the blend-combo tiles are excluded
+// so a single interest spreads across pure single-topic scenes. Pure + deterministic (follows the
+// catalog's order). Used to DISTRIBUTE the offline default scene (defaultSceneForInterests) and to
+// shortlist the AI scene picker (buildScenePrompt). May be empty when nothing matches (e.g. no
+// interests at all, or freeform-only text the fingerprint can't place) — callers fall back then.
+export const scenesForInterests = (theme: Pick<StoryTheme, 'interestIds' | 'freeformInterest'>): SceneId[] => {
+  const keywords = interestKeywordsForTheme(theme)
+  if (keywords.length === 0) return []
+  const excludeBlends = theme.interestIds.length === 1
+  const pool: SceneId[] = []
+  for (const entry of SCENERY_CATALOG) {
+    if (excludeBlends && isBlendComboScene(entry)) continue
+    const haystack = `${entry.id} ${entry.label} ${entry.description}`.toLowerCase()
+    if (keywords.some((keyword) => haystack.includes(keyword))) pool.push(entry.id)
+  }
+  return pool
+}
+
 // A theme-appropriate DEFAULT scene for a chosen interest SET. Used for the OFFLINE fallback beats
 // (when the AI scene matcher is unavailable) AND as the backstop when the matcher returns nothing,
 // so a beat is still illustrated on-theme instead of rendering image-less.
 //
-// It SCORES every catalog scene by how many DISTINCT interest terms (freeform words + preset
-// id/label keywords) appear in the scene's id/label/description, and prefers the highest — so a
-// combo scene that reflects 2+ interests (e.g. `dragon-bakery` for "dragon" + "bakery") beats a
-// single-interest scene (a plain `bakery-shop`). Ties go to the first-recognized-preset curated
-// default (DEFAULT_SCENE_BY_INTEREST), so a single interest still resolves to its hand-picked scene;
-// when nothing matches, it falls back to that default, then a neutral always-valid scene. Pure.
+// It now DISTRIBUTES: it draws RANDOMLY (via the injectable `rng`, default Math.random) from the
+// broad pool of scenes tied to the chosen interests (scenesForInterests), so a SINGLE interest no
+// longer collapses to one fixed image on every offline / AI-failure beat. `rng` is injectable +
+// seedable so the pick is PURE/deterministic in tests (mirrors pickRandomOffInterestScene).
+//
+// When the broad pool is empty (a freeform-only theme the fingerprint can't place), it falls back to
+// the original literal id/label SCORING (which still prefers a combo scene reflecting 2+ interests),
+// then the first-recognized-preset curated default (DEFAULT_SCENE_BY_INTEREST), then a neutral
+// always-valid scene.
 export const defaultSceneForInterests = (
   theme: Pick<StoryTheme, 'interestIds' | 'freeformInterest'>,
+  rng: () => number = Math.random,
 ): SceneId => {
+  // Primary: spread across the broad interest pool (mirrors pickRandomOffInterestScene's draw).
+  const pool = scenesForInterests(theme)
+  if (pool.length > 0) {
+    const index = Math.min(pool.length - 1, Math.floor(rng() * pool.length))
+    return pool[index]
+  }
+
+  // Fallback: the original literal id/label scoring for themes the broad fingerprint can't place.
   const terms = interestTermsForTheme(theme)
 
   // The first recognized preset's curated default — both the no-match fallback and the tie-break
@@ -433,22 +541,9 @@ export const defaultSceneForInterests = (
 
 // --- Off-interest scene pool (the "surprise me" set) -----------------------------------------
 
-// Keyword fingerprints for each SUGGESTED (preset) interest — a curated, BROADER vocabulary than the
-// bare id/label terms, so a scene that is THEMATICALLY tied to an interest (e.g. "alien-planet" ->
-// space, "dragon-lair" -> fantasy, "soccer-field" -> sports, "bakery-shop" -> cooking) is recognized
-// as reachable from that interest even when it does not literally contain the interest's name. Each
-// entry is a lowercased substring matched against a scene's id + label + description.
-const SUGGESTED_INTEREST_KEYWORDS: Record<StoryInterestId, readonly string[]> = {
-  space: ['space', 'sci-fi', 'alien', 'planet', 'moon', 'asteroid', 'rocket', 'spaceship', 'spaceport', 'galaxy', 'cosmic', 'orbit', 'robot', 'android', 'futuristic', 'cyber', 'neon', 'steampunk', 'observatory', 'planetarium', 'zero-gravity'],
-  fantasy: ['fantasy', 'dragon', 'wizard', 'witch', 'fairy', 'magic', 'enchant', 'castle', 'crystal', 'mushroom', 'unicorn', 'mermaid', 'knight', 'rune', 'spell', 'floating', 'cloud', 'palace', 'rainbow', 'fortress', 'goblin', 'gnome', 'troll'],
-  mystery: ['mystery', 'detective', 'haunted', 'ghost', 'graveyard', 'spooky', 'foggy', 'eerie', 'creepy', 'abandoned', 'dungeon', 'noir', 'clue'],
-  sports: ['sport', 'stadium', 'soccer', 'basketball', 'baseball', 'tennis', 'bowling', 'skate', 'ski-', 'ski ', 'racing', 'race-track', 'race track', 'arena', 'rink', 'hockey', 'olympic', 'court'],
-  animals: ['animal', 'wildlife', 'safari', 'zoo', 'dog', 'horse', 'stable', 'butterfly', 'dino', 'dinosaur', 'farm', 'barn', 'aquarium', 'reef', 'fish', 'puppy', 'kitten'],
-  pirates: ['pirate', 'treasure', 'galleon', 'buccaneer'],
-  cooking: ['cooking', 'baking', 'bakery', 'kitchen', 'candy', 'pizza', 'ice cream', 'ice-cream', 'chef', 'pastry', 'treat', 'bread', 'dessert', 'cafe', 'restaurant', 'sweets', 'farmers'],
-  fashion: ['fashion', 'design', 'runway', 'outfit', 'gown', 'couture', 'boutique', 'catwalk', 'tailor'],
-}
-
+// The flattened set of ALL suggested-interest keywords (SUGGESTED_INTEREST_KEYWORDS is defined with
+// the in-interest pools above, since both pools share that one fingerprint), so a scene can be tested
+// for reflecting ANY suggested interest at all.
 const ALL_INTEREST_KEYWORDS: readonly string[] = Object.values(SUGGESTED_INTEREST_KEYWORDS).flat()
 
 // True when a scene reflects NONE of the suggested interests' keywords — i.e. it is thematically
