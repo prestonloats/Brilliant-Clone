@@ -58,7 +58,7 @@ export async function selectCustomOnlyScene(
     try {
       matched = await opts.matcher({ theme, candidates: SCENE_IDS, emphasizeCustom: true })
     } catch {
-      matched = null // a failed/timed-out match is just "no close one" — never throw.
+      // A failed/timed-out match is just "no close one" — never throw (matched stays null).
     }
     // 2. A close match: keep the story on the custom interests as usual (no setting tie-in).
     if (matched) return { sceneId: matched }
