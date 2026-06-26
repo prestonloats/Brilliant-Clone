@@ -31,11 +31,11 @@ const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
   return sa.size === sb.size && [...sa].every((x) => sb.has(x))
 }
 
-// Catalog assumptions the avoid-tests rely on: at least one pair with multiple exact-{a,b} scenes
-// (alternatives exist) and at least one with a single scene (no alternative). Found dynamically so a
-// future catalog tweak can't silently invalidate the tests — they fail loudly here instead.
+// The avoid-tests need a pair with MULTIPLE exact-{a,b} scenes (so an alternative to avoid exists).
+// Found dynamically so a future catalog tweak can't silently invalidate the test — it fails loudly
+// here instead. (After the ">=4 images per pair" coverage top-up every real pair now has 2+ tiles,
+// so the single-scene edge case is exercised at the selection core via pickFromPool below.)
 const MULTI_SCENE_PAIR = ALL_PAIRS.find(([a, b]) => pairScenes(a, b).length >= 2)
-const SINGLE_SCENE_PAIR = ALL_PAIRS.find(([a, b]) => pairScenes(a, b).length === 1)
 
 // --- Primary path: every pair resolves to an exact-{a,b} scene -------------------------------
 
@@ -96,13 +96,12 @@ test('selectPairScene avoids avoidSceneId when the pool has alternatives', () =>
   }
 })
 
-test('selectPairScene keeps the only scene even when it equals avoidSceneId', () => {
-  assert.ok(SINGLE_SCENE_PAIR, 'expected at least one interest pair with exactly one scene')
-  const [a, b] = SINGLE_SCENE_PAIR
-  const only = pairScenes(a, b)[0]
+test('a one-scene pool keeps its only scene even when it equals avoidSceneId', () => {
+  // The coverage top-up gives every real interest pair 2+ tiles, so this single-candidate guarantee
+  // now lives at the selection core: a one-element pool must return its sole member even when that
+  // member is the one being avoided.
   for (const seed of SEEDS) {
-    const { sceneId } = selectPairScene(a, b, { rng: mulberry32(seed), avoidSceneId: only })
-    assert.equal(sceneId, only, `a one-scene pair must keep its scene for {${a}, ${b}} @ seed ${seed}`)
+    assert.equal(pickFromPool(['cozy-kitchen'], mulberry32(seed), 'cozy-kitchen'), 'cozy-kitchen')
   }
 })
 

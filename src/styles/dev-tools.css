@@ -1,0 +1,33 @@
+/* Developer-only controls, gated at runtime by isDevToolsEnabled (src/devMode.ts). They are styled
+   loud + dashed on purpose so they read as a debug affordance and are never mistaken for real
+   learner UI. In production builds the gate returns false, so none of this renders. */
+.dev-tools-bar {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 0;
+}
+
+.dev-skip-button {
+  align-items: center;
+  background: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 10px, #fde68a 10px, #fde68a 20px);
+  border: 2px dashed #b45309;
+  border-radius: 10px;
+  color: #7c2d12;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 6px;
+  letter-spacing: 0.01em;
+  min-height: 38px;
+  padding: 6px 16px;
+}
+
+.dev-skip-button:hover:not(:disabled) {
+  border-color: #92400e;
+}
+
+.dev-skip-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

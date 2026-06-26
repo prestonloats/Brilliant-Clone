@@ -48,7 +48,9 @@ test('there are exactly eight preset interests', () => {
 // the id no longer maps cleanly back to the interests it depicts and would break the grid below.
 test("every blend combo id's tokens are all valid interest ids", () => {
   for (const entry of BLEND_SCENES) {
-    const tokens = entry.id.split('-')
+    // Strip an optional trailing "-<n>" variant suffix (e.g. `cooking-fashion-2`) before checking, so
+    // duplicate blend images validate against the same interest tokens as their base combo.
+    const tokens = entry.id.replace(/-\d+$/, '').split('-')
     assert.ok(tokens.length >= 2, `blend id ${entry.id} should combine 2+ interests`)
     for (const token of tokens) {
       assert.ok(INTEREST_ID_SET.has(token), `blend id ${entry.id} has non-interest token "${token}"`)
@@ -56,44 +58,43 @@ test("every blend combo id's tokens are all valid interest ids", () => {
   }
 })
 
-// --- One image per interest pair and per interest triple ------------------------------------
+// --- Complete blend grid for every interest pair and triple ---------------------------------
 
-// The redesign assumes a COMPLETE, NON-DUPLICATED grid: exactly one tile for each of the 28
-// interest pairs and each of the 56 interest triples (84 blend tiles total), with no extra blends
-// and no two tiles depicting the same interest set.
-test('exactly one blend image covers each interest pair and each interest triple', () => {
+// The grid must stay COMPLETE and orphan-free: every one of the 28 interest pairs and 56 interest
+// triples is covered by at least one blend tile, and no blend tile depicts a set that is not a valid
+// pair/triple. Combos may now carry MULTIPLE images (a base tile plus `-<n>` variant duplicates, the
+// "≥4 per pair / ≥2 per triple" coverage top-up), so tiles are grouped by their base interest set.
+test('every interest pair and triple is covered by a blend tile, with no orphan blends', () => {
   const pairKeys = combinations(INTEREST_IDS, 2).map(comboKey)
   const tripleKeys = combinations(INTEREST_IDS, 3).map(comboKey)
   assert.equal(pairKeys.length, 28, 'C(8,2) should be 28 pairs')
   assert.equal(tripleKeys.length, 56, 'C(8,3) should be 56 triples')
 
+  // Group blend tiles by interest set, ignoring any trailing "-<n>" variant suffix so a base combo
+  // and its duplicate images (`cooking-fashion`, `cooking-fashion-2`, …) collapse to one key.
   const blendByKey = new Map<string, string[]>()
   for (const entry of BLEND_SCENES) {
-    const key = comboKey(entry.id.split('-'))
+    const key = comboKey(entry.id.replace(/-\d+$/, '').split('-'))
     const list = blendByKey.get(key) ?? []
     list.push(entry.id)
     blendByKey.set(key, list)
   }
 
-  // None missing: every pair and every triple has exactly one tile.
+  // None missing: every pair and every triple has at least one blend tile.
   for (const key of pairKeys) {
-    const matches = blendByKey.get(key) ?? []
-    assert.equal(matches.length, 1, `expected exactly one blend image for pair ${key}, got [${matches.join(', ')}]`)
+    assert.ok((blendByKey.get(key) ?? []).length >= 1, `no blend image for pair ${key}`)
   }
   for (const key of tripleKeys) {
-    const matches = blendByKey.get(key) ?? []
-    assert.equal(matches.length, 1, `expected exactly one blend image for triple ${key}, got [${matches.join(', ')}]`)
+    assert.ok((blendByKey.get(key) ?? []).length >= 1, `no blend image for triple ${key}`)
   }
 
-  // None extra and none duplicated: every blend tile maps to a known pair/triple, exactly once.
+  // None extra: every blend tile maps to a known pair/triple.
   const expectedKeys = new Set<string>([...pairKeys, ...tripleKeys])
   for (const [key, matches] of blendByKey) {
     assert.ok(expectedKeys.has(key), `unexpected blend tile(s) not matching any pair/triple: [${matches.join(', ')}]`)
-    assert.equal(matches.length, 1, `duplicate blend tiles for ${key}: [${matches.join(', ')}]`)
   }
 
-  assert.equal(blendByKey.size, 84, 'there should be 84 distinct blend combos (28 pairs + 56 triples)')
-  assert.equal(BLEND_SCENES.length, 84, 'there should be exactly 84 blend tiles, none duplicated')
+  assert.equal(blendByKey.size, 84, 'all 28 pairs + 56 triples should be represented (84 distinct combos)')
 })
 
 // --- The "uncommon" (off-interest) pool ------------------------------------------------------
@@ -120,6 +121,6 @@ test('exactly 67 scenes match zero interests (the uncommon pool)', () => {
 
 // --- Catalog size sanity --------------------------------------------------------------------
 
-test('the raw scenery catalog has 313 entries', () => {
-  assert.equal(SCENERY_CATALOG.length, 313)
+test('the raw scenery catalog has 424 entries', () => {
+  assert.equal(SCENERY_CATALOG.length, 424)
 })

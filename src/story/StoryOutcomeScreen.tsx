@@ -8,6 +8,9 @@ type StoryOutcomeScreenProps = {
   session: StorySession
   busy: boolean
   error: string
+  // Whether there is earlier story to look back at, and the handler that opens the read-only review.
+  canReview: boolean
+  onLookBack: () => void
   onContinue: () => void
   onOpenLibrary: () => void
   onNewStory: () => void
@@ -24,6 +27,8 @@ export function StoryOutcomeScreen({
   session,
   busy,
   error,
+  canReview,
+  onLookBack,
   onContinue,
   onOpenLibrary,
   onNewStory,
@@ -44,6 +49,11 @@ export function StoryOutcomeScreen({
     <section className="screen-stack story-checkpoint-shell">
       <article className="card story-segment-card">
         <StoryScreenNav busy={busy} onBackToPath={onBackToPath} onOpenLibrary={onOpenLibrary} onNewStory={onNewStory} />
+        {canReview && (
+          <button className="story-look-back" type="button" disabled={busy} onClick={onLookBack}>
+            <span aria-hidden="true">←</span> Look back at the story
+          </button>
+        )}
         <header className="story-chapter-head">
           <p className="eyebrow">{capitalizeFirst(session.theme.protagonist)}</p>
           <h1 className="story-chapter-title">Chapter {chapterNumber}</h1>

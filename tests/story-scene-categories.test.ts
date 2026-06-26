@@ -24,9 +24,11 @@ const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
   return sa.size === sb.size && [...sa].every((x) => sb.has(x))
 }
 
-// A scene id is a "combo" when ALL of its '-'-split tokens are interest ids.
+// A scene id is a "combo" when ALL of its '-'-split tokens are interest ids. An optional trailing
+// "-<n>" variant suffix (e.g. `cooking-fashion-2`) is ignored so duplicate blend images count as the
+// same combo their base id names.
 const isComboId = (id: string): boolean => {
-  const tokens = id.split('-')
+  const tokens = id.replace(/-\d+$/, '').split('-')
   return tokens.length >= 2 && tokens.every((t) => INTEREST_SET.has(t))
 }
 
@@ -53,7 +55,7 @@ test('every scene is categorized exactly once: combos + table + uncommon partiti
     }
   }
   assert.equal(combos + tabled + uncommon, SCENE_IDS.length, 'buckets must cover the whole catalog')
-  assert.equal(combos, 84, 'expected 28 pair-combos + 56 triple-combos')
+  assert.equal(combos, 195, 'expected 84 base blend tiles (28 pairs + 56 triples) + 111 variant tiles')
   assert.equal(tabled, 162, 'expected 131 single-topic + 31 hand-assigned multi-interest scenes')
   assert.equal(uncommon, 67)
 })

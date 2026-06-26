@@ -43,7 +43,11 @@ const INTEREST_ID_SET: ReadonlySet<string> = new Set<string>(SUGGESTED_INTEREST_
 // The interest set for a COMBO id (all tokens are interest ids), in id-token order, or null when
 // the id is not a combo. Pure: derived entirely from the id string.
 const comboInterests = (id: SceneId): StoryInterestId[] | null => {
-  const tokens = id.split('-')
+  // Drop an optional trailing "-<n>" VARIANT suffix (e.g. `cooking-fashion-2`) so every duplicate
+  // image of a blend resolves to the SAME interest set as its base combo (`cooking-fashion`). This
+  // lets the catalog hold MULTIPLE tiles per pair/triple without their copies falling through to the
+  // "uncommon" bucket.
+  const tokens = id.replace(/-\d+$/, '').split('-')
   if (tokens.length < 2) return null
   if (!tokens.every((token) => INTEREST_ID_SET.has(token))) return null
   return tokens as StoryInterestId[]

@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  ChapterBeat,
   LessonStep,
   SceneId,
   StorySession,
@@ -47,10 +48,11 @@ import {
   CHECKPOINT_INTERVAL,
   KEEP_VERBATIM_SEGMENTS,
   appendSegment,
-  canReviewBack,
   canReviewBackChapter,
-  canReviewForward,
   canReviewForwardChapter,
+  canReviewStepBack,
+  canReviewStepForward,
+  chapterBeatFor,
   clearCurrentQuestion,
   compactNarrative,
   createInitialSession,
@@ -61,23 +63,28 @@ import {
   isAtLiveEdge,
   isAwaitingOutcomeAck,
   isCheckpointDue,
+  isLiveReviewPos,
   jumpToLiveEdge,
   latestChapter,
   recentNarrative,
+  recordChapterBeat,
+  recordChapterOutcome,
   recordSolved,
   resetCheckpoint,
   rethemeNarrative,
-  reviewBack,
-  reviewBackChapter,
-  reviewForward,
-  reviewForwardChapter,
+  reviewChapterStart,
+  reviewStepBack,
+  reviewStepForward,
   setCurrentQuestion,
   setLatestSegmentChoice,
+  withHistoryIndex,
+  type StoryReviewPos,
 } from './storySessionReducer'
 
 // The Story Mode screens the hook drives via the injected `navigate` callback.
 export type StoryView =
   | 'story-interests'
+  | 'story-intro'
   | 'story-question'
   | 'story-checkpoint'
   | 'story-outcome'
@@ -101,6 +108,24 @@ export type UseStorySession = {
   currentThemed: boolean
   // True while the learner is reviewing a PAST (already-answered) question read-only.
   reviewing: boolean
+  // True while Back has landed on a chapter's STORY TEXT (read-only narrative review).
+  showingChapterText: boolean
+  // The chapter beat currently under review (set only while showingChapterText), else null.
+  chapterText: ChapterBeat | null
+  // The read-only "look back at the story" overlay used by the checkpoint/outcome screens (which
+  // have no inline review). It pages through CHAPTER RECAPS (setup -> choice -> outcome). `canReview`
+  // gates the "Look back" entry; open/close toggle the overlay; back/forward move one chapter.
+  reviewActive: boolean
+  canReview: boolean
+  openReview: () => void
+  closeReview: () => void
+  recapBeat: ChapterBeat | null
+  recapChapter: number
+  recapChapterCount: number
+  canRecapBack: boolean
+  canRecapForward: boolean
+  recapBack: () => void
+  recapForward: () => void
   canGoBack: boolean
   canGoForward: boolean
   // The chapter currently on display + the highest chapter reached, plus whether a previous/next
@@ -147,6 +172,17 @@ const COMPACT_THRESHOLD = 6
 const DEFAULT_PREMISE = 'A bright new adventure stretches out ahead, full of puzzles to solve.'
 
 const nowIso = (): string => new Date().toISOString()
+
+// The newest chapter whose RECAP can be looked back on from the checkpoint/outcome screens. On the
+// OUTCOME screen the current chapter's recap already holds its outcome (and the setup that prompted
+// it), so it is reviewable; on the CHECKPOINT screen it does not yet, so the newest reviewable recap
+// is the previous chapter. Returns 0 when nothing is reviewable (e.g. the very first checkpoint).
+const newestRecapChapter = (session: StorySession): number => {
+  const currentChapter = Math.floor(session.questionsSolvedTotal / CHECKPOINT_INTERVAL) + 1
+  const currentHasOutcome = Boolean(chapterBeatFor(session, currentChapter)?.outcomeText)
+  const newest = currentHasOutcome ? currentChapter : currentChapter - 1
+  return newest >= 1 && chapterBeatFor(session, newest) ? newest : 0
+}
 
 // Resolve the text to COMMIT for a narrated beat, given what the AI returned (or null on failure).
 // Guarantees two things the old single-canned-string path did not:
@@ -294,11 +330,21 @@ export function useStorySession({
   const [library, setLibrary] = useState<StorySession[]>([])
   const [storyBusy, setStoryBusy] = useState(false)
   const [storyError, setStoryError] = useState('')
+  // Transient (never persisted) review flag: true while Back has surfaced a chapter's story text.
+  const [showingChapterText, setShowingChapterText] = useState(false)
+  // Transient: true while the read-only "look back at the story" overlay is open. It lets the
+  // checkpoint/outcome screens (which have no inline review) page back through earlier chapter
+  // recaps, then Return. The question screen reviews inline via Back and never sets this.
+  const [reviewActive, setReviewActive] = useState(false)
+  // Which chapter's recap the overlay currently shows (meaningful only while reviewActive).
+  const [recapChapter, setRecapChapter] = useState(1)
 
   // Synchronous guard against double-generation (state updates lag a render behind).
   const busyRef = useRef(false)
   // Always-current session for callbacks handed to reused step views (avoids stale closures).
   const sessionRef = useRef<StorySession | null>(null)
+  // Always-current chapter-text review flag for callbacks (mirrors sessionRef; avoids stale closures).
+  const showingChapterTextRef = useRef(false)
   // Lazily-created StoryAI promise so the SDK only loads when Story Mode actually generates.
   const aiPromiseRef = useRef<Promise<StoryAI | null> | null | undefined>(undefined)
   // The next themed question, pre-fetched while the learner answers the current one.
@@ -309,6 +355,43 @@ export function useStorySession({
   const commitSession = useCallback((next: StorySession | null) => {
     sessionRef.current = next
     setSession(next)
+  }, [])
+
+  // Update the transient chapter-text review flag in both the ref (for callbacks) and state (render).
+  const setReviewChapterText = useCallback((value: boolean) => {
+    showingChapterTextRef.current = value
+    setShowingChapterText(value)
+  }, [])
+
+  // Leave all review state (called on every entry/resume/new-story path so play never begins
+  // mid-review). The Back/Forward handlers set the chapter-text flag explicitly instead.
+  const resetReview = useCallback(() => {
+    setReviewChapterText(false)
+    setReviewActive(false)
+  }, [setReviewChapterText])
+
+  // Open the read-only "look back at the story" overlay at the NEWEST reviewable chapter recap. From
+  // the OUTCOME screen that is the CURRENT chapter, so the first thing shown is the setup (and choice)
+  // that prompted "what happens next"; from the CHECKPOINT screen it is the previous chapter. Then
+  // Back/Forward page chapter-by-chapter through the story.
+  const openReview = useCallback(() => {
+    const current = sessionRef.current
+    if (!current) return
+    const newest = newestRecapChapter(current)
+    if (newest < 1) return
+    setRecapChapter(newest)
+    setReviewActive(true)
+  }, [])
+
+  // Close the overlay and return to the live screen.
+  const closeReview = useCallback(() => setReviewActive(false), [])
+
+  // Page the recap overlay back/forward one chapter at a time (clamped to [1, newest reviewable]).
+  const recapBack = useCallback(() => setRecapChapter((chapter) => Math.max(1, chapter - 1)), [])
+  const recapForward = useCallback(() => {
+    const current = sessionRef.current
+    const newest = current ? newestRecapChapter(current) : 1
+    setRecapChapter((chapter) => Math.min(Math.max(newest, 1), chapter + 1))
   }, [])
 
   const persist = useCallback(
@@ -440,6 +523,7 @@ export function useStorySession({
   // review pointer back to the live edge so resume continues play rather than mid-review.
   const routeToActive = useCallback(
     (loaded: StorySession) => {
+      resetReview()
       const atEdge = jumpToLiveEdge(loaded)
       commitSession(atEdge)
       if (atEdge.currentQuestion && rehydrateQuestion(atEdge.currentQuestion)) {
@@ -462,7 +546,7 @@ export function useStorySession({
         navigate('story-interests')
       }
     },
-    [commitSession, navigate, startPrefetch, startPrefetchWithinChapter],
+    [commitSession, navigate, startPrefetch, startPrefetchWithinChapter, resetReview],
   )
 
   const takeNextQuestion = useCallback(
@@ -663,6 +747,7 @@ export function useStorySession({
       busyRef.current = true
       setStoryBusy(true)
       setStoryError('')
+      resetReview()
       try {
         // Resolve the MAIN character BEFORE generating: 'displayName' uses the signed-in user's
         // name, 'custom' uses the typed name, 'random'/unset leaves it to the model. A usable name
@@ -729,14 +814,17 @@ export function useStorySession({
         // The opening image is the scene the dispatcher already chose above (for a setting tie-in, the
         // one whose setting now seeds the premise) — it is never derived from the opening prose.
         next = appendSegment(next, { text: openingText, sceneId: forcedOpeningScene })
+        // Snapshot the opening as Chapter 1's reviewable text (survives later segment compaction).
+        next = recordChapterBeat(next, { text: openingText, sceneId: forcedOpeningScene })
         await persist(next)
         await backend.story.setActiveStorySessionId(user.id, id)
         commitSession(next)
         await refreshLibrary(user.id)
-        // The opening beat goes to the checkpoint screen for the learner's FIRST choice. Do NOT
-        // prefetch the first question here — it must be themed against that choice + its outcome,
-        // which only exist after submitCheckpointChoice (which starts the prefetch then).
-        navigate('story-checkpoint')
+        // Show the premise overview FIRST (the intro page) so the reader knows what the adventure is
+        // about before reading the opening chapter; "Begin" then continues to the chapter-1 checkpoint
+        // for their FIRST choice. Do NOT prefetch the first question here — it must be themed against
+        // that choice + its outcome, which only exist after submitCheckpointChoice.
+        navigate('story-intro')
       } catch (error) {
         setStoryError(messageFrom(error, 'Story Mode could not start. Please try again.'))
       } finally {
@@ -744,7 +832,7 @@ export function useStorySession({
         setStoryBusy(false)
       }
     },
-    [user, backend, ensureAi, persist, refreshLibrary, navigate, commitSession],
+    [user, backend, ensureAi, persist, refreshLibrary, navigate, commitSession, resetReview],
   )
 
   // A correctly-solved question (routed here from the reused step view, NOT to completeStep).
@@ -785,6 +873,8 @@ export function useStorySession({
         const { text: beat, isFallback } = resolveBeatText(next, written, 'bridge')
         const beatScene = await sceneForBeat(ai, next.theme, isFallback, previousSceneId(next))
         next = appendSegment(next, { text: beat, sceneId: beatScene })
+        // Snapshot the bridge as this new chapter's reviewable text (survives segment compaction).
+        next = recordChapterBeat(next, { text: beat, sceneId: beatScene })
         next = await maybeCompact(next)
         await persist(next)
         commitSession(next)
@@ -859,6 +949,13 @@ export function useStorySession({
         const { text: continuation, isFallback } = resolveBeatText(next, written, 'outcome')
         const outcomeScene = await sceneForBeat(ai, next.theme, isFallback, previousSceneId(next))
         next = appendSegment(next, { text: continuation, sceneId: outcomeScene })
+        // Fold the learner's choice + this outcome into the chapter beat so the recap shows the full
+        // setup -> choice -> "what happened next" (it survives the segment compaction just below).
+        next = recordChapterOutcome(next, {
+          userChoice: moderated.sanitized,
+          outcomeText: continuation,
+          outcomeSceneId: outcomeScene,
+        })
         next = await maybeCompact(next)
         await persist(next)
         commitSession(next)
@@ -922,37 +1019,52 @@ export function useStorySession({
     }
   }, [user, persist, commitSession])
 
-  // Back/forward review navigation: move the view pointer only (no persist, no counters). The
-  // displayed question is derived below from `historyIndex`, so the screen re-renders read-only.
+  // Back/forward review navigation over the INTERLEAVED [chapter text, that chapter's questions]
+  // sequence: move the view pointer (historyIndex) and/or the transient chapter-text flag only — no
+  // persist, no counters. The displayed question / chapter text is derived below from this position.
+  const applyReviewPos = useCallback(
+    (next: StoryReviewPos) => {
+      const current = sessionRef.current
+      if (!current) return
+      const changed = next.index !== current.historyIndex || next.chapterText !== showingChapterTextRef.current
+      if (!changed) return
+      if (next.index !== current.historyIndex) commitSession(withHistoryIndex(current, next.index))
+      setReviewChapterText(next.chapterText)
+    },
+    [commitSession, setReviewChapterText],
+  )
+
   const goBack = useCallback(() => {
     const current = sessionRef.current
     if (!current) return
-    const next = reviewBack(current)
-    if (next !== current) commitSession(next)
-  }, [commitSession])
+    const pos: StoryReviewPos = { index: current.historyIndex, chapterText: showingChapterTextRef.current }
+    applyReviewPos(reviewStepBack(current, pos))
+  }, [applyReviewPos])
 
   const goForward = useCallback(() => {
     const current = sessionRef.current
     if (!current) return
-    const next = reviewForward(current)
-    if (next !== current) commitSession(next)
-  }, [commitSession])
+    const pos: StoryReviewPos = { index: current.historyIndex, chapterText: showingChapterTextRef.current }
+    applyReviewPos(reviewStepForward(current, pos))
+  }, [applyReviewPos])
 
-  // Chapter-level review: jump the same view pointer to the previous/next chapter's first question
-  // so the learner can page through whole chapters, not just one question at a time.
+  // Chapter-level review: jump a whole chapter at a time, landing on that chapter's TEXT when it was
+  // captured (else its first question), so paging by chapter mirrors the interleaved Back/Forward.
   const goBackChapter = useCallback(() => {
     const current = sessionRef.current
     if (!current) return
-    const next = reviewBackChapter(current)
-    if (next !== current) commitSession(next)
-  }, [commitSession])
+    const target = displayedChapter(current) - 1
+    if (target < 1) return
+    applyReviewPos(reviewChapterStart(current, target))
+  }, [applyReviewPos])
 
   const goForwardChapter = useCallback(() => {
     const current = sessionRef.current
     if (!current) return
-    const next = reviewForwardChapter(current)
-    if (next !== current) commitSession(next)
-  }, [commitSession])
+    const target = displayedChapter(current) + 1
+    if (target > latestChapter(current)) return
+    applyReviewPos(reviewChapterStart(current, target))
+  }, [applyReviewPos])
 
   const dismissError = useCallback(() => setStoryError(''), [])
 
@@ -963,7 +1075,17 @@ export function useStorySession({
     return question ? rehydrateQuestion(question) : null
   }, [session])
 
-  const reviewing = session ? !isAtLiveEdge(session) : false
+  // The current interleaved review position (question pointer + transient chapter-text flag), and
+  // the chapter beat to render while Back has surfaced a chapter's story text (else null).
+  const reviewPos: StoryReviewPos = { index: session?.historyIndex ?? 0, chapterText: showingChapterText }
+  const displayedChapterNumber = session ? displayedChapter(session) : 1
+  const chapterTextBeat: ChapterBeat | null =
+    session && showingChapterText ? chapterBeatFor(session, displayedChapterNumber) : null
+  const reviewing = session ? !isLiveReviewPos(session, reviewPos) : false
+
+  // Story-recap "look back" (chapter-by-chapter) state for the checkpoint/outcome overlay.
+  const newestRecap = session ? newestRecapChapter(session) : 0
+  const recapBeat: ChapterBeat | null = session && reviewActive ? chapterBeatFor(session, recapChapter) : null
 
   return {
     session,
@@ -972,10 +1094,23 @@ export function useStorySession({
     currentStep: rehydrated?.step ?? null,
     currentThemed: rehydrated?.themed ?? false,
     reviewing,
-    canGoBack: session ? canReviewBack(session) : false,
-    canGoForward: session ? canReviewForward(session) : false,
+    showingChapterText: chapterTextBeat !== null,
+    chapterText: chapterTextBeat,
+    reviewActive,
+    canReview: newestRecap >= 1,
+    openReview,
+    closeReview,
+    recapBeat,
+    recapChapter,
+    recapChapterCount: newestRecap,
+    canRecapBack: reviewActive && recapChapter > 1,
+    canRecapForward: reviewActive && recapChapter < newestRecap,
+    recapBack,
+    recapForward,
+    canGoBack: session ? canReviewStepBack(session, reviewPos) : false,
+    canGoForward: session ? canReviewStepForward(session, reviewPos) : false,
     // Chapter surfacing + chapter-level navigation (a pure view over the question history).
-    chapter: session ? displayedChapter(session) : 1,
+    chapter: displayedChapterNumber,
     chapterCount: session ? latestChapter(session) : 1,
     canGoBackChapter: session ? canReviewBackChapter(session) : false,
     canGoForwardChapter: session ? canReviewForwardChapter(session) : false,

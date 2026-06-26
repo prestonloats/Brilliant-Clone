@@ -33,6 +33,7 @@ export type {
   MainCharacterSource,
   StoryTheme,
   StorySegment,
+  ChapterBeat,
   ThemedQuestion,
   StorySessionStatus,
   StorySession,

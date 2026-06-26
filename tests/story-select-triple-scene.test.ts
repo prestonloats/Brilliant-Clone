@@ -9,8 +9,9 @@ import { selectTripleScene } from '../src/story/selectTripleScene'
 
 // Subtask R3 — triple scene selection (rule 3). The primary pool is `tripleScenes(a,b,c)`; the
 // missing-combo fallbacks (pairs -> singles -> defaultSceneForInterests) are DEFENSIVE: with the
-// complete catalog every one of the 56 real triples already has exactly one tile, so the only way
-// to exercise a fallback is to feed an interest id that is NOT in the catalog (cast a plain string).
+// complete catalog every one of the 56 real triples already has at least one tile (most now carry
+// several after the ">=2 images per triple" coverage top-up), so the only way to exercise a fallback
+// is to feed an interest id that is NOT in the catalog (cast a plain string).
 
 const INTERESTS: StoryInterestId[] = ['space', 'fantasy', 'mystery', 'sports', 'animals', 'pirates', 'cooking', 'fashion']
 
@@ -143,12 +144,12 @@ test('avoidSceneId is excluded whenever an alternative exists', () => {
 // --- avoidSceneId: ignored when it is the ONLY option ----------------------------------------
 
 test('avoidSceneId is ignored when it is the only candidate', () => {
-  // Real triple pools hold exactly one tile, so avoiding it leaves no alternative -> return it.
-  const a: StoryInterestId = 'space'
-  const b: StoryInterestId = 'fantasy'
-  const c: StoryInterestId = 'mystery'
+  // After the coverage top-up most triples carry several tiles; find one that STILL has exactly one
+  // so avoiding it leaves no alternative (the behavior under test). Fails loudly if none remain.
+  const single = tripleCombos().find(([a, b, c]) => tripleScenes(a, b, c).length === 1)
+  assert.ok(single, 'precondition: at least one real triple still has exactly one tile')
+  const [a, b, c] = single
   const only = tripleScenes(a, b, c)
-  assert.equal(only.length, 1, 'precondition: a real triple has exactly one tile')
 
   const { sceneId } = selectTripleScene(a, b, c, { rng: mulberry32(5), avoidSceneId: only[0] })
   assert.equal(sceneId, only[0], 'with no alternative the avoided tile is still returned')

@@ -34,6 +34,8 @@ import { StoryQuestionScreen } from '../story/StoryQuestionScreen'
 import { StoryCheckpointScreen } from '../story/StoryCheckpointScreen'
 import { StoryOutcomeScreen } from '../story/StoryOutcomeScreen'
 import { StoryLibraryScreen } from '../story/StoryLibraryScreen'
+import { StoryIntroScreen } from '../story/StoryIntroScreen'
+import { StoryReviewScreen, type StoryReviewControls } from '../story/StoryReviewView'
 
 export function LearningApp({ backend }: { backend: Backend }) {
   const [user, setUser] = useState<UserProfile | null>(null)
@@ -45,6 +47,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
     | 'complete'
     | 'profile'
     | 'story-interests'
+    | 'story-intro'
     | 'story-question'
     | 'story-checkpoint'
     | 'story-outcome'
@@ -321,6 +324,23 @@ export function LearningApp({ backend }: { backend: Backend }) {
     return <LoadingScreen message="Loading your learning path..." />
   }
 
+  // The read-only "look back at the story" overlay controls, shared by the checkpoint + outcome
+  // screens (which otherwise have no review). It pages CHAPTER RECAPS (setup -> choice -> outcome),
+  // opening at the chapter that prompted the current screen. Built from the controller each render.
+  const reviewControls: StoryReviewControls = {
+    active: story.reviewActive,
+    canReview: story.canReview,
+    open: () => story.openReview(),
+    close: () => story.closeReview(),
+    beat: story.recapBeat,
+    chapter: story.recapChapter,
+    chapterCount: story.recapChapterCount,
+    canBack: story.canRecapBack,
+    canForward: story.canRecapForward,
+    back: () => story.recapBack(),
+    forward: () => story.recapForward(),
+  }
+
   return (
     <main className="app-shell">
       {runtimeError && (
@@ -430,12 +450,24 @@ export function LearningApp({ backend }: { backend: Backend }) {
           onBackToPath={() => setView('course')}
         />
       )}
+      {view === 'story-intro' && user && story.session && (
+        <StoryIntroScreen
+          session={story.session}
+          busy={story.storyBusy}
+          onBegin={() => setView('story-checkpoint')}
+          onOpenLibrary={() => void story.openLibrary()}
+          onNewStory={() => void story.startNewStory()}
+          onBackToPath={() => setView('course')}
+        />
+      )}
       {view === 'story-question' && user && story.session && story.currentStep && (
         <StoryQuestionScreen
           session={story.session}
           step={story.currentStep}
           themed={story.currentThemed}
           reviewing={story.reviewing}
+          showingChapterText={story.showingChapterText}
+          chapterText={story.chapterText}
           canGoBack={story.canGoBack}
           canGoForward={story.canGoForward}
           chapter={story.chapter}
@@ -455,28 +487,54 @@ export function LearningApp({ backend }: { backend: Backend }) {
           onBackToPath={() => setView('course')}
         />
       )}
-      {view === 'story-checkpoint' && user && story.session && (
-        <StoryCheckpointScreen
-          session={story.session}
-          busy={story.storyBusy}
-          error={story.storyError}
-          onContinue={(choice) => void story.submitCheckpointChoice(choice)}
-          onOpenLibrary={() => void story.openLibrary()}
-          onNewStory={() => void story.startNewStory()}
-          onBackToPath={() => setView('course')}
-        />
-      )}
-      {view === 'story-outcome' && user && story.session && (
-        <StoryOutcomeScreen
-          session={story.session}
-          busy={story.storyBusy}
-          error={story.storyError}
-          onContinue={() => void story.continueFromOutcome()}
-          onOpenLibrary={() => void story.openLibrary()}
-          onNewStory={() => void story.startNewStory()}
-          onBackToPath={() => setView('course')}
-        />
-      )}
+      {view === 'story-checkpoint' &&
+        user &&
+        story.session &&
+        (story.reviewActive ? (
+          <StoryReviewScreen
+            review={reviewControls}
+            busy={story.storyBusy}
+            onBackToPath={() => setView('course')}
+            onOpenLibrary={() => void story.openLibrary()}
+            onNewStory={() => void story.startNewStory()}
+          />
+        ) : (
+          <StoryCheckpointScreen
+            session={story.session}
+            busy={story.storyBusy}
+            error={story.storyError}
+            canReview={story.canReview}
+            onLookBack={() => story.openReview()}
+            onContinue={(choice) => void story.submitCheckpointChoice(choice)}
+            onOpenLibrary={() => void story.openLibrary()}
+            onNewStory={() => void story.startNewStory()}
+            onBackToPath={() => setView('course')}
+          />
+        ))}
+      {view === 'story-outcome' &&
+        user &&
+        story.session &&
+        (story.reviewActive ? (
+          <StoryReviewScreen
+            review={reviewControls}
+            busy={story.storyBusy}
+            onBackToPath={() => setView('course')}
+            onOpenLibrary={() => void story.openLibrary()}
+            onNewStory={() => void story.startNewStory()}
+          />
+        ) : (
+          <StoryOutcomeScreen
+            session={story.session}
+            busy={story.storyBusy}
+            error={story.storyError}
+            canReview={story.canReview}
+            onLookBack={() => story.openReview()}
+            onContinue={() => void story.continueFromOutcome()}
+            onOpenLibrary={() => void story.openLibrary()}
+            onNewStory={() => void story.startNewStory()}
+            onBackToPath={() => setView('course')}
+          />
+        ))}
       {view === 'story-library' && user && (
         <StoryLibraryScreen
           sessions={story.library}

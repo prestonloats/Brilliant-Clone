@@ -3,6 +3,8 @@ import type { Lesson, LessonProgress, LessonStep } from '../domain'
 import { ProgressBar } from '../components/ProgressBar'
 import { StepRenderer } from './StepRenderer'
 import type { CompleteOptions } from './types'
+import { isDevToolsEnabled, type DevToolsEnv } from '../devMode'
+import { buildDevSkipCompletion, shouldShowLessonDevSkip } from './devSkip'
 
 type LessonPlayerProps = {
   lesson: Lesson
@@ -36,6 +38,7 @@ export function LessonPlayer({ lesson, step, progress, onBack, onStepComplete }:
   const viewedStep = isReviewing ? lesson.steps[viewIndex] : step
   const isPhysicalBalanceStep = viewedStep.type === 'balance' && viewedStep.layout === 'physical-drag'
   const viewedProgressPercent = Math.round(((viewIndex + 1) / lesson.steps.length) * 100)
+  const devEnabled = isDevToolsEnabled(import.meta.env as unknown as DevToolsEnv)
 
   useEffect(() => {
     stepStartedAt.current = performance.now()
@@ -43,6 +46,19 @@ export function LessonPlayer({ lesson, step, progress, onBack, onStepComplete }:
 
   const goBack = () => setViewIndex((index) => Math.max(0, index - 1))
   const goForward = () => setViewIndex((index) => Math.min(progress.currentStepIndex, index + 1))
+
+  // Dev tool: complete the LIVE step exactly as if it were answered correctly (graded steps record a
+  // correct attempt; concept cards just advance), so a developer can blow through a lesson quickly.
+  const devSkip = () => {
+    const completion = buildDevSkipCompletion(viewedStep)
+    onStepComplete(
+      viewedStep,
+      completion.correct,
+      completion.feedback,
+      Math.round(performance.now() - stepStartedAt.current),
+      completion.options,
+    )
+  }
 
   return (
     <section className={`lesson-shell ${isPhysicalBalanceStep ? 'physical-lesson-shell' : ''}`}>
@@ -58,6 +74,18 @@ export function LessonPlayer({ lesson, step, progress, onBack, onStepComplete }:
           Next →
         </button>
       </div>
+      {shouldShowLessonDevSkip({ devEnabled, isReviewing }) && (
+        <div className="dev-tools-bar">
+          <button
+            type="button"
+            className="dev-skip-button"
+            onClick={devSkip}
+            title="Developer tool: skip this step and count it correct"
+          >
+            ⏭ Dev: skip (correct)
+          </button>
+        </div>
+      )}
       <StepRenderer
         key={viewedStep.id}
         step={viewedStep}

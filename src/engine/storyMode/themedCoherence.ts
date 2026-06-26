@@ -29,10 +29,16 @@
 // learner needs. Check (4) covers prompt-only questions that are NOT a single solvable equation
 // (e.g. "slope -3 and passes through (2, 1) ... find b"), where the solution check (2) is vacuous
 // but dropping the point (2, 1) still makes the question unanswerable.
+//   3. COORDINATE WALKS (input only): a walk question's answer is a DESTINATION (x, y), not a
+//      scalar, so checks (1)/(2) are vacuous and (4)'s numbers can be reproduced inside a totally
+//      different question. When the canonical prompt is a walk, the themed prompt must parse back to
+//      the SAME destination coordinate — the coordinate analogue of the equation-solution check —
+//      so a walk can never be re-themed into a different (scalar-answer) question graded against the
+//      code's coordinate key.
 
 import type { LessonStep } from '../../domain'
 import { oneStepSolutionsInText } from './randomizeQuestionNumbers'
-import { linearSolutionsInText } from './numberVariants'
+import { coordinateWalkInText, linearSolutionsInText } from './numberVariants'
 
 // Signed whole-number tokens (a leading '-' counts only when glued to the digits, so "x = -15"
 // reads as -15 while "x - 5" reads as 5). Mirrors how negative answers are actually displayed.
@@ -110,6 +116,24 @@ const promptGivensPreserved = (canonical: LessonStep, themed: LessonStep): boole
   return isMultisetSubset(integersIn(promptOf(canonical)), integersIn(promptOf(themed)))
 }
 
+// For an INPUT coordinate-walk question — no equation, the answer is a DESTINATION (x, y) (the
+// `coordinate-walk` architecture and the bundled coordinate-plane walks) — the themed prompt must
+// still describe a walk that LANDS ON THE SAME coordinate. The two checks above cannot catch this
+// class: a walk has no solvable equation (so `promptEquationsCoherent` is vacuous), and its move
+// magnitudes are just a multiset the LLM can faithfully reproduce INSIDE A DIFFERENT question (so
+// `promptGivensPreserved` passes too). That is the real bug: "move 2 right, 5 up, 1 left -> (x, y)"
+// re-themed as "for the line y = 2x - 5, what is y when x = 1?" reuses the same integers {2, 5, 1}
+// yet asks for a single number instead of a coordinate, so the learner's correct line answer is
+// graded against the code's coordinate key and rejected. Parsing the walk back out of the themed
+// text and comparing the destination is the coordinate analogue of the equation-solution check, so
+// the shown question can never quietly become a different (scalar-answer) question.
+const promptWalksCoherent = (canonical: LessonStep, themed: LessonStep): boolean => {
+  const canonicalWalk = coordinateWalkInText(promptOf(canonical))
+  if (canonicalWalk === null) return true // canonical isn't a coordinate walk; nothing to enforce
+  const themedWalk = coordinateWalkInText(promptOf(themed))
+  return themedWalk !== null && themedWalk.x === canonicalWalk.x && themedWalk.y === canonicalWalk.y
+}
+
 // Every canonical label's numbers must survive in the themed label with the SAME id.
 const labelsCoherent = (
   canonicalItems: ReadonlyArray<{ id: string; label: string }>,
@@ -132,7 +156,11 @@ export function isThemedStepCoherent(canonical: LessonStep, themed: LessonStep):
   if (canonical.type !== themed.type) return false
 
   if (themed.type === 'input') {
-    return promptEquationsCoherent(canonical, themed) && promptGivensPreserved(canonical, themed)
+    return (
+      promptEquationsCoherent(canonical, themed) &&
+      promptGivensPreserved(canonical, themed) &&
+      promptWalksCoherent(canonical, themed)
+    )
   }
   if (themed.type === 'sequence') {
     const canonicalTiles = canonical.type === 'sequence' ? canonical.tiles : []

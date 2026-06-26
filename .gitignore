@@ -9,7 +9,7 @@ lerna-debug.log*
 
 node_modules
 dist
-dist-tests
+dist-tests*
 dist-ssr
 *.local
 
@@ -35,3 +35,7 @@ dist-ssr
 # Local scratch / diagnostic scripts
 fb-diag.mjs
 fb-setup.mjs
+
+# Original high-res scenery PNGs, backed up by scripts/optimize-scenery.mjs (the app ships WebP).
+# Kept locally so the source art is recoverable, but never committed or deployed.
+scenery-originals/

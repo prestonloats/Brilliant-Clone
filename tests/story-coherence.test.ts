@@ -24,7 +24,12 @@ import {
   twoStepEquationsLesson,
   type LessonStep,
 } from '../src/domain'
-import { isThemedStepCoherent, mulberry32, randomizeQuestionNumbers } from '../src/engine'
+import {
+  generateForArchitecture,
+  isThemedStepCoherent,
+  mulberry32,
+  randomizeQuestionNumbers,
+} from '../src/engine'
 import { applyRetheme } from '../src/story/applyRetheme'
 import type { RethemeResult } from '../src/story/storyAi'
 import { findStep } from './helpers/findStep'
@@ -110,6 +115,35 @@ test('coherence(input): dropping the equation from a prompt-only question is inc
       })
       assert.equal(isThemedStepCoherent(variant, noEquation), false, `equation-dropped @ ${seed} must be incoherent`)
     }
+  }
+})
+
+// --- COORDINATE WALK (architecture) ---------------------------------------------------------
+//
+// Regression for the reported bug: a coordinate-walk question's answer is a DESTINATION (x, y), not a
+// scalar. The walk was re-themed into a line-value question ("for the line y = 2x - 5, what is y when
+// x = 1?") that REUSED the walk's move magnitudes {2, 5, 1}, so the equation-solution check was
+// vacuous AND the number-subset check passed — the rewrite slipped through, and the learner's correct
+// line answer (-3) was graded against the code's coordinate key and rejected (with the walk's
+// "combine the left/right moves..." hint). The guard must reject any re-theme that does not land on
+// the SAME coordinate.
+test('coherence(input): a coordinate walk re-themed into a different (scalar) question is incoherent', () => {
+  for (let seed = 0; seed < 60; seed += 1) {
+    const generated = generateForArchitecture('coordinate-walk', seed)
+    assert.ok(generated, 'coordinate-walk architecture should generate a question')
+    const canonical = generated.step as Extract<LessonStep, { type: 'input' }>
+
+    // FAITHFUL: a story wrapper that keeps the move phrases (the actual math) -> coherent.
+    const faithful = themeWith(canonical, { themedPrompt: `On the star map, ${canonical.prompt}` })
+    assert.equal(isThemedStepCoherent(canonical, faithful), true, `faithful walk @ ${seed} should be coherent`)
+
+    // THE BUG: rewrite the walk as a line-value question that REUSES every move magnitude (so the
+    // old number-subset check still passes) but asks for a single number instead of a coordinate.
+    const givens = canonical.prompt.match(/-?\d+/g)?.join(', ') ?? ''
+    const swapped = themeWith(canonical, {
+      themedPrompt: `Pirate riddle with markers ${givens}: for the line y = 2x - 5, what is y when x = 1?`,
+    })
+    assert.equal(isThemedStepCoherent(canonical, swapped), false, `walk->scalar @ ${seed} must be incoherent`)
   }
 })
 

@@ -419,6 +419,19 @@ const finalCoordinate = (moves: readonly WalkMove[]): { x: number; y: number } =
   return { x, y }
 }
 
+// The destination a free-text prompt walks to, or null when the text is NOT a coordinate-walk
+// question (fewer than 2 signed moves). The coordinate analogue of `linearSolutionsInText`: it lets
+// the themed-coherence guard prove a re-themed coordinate walk still lands on the SAME (x, y), so a
+// walk can never be silently rewritten into a different question whose answer disagrees with the
+// code-graded coordinate (the "move 2 right, 5 up, 1 left -> (x, y)" walk rewritten as the
+// line-value question "y = 2x - 5 at x = 1": same integers {2, 5, 1}, but the answer is a coordinate,
+// not a single number). PURE.
+export const coordinateWalkInText = (text: string): { x: number; y: number } | null => {
+  const moves = parseWalkMoves(text)
+  if (moves.length < 2) return null
+  return finalCoordinate(moves)
+}
+
 // Mirror the authored accept styles (`(x,y)`, `(x, y)`, `x,y`, `x=x,y=y`) so every equivalent form
 // the learner might type still grades; the checker normalizes whitespace/case, so these cover it.
 const coordinateAccept = (x: number, y: number): string[] =>

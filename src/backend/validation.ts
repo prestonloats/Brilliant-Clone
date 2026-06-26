@@ -2,6 +2,7 @@
 
 import type {
   AttemptEvent,
+  ChapterBeat,
   CustomCharacter,
   LessonId,
   LessonProgress,
@@ -340,6 +341,24 @@ const normalizeStorySegment = (value: unknown): StorySegment | null => {
   }
 }
 
+// One persisted chapter opening-beat snapshot. A malformed beat is dropped from the array (returns
+// null) instead of dropping the whole session, mirroring `normalizeStorySegment`. The `chapter` is
+// a 1-based integer; `sceneId` is kept ONLY when it is a KNOWN catalog id (omitted otherwise).
+const normalizeChapterBeat = (value: unknown): ChapterBeat | null => {
+  if (!isRecord(value)) return null
+  if (!isNumber(value.chapter) || !Number.isInteger(value.chapter) || value.chapter < 1) return null
+  if (!isString(value.text)) return null
+
+  return {
+    chapter: value.chapter,
+    text: value.text,
+    ...(isSceneId(value.sceneId) ? { sceneId: value.sceneId } : {}),
+    ...(isString(value.userChoice) ? { userChoice: value.userChoice } : {}),
+    ...(isString(value.outcomeText) ? { outcomeText: value.outcomeText } : {}),
+    ...(isSceneId(value.outcomeSceneId) ? { outcomeSceneId: value.outcomeSceneId } : {}),
+  }
+}
+
 // Rethemed label list ({ id, label }[]) for mcq/operation-choice options or sequence tiles.
 // Returns undefined when the field is absent (so it stays omitted) and filters bad entries.
 const normalizeThemedLabels = (
@@ -451,6 +470,11 @@ export const normalizeStorySession = (value: unknown, fallbackId?: string): Stor
         .map(normalizeStorySegment)
         .filter((segment): segment is StorySegment => segment !== null)
     : []
+  // Persisted chapter opening-beats are OPTIONAL/additive: filter out malformed entries and OMIT
+  // the field entirely when none survive, so legacy sessions (no beats) round-trip unchanged.
+  const chapterBeats = Array.isArray(value.chapterBeats)
+    ? value.chapterBeats.map(normalizeChapterBeat).filter((beat): beat is ChapterBeat => beat !== null)
+    : []
 
   // History seeds from `currentQuestion` for legacy/v1 sessions that never tracked it, so resume
   // still has a one-entry review history at the live edge. The index is clamped into range and
@@ -476,6 +500,7 @@ export const normalizeStorySession = (value: unknown, fallbackId?: string): Stor
       ? value.servedStepIds.filter(isString)
       : [],
     segments,
+    ...(chapterBeats.length > 0 ? { chapterBeats } : {}),
     narrativeSummary: isString(value.narrativeSummary) ? value.narrativeSummary : '',
     createdAt: isString(value.createdAt) ? value.createdAt : new Date().toISOString(),
     updatedAt: isString(value.updatedAt) ? value.updatedAt : new Date().toISOString(),

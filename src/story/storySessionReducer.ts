@@ -7,7 +7,7 @@
 // `node --test` (the repo has no DOM/React test harness). `useStorySession` is the thin React
 // wrapper that wires these transitions to the backend, the selector, and the StoryAI adapter.
 
-import type { SceneId, StorySession, StoryTheme, ThemedQuestion } from '../domain'
+import type { ChapterBeat, SceneId, StorySession, StoryTheme, ThemedQuestion } from '../domain'
 
 // A checkpoint fires after this many solved questions (every 5).
 export const CHECKPOINT_INTERVAL = 5
@@ -301,6 +301,151 @@ export function reviewForwardChapter(session: StorySession): StorySession {
   const target = Math.min(lastIndex, firstIndexOfChapter(displayedChapter(session) + 1))
   if (target === session.historyIndex) return session
   return { ...session, historyIndex: target }
+}
+
+// --- Persisted chapter text + interleaved chapter/question review ----------------------------
+//
+// Each chapter's OPENING narrative beat is snapshotted into `chapterBeats` when the chapter begins,
+// so the prose that opened a chapter survives `segments` compaction and stays reviewable. On top of
+// that snapshot a pure INTERLEAVED review model lets Back reach "[chapter text] then that chapter's
+// questions": a review position (`StoryReviewPos`) is EITHER a chapter's text OR a question at a
+// history index, and stepping Back/Forward walks the merged sequence. Like the pointer-only review
+// above, nothing here mutates the session and nothing touches `updatedAt`.
+
+// The 1-based chapter the CURRENT capture moment opens. Derived from questionsSolvedTotal (NOT
+// segment count): a beat is captured at session start (0 -> chapter 1) and right after each
+// checkpoint bridge (a multiple of CHECKPOINT_INTERVAL, e.g. 5 -> chapter 2), which is exactly
+// chapterForIndex(firstIndexOfChapter(chapter)).
+const captureChapter = (session: StorySession): number => chapterForIndex(session.questionsSolvedTotal)
+
+// Capture/replace the current chapter's opening narrative. Idempotent UPSERT keyed by chapter:
+// replaces any existing entry for that chapter and keeps `chapterBeats` sorted ascending by
+// `chapter`. `sceneId` is included ONLY when provided. Does NOT change `updatedAt` (it is captured
+// alongside an `appendSegment` that already set it).
+export function recordChapterBeat(session: StorySession, params: { text: string; sceneId?: SceneId }): StorySession {
+  const chapter = captureChapter(session)
+  const beat: ChapterBeat = {
+    chapter,
+    text: params.text,
+    ...(params.sceneId ? { sceneId: params.sceneId } : {}),
+  }
+  const others = (session.chapterBeats ?? []).filter((existing) => existing.chapter !== chapter)
+  const chapterBeats = [...others, beat].sort((a, b) => a.chapter - b.chapter)
+  return { ...session, chapterBeats }
+}
+
+// Fold the learner's checkpoint CHOICE and its OUTCOME ("what happened next") into the CURRENT
+// chapter's beat, KEEPING the setup text/scene already captured by `recordChapterBeat`, so the recap
+// can show the full setup -> choice -> outcome. The chapter is derived from questionsSolvedTotal —
+// the choice/outcome are committed before any of the new chapter's questions are solved, so it
+// matches the setup's chapter. Each field is written only when provided (others preserved). If no
+// setup beat exists yet (defensive — never happens in the live flow) one is created with empty text.
+// Idempotent UPSERT, kept ascending by chapter; does NOT change updatedAt (mirrors recordChapterBeat).
+export function recordChapterOutcome(
+  session: StorySession,
+  params: { userChoice?: string; outcomeText?: string; outcomeSceneId?: SceneId },
+): StorySession {
+  const chapter = captureChapter(session)
+  const existing = session.chapterBeats?.find((beat) => beat.chapter === chapter)
+  const merged: ChapterBeat = {
+    ...(existing ?? { chapter, text: '' }),
+    ...(params.userChoice ? { userChoice: params.userChoice } : {}),
+    ...(params.outcomeText ? { outcomeText: params.outcomeText } : {}),
+    ...(params.outcomeSceneId ? { outcomeSceneId: params.outcomeSceneId } : {}),
+  }
+  const others = (session.chapterBeats ?? []).filter((beat) => beat.chapter !== chapter)
+  const chapterBeats = [...others, merged].sort((a, b) => a.chapter - b.chapter)
+  return { ...session, chapterBeats }
+}
+
+// The persisted opening beat for a 1-based chapter, or null when none was captured.
+export function chapterBeatFor(session: StorySession, chapter: number): ChapterBeat | null {
+  return session.chapterBeats?.find((beat) => beat.chapter === chapter) ?? null
+}
+
+// Whether a chapter has reviewable opening text captured.
+export function hasChapterText(session: StorySession, chapter: number): boolean {
+  return chapterBeatFor(session, chapter) !== null
+}
+
+// A review position is EITHER a chapter's text OR a question at a history index. For chapter-text,
+// `index` is firstIndexOfChapter(chapter) so chapterForIndex(index) recovers the chapter.
+export type StoryReviewPos = { index: number; chapterText: boolean }
+
+// The live edge as a review position: the newest served question (never chapter text).
+export function liveReviewPos(session: StorySession): StoryReviewPos {
+  return { index: Math.max(0, session.history.length - 1), chapterText: false }
+}
+
+// True only AT the live question (the newest question, not any chapter text).
+export function isLiveReviewPos(session: StorySession, pos: StoryReviewPos): boolean {
+  const liveIndex = Math.max(0, session.history.length - 1)
+  return !pos.chapterText && pos.index >= liveIndex
+}
+
+// Step one position BACK through the interleaved [chapter text, that chapter's questions] sequence.
+export function reviewStepBack(session: StorySession, pos: StoryReviewPos): StoryReviewPos {
+  if (pos.chapterText) {
+    // From a chapter's text, Back lands on the PREVIOUS chapter's last question. Chapter-1 text is
+    // the very first position, so there it is a no-op.
+    if (pos.index === 0) return pos
+    return { index: pos.index - 1, chapterText: false }
+  }
+  const chapter = chapterForIndex(pos.index)
+  const first = firstIndexOfChapter(chapter)
+  if (pos.index === first) {
+    // At a chapter's first question, Back surfaces THAT chapter's text when captured; otherwise it
+    // falls straight through to the previous question (or no-ops at the very start).
+    if (hasChapterText(session, chapter)) return { index: first, chapterText: true }
+    if (pos.index === 0) return pos
+    return { index: pos.index - 1, chapterText: false }
+  }
+  return { index: pos.index - 1, chapterText: false }
+}
+
+// Step one position FORWARD through the interleaved sequence toward the live edge.
+export function reviewStepForward(session: StorySession, pos: StoryReviewPos): StoryReviewPos {
+  const liveIndex = Math.max(0, session.history.length - 1)
+  // From a chapter's text, Forward lands on that chapter's first question.
+  if (pos.chapterText) return { index: pos.index, chapterText: false }
+  if (pos.index >= liveIndex) return pos
+  const next = pos.index + 1
+  const nextChapter = chapterForIndex(next)
+  // Crossing into a new chapter surfaces its text first (when captured) before its questions.
+  if (next === firstIndexOfChapter(nextChapter) && hasChapterText(session, nextChapter)) {
+    return { index: next, chapterText: true }
+  }
+  return { index: next, chapterText: false }
+}
+
+// Whether Back/Forward would actually move (the step returns a DIFFERENT position).
+export function canReviewStepBack(session: StorySession, pos: StoryReviewPos): boolean {
+  const next = reviewStepBack(session, pos)
+  return next.index !== pos.index || next.chapterText !== pos.chapterText
+}
+
+export function canReviewStepForward(session: StorySession, pos: StoryReviewPos): boolean {
+  const next = reviewStepForward(session, pos)
+  return next.index !== pos.index || next.chapterText !== pos.chapterText
+}
+
+// Apply an explicit question index (clamped to [0, max(0, history.length - 1)]); pointer-only with
+// NO `updatedAt` change (mirrors jumpToLiveEdge). The UI uses this to apply a resolved review
+// position / chapter jump back onto the session's `historyIndex`.
+export function withHistoryIndex(session: StorySession, index: number): StorySession {
+  const liveIndex = Math.max(0, session.history.length - 1)
+  const clamped = Math.min(Math.max(index, 0), liveIndex)
+  return { ...session, historyIndex: clamped }
+}
+
+// The jump target for a chapter: its TEXT when captured, otherwise its first question, clamped to
+// the live edge so a not-yet-reached chapter never points past the newest question.
+export function reviewChapterStart(session: StorySession, chapter: number): StoryReviewPos {
+  if (hasChapterText(session, chapter)) {
+    return { index: firstIndexOfChapter(chapter), chapterText: true }
+  }
+  const liveIndex = Math.max(0, session.history.length - 1)
+  return { index: Math.min(firstIndexOfChapter(chapter), liveIndex), chapterText: false }
 }
 
 // Remove the on-screen question (e.g. when entering a checkpoint), dropping the key entirely so

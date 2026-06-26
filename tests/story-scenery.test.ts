@@ -46,23 +46,23 @@ test('every catalog entry has a unique id, label, description, and asset path', 
 })
 
 test('scenerySrc points at the public asset path', () => {
-  assert.equal(scenerySrc('outer-space'), '/scenery/outer-space.png')
-  for (const id of SCENE_IDS) assert.equal(scenerySrc(id), `/scenery/${id}.png`)
+  assert.equal(scenerySrc('outer-space'), '/scenery/outer-space.webp')
+  for (const id of SCENE_IDS) assert.equal(scenerySrc(id), `/scenery/${id}.webp`)
 })
 
 // Guards against the silent breakage that started this whole feature: a catalog id with no asset
-// (broken <img>) or an orphan PNG no code can ever select.
+// (broken <img>) or an orphan image no code can ever select.
 test('the catalog and the public/scenery assets match one-to-one', () => {
   const dir = join(process.cwd(), 'public', 'scenery')
   for (const id of SCENE_IDS) {
-    assert.ok(existsSync(join(dir, `${id}.png`)), `missing asset for catalog id ${id}`)
+    assert.ok(existsSync(join(dir, `${id}.webp`)), `missing asset for catalog id ${id}`)
   }
   const assetIds = readdirSync(dir)
-    .filter((name) => name.endsWith('.png'))
-    .map((name) => name.slice(0, -'.png'.length))
+    .filter((name) => name.endsWith('.webp'))
+    .map((name) => name.slice(0, -'.webp'.length))
   const catalogIds = new Set<string>(SCENE_IDS)
   for (const assetId of assetIds) {
-    assert.ok(catalogIds.has(assetId), `orphan asset with no catalog entry: ${assetId}.png`)
+    assert.ok(catalogIds.has(assetId), `orphan asset with no catalog entry: ${assetId}.webp`)
   }
   assert.equal(assetIds.length, SCENE_IDS.length)
 })
