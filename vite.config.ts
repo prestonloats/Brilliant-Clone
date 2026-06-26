@@ -16,16 +16,15 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    // Expose the user's OPENAI_* vars (e.g. OPENAI_API_KEY, OPENAI_MODEL) to client code as
-    // import.meta.env.* IN ADDITION TO the default VITE_ prefix, so the direct client-side OpenAI
-    // provider works with the var name the user already set — no rename needed.
-    // SECURITY: this means an OPENAI_API_KEY value is inlined into the public client build whenever
-    // it is set (the secret-scan guard above only inspects VITE_* names). That is acceptable for
-    // LOCAL DEV; for a public deploy keep the key off the client via the proxy provider
-    // (devProxy/ + VITE_STORY_AI_PROVIDER=proxy) or Firebase AI Logic instead.
-    envPrefix: ['VITE_', 'OPENAI_'],
+    // SECURITY: only the VITE_ prefix is exposed to the client bundle. OPENAI_API_KEY is deliberately
+    // NOT exposed, so a billable `sk-...` secret can never be inlined into the public build. The key
+    // lives ONLY server-side: the dev proxy reads it via loadEnv('') (see devProxy/), and the deployed
+    // Cloud Function reads it from Secret Manager (see functions/). The browser only ever talks to the
+    // same-origin /api/story proxy (VITE_STORY_AI_PROVIDER=proxy), never to api.openai.com.
+    envPrefix: ['VITE_'],
     // storyAiProxyPlugin only mounts during `vite dev` (apply: 'serve'); it also reads OPENAI_API_KEY
-    // server-side for the same-origin proxy path.
+    // server-side for the same-origin proxy path. In production the same /api/story path is served by
+    // the Cloud Function in functions/ (wired via the Hosting rewrite in firebase.json).
     plugins: [react(), storyAiProxyPlugin()],
     build: {
       rollupOptions: {

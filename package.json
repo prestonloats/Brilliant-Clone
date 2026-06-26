@@ -12,7 +12,8 @@
     "test:ci": "npm run typecheck && npm test",
     "preview": "vite preview",
     "optimize:images": "node scripts/optimize-scenery.mjs",
-    "deploy": "npm run build && firebase deploy --only hosting --project starting-project-e6700"
+    "deploy": "npm run build && firebase deploy --only functions,hosting --project starting-project-e6700",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting --project starting-project-e6700"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
