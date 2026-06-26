@@ -21,6 +21,23 @@ export {
   graphingLinesLesson,
 } from './content/lessons'
 
+// Story Mode content/session types live with the content model but are part of the
+// runtime/persistence surface, so they are re-exported here alongside the other
+// persistence types (LessonProgress, SkillMastery, ...) for one-stop importing.
+export type {
+  StoryInterestId,
+  StoryInterest,
+  SceneId,
+  CharacterPreset,
+  CustomCharacter,
+  MainCharacterSource,
+  StoryTheme,
+  StorySegment,
+  ThemedQuestion,
+  StorySessionStatus,
+  StorySession,
+} from './content/storyTypes'
+
 export type UserProfile = {
   id: string
   email: string

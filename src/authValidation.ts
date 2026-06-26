@@ -7,6 +7,11 @@
 
 export const PASSWORD_MIN_LENGTH = 6
 
+// Upper bound for a display name, shared by account creation and the Profile-page editor so the
+// rule is identical everywhere. Kept at the Story Mode character-name cap because a chosen display
+// name can flow forward as the "Use my name" protagonist (see resolveProtagonist).
+export const DISPLAY_NAME_MAX_LENGTH = 40
+
 export type AuthMode = 'login' | 'signup'
 
 export type AuthFormValues = {
@@ -27,6 +32,20 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export const isValidEmail = (value: string): boolean => EMAIL_PATTERN.test(value.trim())
 
+// Single source of truth for the display-name rule, shared by account creation (`validateAuthForm`)
+// and the Profile-page editor / backend update guard. Returns the first user-facing error, or
+// `null` when the trimmed name is non-empty and within the length cap.
+export const validateDisplayName = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return 'Enter a display name.'
+  }
+  if (trimmed.length > DISPLAY_NAME_MAX_LENGTH) {
+    return `Use a display name with ${DISPLAY_NAME_MAX_LENGTH} characters or fewer.`
+  }
+  return null
+}
+
 // Returns the first user-facing validation error, or `null` when the form is ready to submit.
 export const validateAuthForm = (
   values: AuthFormValues,
@@ -38,8 +57,11 @@ export const validateAuthForm = (
   if (!isValidEmail(values.email)) {
     return 'Enter a valid email address.'
   }
-  if (mode === 'signup' && !values.displayName.trim()) {
-    return 'Enter a display name.'
+  if (mode === 'signup') {
+    const displayNameError = validateDisplayName(values.displayName)
+    if (displayNameError) {
+      return displayNameError
+    }
   }
 
   if (requiresPassword) {

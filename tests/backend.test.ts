@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
-import { createAttemptEvent, createBackend, LocalBackend, type Backend } from '../src/backend'
+import {
+  createAttemptEvent,
+  createBackend,
+  LocalBackend,
+  validateDisplayNameInput,
+  type Backend,
+} from '../src/backend'
 import type { AttemptEvent, LessonProgress, LessonScore, SkillMastery } from '../src/domain'
 import {
   getBackendProviderFromEnv,
@@ -288,6 +294,7 @@ test('backend provider selection fails closed for firebase mode', () => {
     progress: localBackend.progress,
     mastery: localBackend.mastery,
     attempts: localBackend.attempts,
+    story: localBackend.story,
   }
 
   assert.equal(getBackendProviderFromEnv(undefined), 'local')
@@ -405,6 +412,85 @@ test('local resend verification is a no-op and reload mirrors the active profile
 
   backend.auth.signOut()
   assert.equal(backend.auth.reloadCurrentUser(), null)
+})
+
+test('local auth updates the display name and reflects it in the active profile', () => {
+  const backend = new LocalBackend()
+  const user = backend.auth.signUp({
+    email: 'learner@example.com',
+    password: 'secret1',
+    displayName: 'Learner',
+  })
+
+  const updated = backend.auth.updateDisplayName('  Maya Patel  ')
+
+  assert.equal(updated.id, user.id)
+  assert.equal(updated.displayName, 'Maya Patel') // trimmed
+  assert.equal(updated.email, 'learner@example.com')
+  assert.equal(backend.auth.getCurrentUser()?.displayName, 'Maya Patel')
+})
+
+test('local display name update survives a reload through normalization', () => {
+  const backend = new LocalBackend()
+  backend.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
+
+  backend.auth.updateDisplayName('Renamed Learner')
+
+  // A fresh backend re-reads from storage (same session), forcing the value through
+  // normalizeDatabase rather than returning the cached in-memory object.
+  const reloaded = new LocalBackend()
+  assert.equal(reloaded.auth.getCurrentUser()?.displayName, 'Renamed Learner')
+})
+
+test('local display name update is rejected when no profile is signed in', () => {
+  const backend = new LocalBackend()
+  backend.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
+  backend.auth.signOut()
+
+  assert.throws(() => backend.auth.updateDisplayName('Nobody'), /sign in/i)
+})
+
+test('local display name update rejects empty and too-long names without changing the profile', () => {
+  const backend = new LocalBackend()
+  backend.auth.signUp({ email: 'learner@example.com', password: 'secret1', displayName: 'Learner' })
+
+  assert.throws(() => backend.auth.updateDisplayName('   '), /display name/i)
+  assert.throws(() => backend.auth.updateDisplayName('A'.repeat(41)), /40 characters or fewer/i)
+  assert.equal(backend.auth.getCurrentUser()?.displayName, 'Learner')
+})
+
+test('validateDisplayNameInput trims valid names and throws on invalid ones', () => {
+  assert.equal(validateDisplayNameInput('  Maya  '), 'Maya')
+  assert.throws(() => validateDisplayNameInput(''), /display name/i)
+  assert.throws(() => validateDisplayNameInput('   '), /display name/i)
+  assert.throws(() => validateDisplayNameInput('A'.repeat(41)), /40 characters or fewer/i)
+})
+
+test('firebase display name update serializes the new name under the authenticated uid', () => {
+  // updateDisplayName stores profileFromFirebaseUser(user) with the validated name, then the
+  // serializer stamps the authenticated uid and drops transient emailVerified state.
+  const displayName = validateDisplayNameInput('  Renamed Learner  ')
+  const stored = toFirestoreUserProfile('auth-uid', {
+    id: 'payload-user',
+    email: 'learner@example.com',
+    displayName,
+    emailVerified: true,
+    createdAt: '2026-06-23T00:00:00.000Z',
+  })
+
+  assert.equal(stored.displayName, 'Renamed Learner')
+  assert.equal(stored.id, 'auth-uid')
+  assert.equal('emailVerified' in stored, false)
+})
+
+test('firebase display name update reuses the owner + verified-email write guards', () => {
+  // updateDisplayName composes requireVerifiedUid = requireMatchingUserId + assertVerifiedEmailForWrite.
+  assert.equal(requireMatchingUserId('auth-uid', 'auth-uid'), 'auth-uid')
+  assert.throws(() => requireMatchingUserId(null, 'auth-uid'), /sign in/i)
+  assert.throws(() => requireMatchingUserId('auth-uid', 'other-user'), /different authenticated user/i)
+  assert.throws(() => assertVerifiedEmailForWrite(false), /verify your email/i)
+  assert.throws(() => assertVerifiedEmailForWrite(undefined), /verify your email/i)
+  assert.doesNotThrow(() => assertVerifiedEmailForWrite(true))
 })
 
 test('local progress saves and resumes by user and lesson', () => {

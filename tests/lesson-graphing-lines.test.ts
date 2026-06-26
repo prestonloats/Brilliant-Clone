@@ -135,6 +135,7 @@ test('graphing-lines table question uses real tables and explains tables first',
   assert.ok(tablesConcept.tables && tablesConcept.tables.length > 0, 'the tables concept should show example tables')
 
   const tableChoice = findStep('choose-line-table', 'operation-choice')
+  assert.equal(tableChoice.choices.length, 4, 'the table question should offer four answer options')
   assert.ok(
     tableChoice.choices.every((choice) => choice.table && choice.table.x.length === choice.table.y.length),
     'every table choice should carry equal-length x and y rows',

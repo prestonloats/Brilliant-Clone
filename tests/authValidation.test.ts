@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  DISPLAY_NAME_MAX_LENGTH,
   isValidEmail,
   PASSWORD_MIN_LENGTH,
   validateAuthForm,
+  validateDisplayName,
   type AuthFormValues,
 } from '../src/authValidation'
 
@@ -100,6 +102,47 @@ test('firebase auth enforces password presence and minimum length', () => {
       mode: 'login',
       requiresPassword: true,
     }),
+    null,
+  )
+})
+
+test('validateDisplayName accepts trimmed non-empty names within the length cap', () => {
+  assert.equal(validateDisplayName('Maya'), null)
+  assert.equal(validateDisplayName('  Maya  '), null)
+  assert.equal(validateDisplayName('A'.repeat(DISPLAY_NAME_MAX_LENGTH)), null)
+})
+
+test('validateDisplayName rejects empty / whitespace-only names', () => {
+  assert.match(validateDisplayName('') ?? '', /display name/i)
+  assert.match(validateDisplayName('   ') ?? '', /display name/i)
+  assert.match(validateDisplayName('\t\n') ?? '', /display name/i)
+})
+
+test('validateDisplayName rejects names longer than the cap (counting trimmed length)', () => {
+  assert.equal(DISPLAY_NAME_MAX_LENGTH, 40)
+  assert.match(
+    validateDisplayName('A'.repeat(DISPLAY_NAME_MAX_LENGTH + 1)) ?? '',
+    /40 characters or fewer/i,
+  )
+  // Surrounding whitespace is trimmed before the length is measured, so a padded name that fits
+  // once trimmed is still accepted.
+  assert.equal(validateDisplayName(`  ${'A'.repeat(DISPLAY_NAME_MAX_LENGTH)}  `), null)
+})
+
+test('validateAuthForm enforces the shared display-name cap when creating an account', () => {
+  assert.match(
+    validateAuthForm(
+      values({ email: 'learner@example.com', displayName: 'A'.repeat(DISPLAY_NAME_MAX_LENGTH + 1) }),
+      { mode: 'signup', requiresPassword: false },
+    ) ?? '',
+    /40 characters or fewer/i,
+  )
+  // Login never inspects the display name, so an over-long value is irrelevant there.
+  assert.equal(
+    validateAuthForm(
+      values({ email: 'learner@example.com', displayName: 'A'.repeat(DISPLAY_NAME_MAX_LENGTH + 1) }),
+      { mode: 'login', requiresPassword: false },
+    ),
     null,
   )
 })

@@ -86,6 +86,13 @@
   padding: clamp(22px, 5vw, 44px);
 }
 
+/* Visually separate the display-name editor from the identity summary above it. */
+.profile-name-form {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 24px;
+}
+
 .screen-stack,
 .lesson-shell {
   display: grid;
@@ -116,4 +123,4 @@
   line-height: 1.5;
   margin-top: 14px;
 }
-
+

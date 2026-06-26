@@ -19,6 +19,7 @@ import {
 import { getCourseMasterySummary } from './masteryCelebration'
 import { MasterySparkles } from './MasterySparkles'
 import { CoursePathGraph } from './CoursePathGraph'
+import { StoryEntryCard } from '../story/StoryEntryCard'
 
 type CourseMapProps = {
   user: UserProfile
@@ -28,6 +29,13 @@ type CourseMapProps = {
   mastery: SkillMastery[]
   onLaunchLesson: (lessonId: LessonId) => void
   onRetakeLesson: (lessonId: LessonId) => void
+  storyUnlocked: boolean
+  storyProviderConfigured: boolean
+  storyHasActiveSession: boolean
+  storySavedCount: number
+  storyBusy: boolean
+  onOpenStory: () => void
+  onOpenStoryLibrary: () => void
 }
 
 export function CourseMap({
@@ -38,6 +46,13 @@ export function CourseMap({
   mastery,
   onLaunchLesson,
   onRetakeLesson,
+  storyUnlocked,
+  storyProviderConfigured,
+  storyHasActiveSession,
+  storySavedCount,
+  storyBusy,
+  onOpenStory,
+  onOpenStoryLibrary,
 }: CourseMapProps) {
   const reviewLessonId = getReviewSuggestedLessonId(progressByLesson, mastery)
   const pathSummary = getCourseProgressSummary(algebraCourse, lessons, progressByLesson, activeLesson.id)
@@ -124,6 +139,16 @@ export function CourseMap({
           <ProgressBar value={featuredProgressPercent} label={`${featuredLesson.title}: ${featuredProgressPercent}% complete`} />
         )}
       </div>
+
+      <StoryEntryCard
+        unlocked={storyUnlocked}
+        providerConfigured={storyProviderConfigured}
+        hasActiveSession={storyHasActiveSession}
+        savedCount={storySavedCount}
+        busy={storyBusy}
+        onOpen={onOpenStory}
+        onOpenLibrary={onOpenStoryLibrary}
+      />
 
       <CoursePathGraph
         progress={progress}

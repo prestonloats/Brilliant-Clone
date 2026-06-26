@@ -50,6 +50,25 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /story/{uid} {
+      allow read: if owns(uid);
+      // The parent doc holds the active-session POINTER ({ userId, activeSessionId }). Writes
+      // require a verified email and a payload userId matching the path, consistent with the
+      // progress/mastery write gate. (Legacy data once lived here and is migrated into /sessions.)
+      allow create, update: if writesUserId(uid) && verifiedEmail();
+      allow delete: if false;
+
+      // The saved-stories LIBRARY: one whole session document per id. The stored id must match
+      // the path segment so a write cannot mislabel a session (mirrors the progress/attempt
+      // id guards). Owner + verified email gate every write, including delete.
+      match /sessions/{sessionId} {
+        allow read: if owns(uid);
+        allow create, update: if writesUserId(uid) && verifiedEmail()
+          && request.resource.data.id == sessionId;
+        allow delete: if owns(uid) && verifiedEmail();
+      }
+    }
+
     match /content/{document=**} {
       allow read: if true;
       allow write: if false;

@@ -154,6 +154,12 @@ export const graphingLinesLesson: Lesson = {
           feedback: 'The slope is right, but the intercept should be +1, not -1.',
           table: { x: [0, 1, 2], y: [-1, 1, 3] },
         },
+        {
+          id: 'table-three-x-plus-one',
+          label: 'x: 0, 1, 2 -> y: 1, 4, 7',
+          feedback: 'The intercept is right, but this rises by 3 each step, so it matches y = 3x + 1.',
+          table: { x: [0, 1, 2], y: [1, 4, 7] },
+        },
       ],
       feedback: {
         correct: 'Yes. The table starts at y = 1 when x = 0 and rises by 2 each step.',

@@ -1,0 +1,1007 @@
+// Story Mode controller hook (plan section 6.3).
+//
+// This is the React seam that wires the PURE pieces together: the session reducer
+// (`storySessionReducer`), the question-architecture bank (`selectNextArchitecture` +
+// `generateForArchitecture` — Story Mode pulls code-graded questions from the bank, NOT reused
+// lesson steps), the LLM adapter (`createStoryAI`), the re-theme reconstructor (`applyRetheme`),
+// the teen-safety helpers (`safety`), and the `story` persistence repository. The LLM only ever
+// re-themes the DISPLAY TEXT; the answer key always comes from code. It persists the session after every
+// transition, guards against double calls with `storyBusy`, pre-fetches the next themed question
+// while the learner answers, resumes by re-hydrating the persisted question, and compacts the
+// narrative once it grows past a threshold.
+//
+// PURE-REVIEW INVARIANT (critical): Story Mode NEVER writes LessonProgress, mastery, streaks, or
+// attempts. It only ever calls `backend.story.saveStorySession`. It reads progress/mastery/
+// attempts to drive selection, but writes nothing but its own session. Results from the reused
+// step views are routed here (`submitQuestionResult`), never to `LearningApp.completeStep`.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  LessonStep,
+  SceneId,
+  StorySession,
+  StoryTheme,
+  ThemedQuestion,
+  UserProfile,
+} from '../domain'
+import type { AttemptEvent, SkillMastery } from '../domain'
+import type { Backend } from '../backend'
+import {
+  createVariantSeed,
+  generateForArchitecture,
+  isThemedStepCoherent,
+  selectNextArchitecture,
+} from '../engine'
+import type { ProgressByLesson } from '../engine'
+import { applyRetheme } from './applyRetheme'
+import { questionKey, rehydrateQuestion, toThemedQuestion } from './rehydrateQuestion'
+import { createStoryAI, type StoryAiEnv } from './createStoryAI'
+import { resolveProtagonist } from './resolveMainCharacter'
+import { defaultSceneForInterests, getSceneLabel, pickRandomOffInterestScene } from './scenery'
+import type { RethemeRequest, RethemeResult, StoryAI } from './storyAi'
+import { RETHEME_FALLBACK, fallbackProtagonist, storyFallbackBeat, type StoryBeatKind } from './storyPrompts'
+import { isOutputSafe, moderateUserInput } from './safety'
+import { sortStorySessionsByRecent } from './storyLibrary'
+import {
+  CHECKPOINT_INTERVAL,
+  KEEP_VERBATIM_SEGMENTS,
+  appendSegment,
+  canReviewBack,
+  canReviewBackChapter,
+  canReviewForward,
+  canReviewForwardChapter,
+  clearCurrentQuestion,
+  compactNarrative,
+  createInitialSession,
+  createStorySessionId,
+  displayedChapter,
+  displayedQuestion,
+  endSession,
+  isAtLiveEdge,
+  isAwaitingOutcomeAck,
+  isCheckpointDue,
+  jumpToLiveEdge,
+  latestChapter,
+  recentNarrative,
+  recordSolved,
+  resetCheckpoint,
+  rethemeNarrative,
+  reviewBack,
+  reviewBackChapter,
+  reviewForward,
+  reviewForwardChapter,
+  setCurrentQuestion,
+  setLatestSegmentChoice,
+} from './storySessionReducer'
+
+// The Story Mode screens the hook drives via the injected `navigate` callback.
+export type StoryView =
+  | 'story-interests'
+  | 'story-question'
+  | 'story-checkpoint'
+  | 'story-outcome'
+  | 'story-library'
+
+type UseStorySessionInput = {
+  backend: Backend
+  user: UserProfile | null
+  progressByLesson: ProgressByLesson
+  mastery: SkillMastery[]
+  attempts: AttemptEvent[]
+  navigate: (view: StoryView) => void
+}
+
+export type UseStorySession = {
+  session: StorySession | null
+  // Every saved story for the active user (most-recently-played first), for the library UI.
+  library: StorySession[]
+  savedCount: number
+  currentStep: LessonStep | null
+  currentThemed: boolean
+  // True while the learner is reviewing a PAST (already-answered) question read-only.
+  reviewing: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  // The chapter currently on display + the highest chapter reached, plus whether a previous/next
+  // chapter exists to jump to (a pure view over the question history; see storySessionReducer).
+  chapter: number
+  chapterCount: number
+  canGoBackChapter: boolean
+  canGoForwardChapter: boolean
+  storyBusy: boolean
+  storyError: string
+  providerConfigured: boolean
+  hasActiveSession: boolean
+  questionNumberInChapter: number
+  openStory: () => Promise<void>
+  openLibrary: () => Promise<void>
+  startNewStory: () => Promise<void>
+  switchToStory: (sessionId: string) => Promise<void>
+  deleteStory: (sessionId: string) => Promise<void>
+  beginAdventure: (theme: StoryTheme) => Promise<void>
+  submitQuestionResult: () => Promise<void>
+  submitCheckpointChoice: (text: string) => Promise<void>
+  continueFromOutcome: () => Promise<void>
+  goBack: () => void
+  goForward: () => void
+  goBackChapter: () => void
+  goForwardChapter: () => void
+  endStory: () => Promise<void>
+  dismissError: () => void
+}
+
+// Vite injects VITE_* at build; the cast mirrors src/firebaseConfig.ts. Read once at module
+// scope so the provider check never re-evaluates per render.
+const STORY_AI_ENV = import.meta.env as unknown as StoryAiEnv
+
+// Once the narrative passes this many beats, fold the older ones into the rolling summary so
+// each prompt stays cheap (plan section 8). KEEP_VERBATIM_SEGMENTS lives in the reducer alongside
+// the pure `recentNarrative`/`rethemeNarrative` builders that consume it.
+const COMPACT_THRESHOLD = 6
+
+// Safe, offline premise fallback used when no provider is configured or a generation fails/blocks.
+// The opening/bridge/outcome BEAT fallbacks are theme-aware and distinct-per-beat (storyFallbackBeat
+// in storyPrompts), so a failed continuation can never reprint the opening verbatim, and the
+// protagonist fallback is interest-aware (fallbackProtagonist) instead of a hardcoded "the Explorer".
+const DEFAULT_PREMISE = 'A bright new adventure stretches out ahead, full of puzzles to solve.'
+
+const nowIso = (): string => new Date().toISOString()
+
+// Resolve the text to COMMIT for a narrated beat, given what the AI returned (or null on failure).
+// Guarantees two things the old single-canned-string path did not:
+//   1. DISTINCTNESS — the committed text never equals the immediately previous beat's text, so a
+//      learner's choice can never "reprint the same paragraph" (a failed continuation rotates through
+//      theme-aware fallback variants until it differs).
+//   2. THEME-AWARE FALLBACK — a failed/blocked/empty generation falls back to a per-beat, on-theme
+//      beat (storyFallbackBeat) instead of one generic canned bridge shared by every beat type.
+// Returns whether the committed text is a fallback so the caller can supply a default scene image.
+const resolveBeatText = (
+  session: StorySession,
+  generated: string | null,
+  kind: StoryBeatKind,
+): { text: string; isFallback: boolean } => {
+  const previous = session.segments[session.segments.length - 1]?.text.trim() ?? ''
+  const clean = (generated ?? '').trim()
+  if (clean && isOutputSafe(clean) && clean !== previous) return { text: clean, isFallback: false }
+  // Fallback: rotate variants so a duplicate (or a run of fallbacks) never repeats the prior beat.
+  const base = session.segments.length
+  for (let offset = 0; offset < 4; offset += 1) {
+    const candidate = storyFallbackBeat(kind, session.theme, base + offset).trim()
+    if (candidate && candidate !== previous) return { text: candidate, isFallback: true }
+  }
+  return { text: storyFallbackBeat(kind, session.theme, base), isFallback: true }
+}
+
+const messageFrom = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message ? error.message : fallback
+
+const choiceRejectionMessage = (reason?: string): string => {
+  if (reason === 'empty') return 'Type what you want to do next to continue the adventure.'
+  if (reason === 'profanity' || reason === 'unsafe') {
+    return "Let's keep the story friendly for everyone — try describing a different action."
+  }
+  return 'Try describing your next move a little differently.'
+}
+
+// A provider is "configured" purely from env, WITHOUT loading any SDK (the dynamic import only
+// happens lazily in `ensureAi`, so opening CourseMap never pulls in @google/genai).
+const isProviderConfigured = (env: StoryAiEnv): boolean => {
+  // The proxy provider keeps the key server-side; it's configured once the proxy URL is set
+  // (createProxyProvider requires VITE_STORY_AI_PROXY_URL).
+  if (env.VITE_STORY_AI_PROVIDER === 'proxy') return Boolean(env.VITE_STORY_AI_PROXY_URL)
+  if (env.VITE_STORY_AI_PROVIDER === 'firebase') return true
+  // Direct OpenAI developer key (the user's OPENAI_API_KEY, or a VITE_OPENAI_API_KEY fallback) —
+  // mirrors the selection in createStoryAI so the entry gate matches the live provider.
+  if ((env.OPENAI_API_KEY ?? env.VITE_OPENAI_API_KEY ?? '').trim()) return true
+  return Boolean(env.VITE_GEMINI_API_KEY)
+}
+
+// Ask the LLM to match a pre-generated background image to a freshly-written (AI) beat. Best-effort
+// and non-blocking: no provider, an empty beat, or ANY failure/timeout/unknown id resolves to
+// `undefined`, and the caller (`sceneForBeat`) then substitutes an interest-aware default so the beat
+// is still illustrated on-theme rather than image-less. The chosen id is persisted on the segment,
+// so resume re-shows the same image without asking the model again. FALLBACK beats do NOT call this
+// (the provider is usually degraded then, so it would just waste a slow timeout) — the caller uses a
+// theme-appropriate default scene (`sceneForBeat`) instead so a fallback chapter is still illustrated.
+const pickSceneForBeat = async (
+  ai: StoryAI | null,
+  theme: StoryTheme,
+  text: string,
+): Promise<SceneId | undefined> => {
+  const trimmed = text.trim()
+  if (!ai || !trimmed) return undefined
+  try {
+    return (await ai.pickScene({ theme, sceneText: trimmed })) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Resolve a scene image for a beat. A FALLBACK beat uses an interest-SET-aware DEFAULT scene
+// (without calling the possibly-degraded provider). A real AI beat asks the model to match one, but
+// if the matcher returns nothing (no provider, empty beat, failure, timeout, or an unknown id) it
+// falls back to the SAME interest-aware default — so a beat is always illustrated on-theme (e.g. a
+// dragon+bakery scene) instead of rendering image-less. The whole theme (presets + freeform) is
+// passed so a combo interest can win, not just the first preset.
+const sceneForBeat = async (
+  ai: StoryAI | null,
+  theme: StoryTheme,
+  text: string,
+  isFallback: boolean,
+): Promise<SceneId | undefined> =>
+  isFallback
+    ? defaultSceneForInterests(theme)
+    : (await pickSceneForBeat(ai, theme, text)) ?? defaultSceneForInterests(theme)
+
+// Build the re-theme request from a bundled step: display text + option/tile labels only, never
+// the answer key (accept/correctId/correctOrder stay in the original object).
+const buildRethemeRequest = (theme: StoryTheme, narrative: string, step: LessonStep): RethemeRequest => {
+  if (step.type === 'mcq') {
+    return {
+      theme,
+      recentNarrative: narrative,
+      stepType: 'mcq',
+      prompt: step.prompt,
+      options: step.options.map((option) => ({ id: option.id, label: option.label })),
+    }
+  }
+  if (step.type === 'operation-choice') {
+    return {
+      theme,
+      recentNarrative: narrative,
+      stepType: 'operation-choice',
+      prompt: step.prompt,
+      ...(step.equation ? { equation: step.equation } : {}),
+      options: step.choices.map((choice) => ({ id: choice.id, label: choice.label })),
+    }
+  }
+  if (step.type === 'sequence') {
+    return {
+      theme,
+      recentNarrative: narrative,
+      stepType: 'sequence',
+      prompt: step.prompt,
+      ...(step.equation ? { equation: step.equation } : {}),
+      tiles: step.tiles.map((tile) => ({ id: tile.id, label: tile.label })),
+    }
+  }
+  // input (the only remaining rethemable type)
+  const equation = step.type === 'input' ? step.equation : undefined
+  const prompt = 'prompt' in step ? step.prompt : ''
+  return {
+    theme,
+    recentNarrative: narrative,
+    stepType: 'input',
+    prompt,
+    ...(equation ? { equation } : {}),
+  }
+}
+
+// All display text of a (themed) step, for the output-moderation pass before we show it.
+const themedStepText = (step: LessonStep): string => {
+  const parts: string[] = []
+  if ('prompt' in step && step.prompt) parts.push(step.prompt)
+  if (step.type === 'mcq') parts.push(...step.options.map((option) => option.label))
+  else if (step.type === 'operation-choice') parts.push(...step.choices.map((choice) => choice.label))
+  else if (step.type === 'sequence') parts.push(...step.tiles.map((tile) => tile.label))
+  return parts.join(' ')
+}
+
+export function useStorySession({
+  backend,
+  user,
+  progressByLesson,
+  mastery,
+  attempts,
+  navigate,
+}: UseStorySessionInput): UseStorySession {
+  const [session, setSession] = useState<StorySession | null>(null)
+  const [library, setLibrary] = useState<StorySession[]>([])
+  const [storyBusy, setStoryBusy] = useState(false)
+  const [storyError, setStoryError] = useState('')
+
+  // Synchronous guard against double-generation (state updates lag a render behind).
+  const busyRef = useRef(false)
+  // Always-current session for callbacks handed to reused step views (avoids stale closures).
+  const sessionRef = useRef<StorySession | null>(null)
+  // Lazily-created StoryAI promise so the SDK only loads when Story Mode actually generates.
+  const aiPromiseRef = useRef<Promise<StoryAI | null> | null | undefined>(undefined)
+  // The next themed question, pre-fetched while the learner answers the current one.
+  const prefetchRef = useRef<Promise<ThemedQuestion | null> | null>(null)
+
+  const providerConfigured = useMemo(() => isProviderConfigured(STORY_AI_ENV), [])
+
+  const commitSession = useCallback((next: StorySession | null) => {
+    sessionRef.current = next
+    setSession(next)
+  }, [])
+
+  const persist = useCallback(
+    async (next: StorySession) => {
+      await backend.story.saveStorySession(next)
+    },
+    [backend],
+  )
+
+  // Reload the saved-stories library into state (most-recently-played first) and return it.
+  const refreshLibrary = useCallback(
+    async (userId: string): Promise<StorySession[]> => {
+      try {
+        const sorted = sortStorySessionsByRecent(await backend.story.listStorySessions(userId))
+        setLibrary(sorted)
+        return sorted
+      } catch {
+        setLibrary([])
+        return []
+      }
+    },
+    [backend],
+  )
+
+  const ensureAi = useCallback(async (): Promise<StoryAI | null> => {
+    if (aiPromiseRef.current === undefined) {
+      try {
+        aiPromiseRef.current = createStoryAI(STORY_AI_ENV)
+      } catch {
+        aiPromiseRef.current = null
+      }
+    }
+    const promise = aiPromiseRef.current
+    if (!promise) return null
+    try {
+      return await promise
+    } catch {
+      return null
+    }
+  }, [])
+
+  // Pick + re-theme the next question. Selection is pure and now draws from the code-authoritative
+  // question-architecture BANK (not reused lesson steps); re-theme degrades to the canonical
+  // question on any AI failure/timeout/quota/safety block (applyRetheme returns themed:false).
+  const selectAndRetheme = useCallback(
+    async (current: StorySession, excludeKey?: string): Promise<ThemedQuestion | null> => {
+      const arch = selectNextArchitecture({
+        progressByLesson,
+        // Served architecture keys are `arch:<id>` (recorded on solve); legacy `${lessonId}:${stepId}`
+        // entries simply never match a candidate.
+        servedKeys: current.servedStepIds,
+        mastery,
+        attempts,
+        // Exclude the on-screen question (not yet in servedStepIds, which only grows on solve) so a
+        // prefetch can never re-pick the question currently being answered (the duplicate-question bug).
+        ...(excludeKey ? { excludeKey } : {}),
+      })
+      // Null only if no architecture's required lesson is completed — preserve the "no question
+      // available" empty state (the unlock gate normally guarantees at least one is eligible).
+      if (!arch) return null
+
+      // Generate the CANONICAL question FIRST: a deterministic, code-graded instance of the chosen
+      // architecture, so the LLM rethemes the canonical prompt and grading uses the architecture's
+      // code-computed answer key. The seed is persisted so resume rebuilds the exact same instance
+      // (and key). A null result (unknown id) is treated defensively as "no question available".
+      const paramSeed = createVariantSeed()
+      const generated = generateForArchitecture(arch.id, paramSeed)
+      if (!generated) return null
+      const canonicalStep = generated.step
+
+      const ai = await ensureAi()
+      let result: RethemeResult = RETHEME_FALLBACK
+      if (ai) {
+        try {
+          // rethemeNarrative (not plain recentNarrative) so the question chains from the PREVIOUS
+          // question's scene and the committed choice/outcome — one coherent thread, not a fresh
+          // scenario each time. `current` is always the latest committed state at call time.
+          result = await ai.rethemeQuestion(buildRethemeRequest(current.theme, rethemeNarrative(current), canonicalStep))
+        } catch {
+          result = RETHEME_FALLBACK
+        }
+      }
+
+      const applied = applyRetheme(canonicalStep, result)
+      // Two gates before we trust the rewrite, else we show the coherent (un-themed) canonical step:
+      //   - output moderation (an unsafe rewrite is dropped), and
+      //   - NUMBER COHERENCE: the themed prompt/labels must state the SAME math as the canonical
+      //     step, so the question, the shown equation, and the code-computed answer can never
+      //     disagree (the LLM occasionally changes a number despite the "never change" instruction).
+      const themed =
+        applied.themed &&
+        isOutputSafe(themedStepText(applied.step)) &&
+        isThemedStepCoherent(canonicalStep, applied.step)
+      const step = themed ? applied.step : canonicalStep
+      return toThemedQuestion(arch, step, themed, paramSeed)
+    },
+    [progressByLesson, mastery, attempts, ensureAi],
+  )
+
+  const startPrefetch = useCallback(
+    (current: StorySession) => {
+      // Exclude whatever question is on screen right now (if any). At a checkpoint boundary
+      // `currentQuestion` is cleared, so this is undefined and the just-solved questions in
+      // `servedStepIds` provide the anti-repeat instead.
+      const excludeKey = current.currentQuestion ? questionKey(current.currentQuestion) : undefined
+      prefetchRef.current = selectAndRetheme(current, excludeKey).catch(() => null)
+    },
+    [selectAndRetheme],
+  )
+
+  // Prefetch the NEXT question ONLY when it will stay within the CURRENT chapter — i.e. the live
+  // question is not the last one before a checkpoint. Across a checkpoint the next question must be
+  // re-themed AFTER the learner's choice + the outcome are committed (done in submitCheckpointChoice),
+  // so prefetching it now would lock in a STALE, pre-choice scene (the root cause of the first
+  // question of each chapter ignoring the choice). When skipped, the prefetch slot is cleared so a
+  // stale one can never be consumed.
+  const startPrefetchWithinChapter = useCallback(
+    (current: StorySession) => {
+      if (current.questionsSinceCheckpoint < CHECKPOINT_INTERVAL - 1) {
+        startPrefetch(current)
+      } else {
+        prefetchRef.current = null
+      }
+    },
+    [startPrefetch],
+  )
+
+  // Commit an active session and navigate to the right screen to resume it. Always snaps the
+  // review pointer back to the live edge so resume continues play rather than mid-review.
+  const routeToActive = useCallback(
+    (loaded: StorySession) => {
+      const atEdge = jumpToLiveEdge(loaded)
+      commitSession(atEdge)
+      if (atEdge.currentQuestion && rehydrateQuestion(atEdge.currentQuestion)) {
+        navigate('story-question')
+        // Only prefetch the next question if it stays in this chapter (not across a checkpoint).
+        startPrefetchWithinChapter(atEdge)
+      } else if (isAwaitingOutcomeAck(atEdge)) {
+        // A refresh after submitting a checkpoint action but before continuing to the next
+        // question: the outcome beat is already appended and the choice recorded, so resume to
+        // the outcome page (not the checkpoint, which would re-prompt) and pre-fetch the first
+        // question of the new chapter against that committed choice + outcome.
+        navigate('story-outcome')
+        startPrefetch(atEdge)
+      } else if (atEdge.segments.length > 0) {
+        // A checkpoint/opening beat awaiting the learner's choice. Do NOT prefetch yet — the choice
+        // (and its outcome) change the narrative, so the next question is themed in
+        // submitCheckpointChoice once they are committed; prefetching now would be stale.
+        navigate('story-checkpoint')
+      } else {
+        navigate('story-interests')
+      }
+    },
+    [commitSession, navigate, startPrefetch, startPrefetchWithinChapter],
+  )
+
+  const takeNextQuestion = useCallback(
+    async (current: StorySession): Promise<ThemedQuestion | null> => {
+      const pending = prefetchRef.current
+      prefetchRef.current = null
+      if (pending) {
+        const prefetched = await pending
+        if (prefetched) return prefetched
+      }
+      return selectAndRetheme(current)
+    },
+    [selectAndRetheme],
+  )
+
+  const maybeCompact = useCallback(
+    async (current: StorySession): Promise<StorySession> => {
+      if (current.segments.length <= COMPACT_THRESHOLD) return current
+      const ai = await ensureAi()
+      if (!ai) return current
+      const older = current.segments.slice(0, current.segments.length - KEEP_VERBATIM_SEGMENTS)
+      const narrative = [current.narrativeSummary, ...older.map((segment) => segment.text)]
+        .filter(Boolean)
+        .join('\n\n')
+      try {
+        const summary = await ai.summarize({ narrative })
+        const safeSummary = isOutputSafe(summary) && summary.trim() ? summary.trim() : current.narrativeSummary
+        return compactNarrative(current, { summary: safeSummary, keepLastSegments: KEEP_VERBATIM_SEGMENTS })
+      } catch {
+        return current
+      }
+    },
+    [ensureAi],
+  )
+
+  // Load the active session (via the pointer) and the library on sign-in so the entry card can
+  // show Start vs Resume + a saved-stories count. Read only; it never writes. setState happens
+  // only in the resolved `.then` (the recommended async-effect pattern), never synchronously.
+  useEffect(() => {
+    let cancelled = false
+    const load = async (): Promise<{ session: StorySession | null; library: StorySession[] }> => {
+      if (!user) return { session: null, library: [] }
+      try {
+        const [activeId, sessions] = await Promise.all([
+          backend.story.getActiveStorySessionId(user.id),
+          backend.story.listStorySessions(user.id),
+        ])
+        const active = activeId ? await backend.story.getStorySession(user.id, activeId) : null
+        return { session: active, library: sortStorySessionsByRecent(sessions) }
+      } catch {
+        return { session: null, library: [] }
+      }
+    }
+    void load().then(({ session: loaded, library: loadedLibrary }) => {
+      if (cancelled) return
+      commitSession(loaded)
+      setLibrary(loadedLibrary)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [user, backend, commitSession])
+
+  // Enter Story Mode: resume the active session, else open the library if other stories exist,
+  // else start fresh at interests.
+  const openStory = useCallback(async () => {
+    if (!user || busyRef.current) return
+    busyRef.current = true
+    setStoryBusy(true)
+    setStoryError('')
+    try {
+      const [activeId, sessions] = await Promise.all([
+        backend.story.getActiveStorySessionId(user.id),
+        backend.story.listStorySessions(user.id),
+      ])
+      const sorted = sortStorySessionsByRecent(sessions)
+      setLibrary(sorted)
+      const loaded = activeId ? await backend.story.getStorySession(user.id, activeId) : null
+      if (loaded && loaded.status === 'active') {
+        routeToActive(loaded)
+      } else if (sorted.length > 0) {
+        commitSession(loaded ?? null)
+        navigate('story-library')
+      } else {
+        commitSession(null)
+        navigate('story-interests')
+      }
+    } catch (error) {
+      setStoryError(messageFrom(error, 'Story Mode could not be opened.'))
+      navigate('story-interests')
+    } finally {
+      busyRef.current = false
+      setStoryBusy(false)
+    }
+  }, [user, backend, navigate, commitSession, routeToActive])
+
+  // Open the saved-stories library (a fresh read so newly-saved sessions appear).
+  const openLibrary = useCallback(async () => {
+    if (!user) return
+    setStoryError('')
+    await refreshLibrary(user.id)
+    navigate('story-library')
+  }, [user, refreshLibrary, navigate])
+
+  // Start a brand-new story with new interests WITHOUT losing the current one: persist the
+  // current active session into the library first, then route to interest selection. The new
+  // session itself is created by `beginAdventure` once interests are chosen.
+  const startNewStory = useCallback(async () => {
+    if (!user) return
+    setStoryError('')
+    const current = sessionRef.current
+    if (current) {
+      try {
+        await persist(current)
+      } catch {
+        // Non-fatal: a new story can still begin even if saving the old one failed.
+      }
+    }
+    navigate('story-interests')
+  }, [user, persist, navigate])
+
+  // Resume/switch to any saved story: persist the current one, point the active pointer at the
+  // chosen session, (re)activate it if it had ended, and route into it.
+  const switchToStory = useCallback(
+    async (sessionId: string) => {
+      if (!user || busyRef.current) return
+      busyRef.current = true
+      setStoryBusy(true)
+      setStoryError('')
+      try {
+        const current = sessionRef.current
+        if (current && current.id !== sessionId) {
+          try {
+            await persist(current)
+          } catch {
+            // Non-fatal: still allow the switch.
+          }
+        }
+        await backend.story.setActiveStorySessionId(user.id, sessionId)
+        let loaded = await backend.story.getStorySession(user.id, sessionId)
+        if (loaded && loaded.status !== 'active') {
+          loaded = { ...loaded, status: 'active', updatedAt: nowIso() }
+          await persist(loaded)
+        }
+        await refreshLibrary(user.id)
+        if (loaded) {
+          routeToActive(loaded)
+        } else {
+          commitSession(null)
+          setStoryError('That story could not be opened.')
+          navigate('story-library')
+        }
+      } catch (error) {
+        setStoryError(messageFrom(error, 'That story could not be opened.'))
+      } finally {
+        busyRef.current = false
+        setStoryBusy(false)
+      }
+    },
+    [user, backend, persist, refreshLibrary, routeToActive, commitSession, navigate],
+  )
+
+  // Delete a saved story. If the deleted one was active (or the pointer no longer resolves),
+  // re-point to the most-recent remaining story, or clear it when none remain.
+  const deleteStory = useCallback(
+    async (sessionId: string) => {
+      if (!user || busyRef.current) return
+      busyRef.current = true
+      setStoryBusy(true)
+      setStoryError('')
+      try {
+        await backend.story.deleteStorySession(user.id, sessionId)
+        const remaining = await refreshLibrary(user.id)
+        const activeId = await backend.story.getActiveStorySessionId(user.id)
+        const activeStillValid = activeId !== null && remaining.some((entry) => entry.id === activeId)
+        if (!activeStillValid) {
+          const next = remaining[0] ?? null
+          await backend.story.setActiveStorySessionId(user.id, next ? next.id : null)
+          commitSession(next)
+        } else if (sessionRef.current?.id === sessionId) {
+          commitSession(remaining.find((entry) => entry.id === activeId) ?? null)
+        }
+      } catch (error) {
+        setStoryError(messageFrom(error, 'That story could not be deleted.'))
+      } finally {
+        busyRef.current = false
+        setStoryBusy(false)
+      }
+    },
+    [user, backend, refreshLibrary, commitSession],
+  )
+
+  // Start a brand-new adventure from the chosen interests: ask the LLM for the world + opening,
+  // seed the session, show the opening beat, and pre-fetch the first question.
+  const beginAdventure = useCallback(
+    async (chosenTheme: StoryTheme) => {
+      if (!user || busyRef.current) return
+      busyRef.current = true
+      setStoryBusy(true)
+      setStoryError('')
+      try {
+        // Resolve the MAIN character BEFORE generating: 'displayName' uses the signed-in user's
+        // name, 'custom' uses the typed name, 'random'/unset leaves it to the model. A usable name
+        // is fed forward so the prompts honor it; an unusable one degrades to random (name unset).
+        const resolved = resolveProtagonist(chosenTheme, user.displayName)
+        const themeForStart: StoryTheme = { ...chosenTheme }
+        if (resolved.mainCharacterName !== undefined) {
+          themeForStart.mainCharacterName = resolved.mainCharacterName
+        } else {
+          // Drop any stale/unusable name so the model invents one (and nothing rejected leaks).
+          delete themeForStart.mainCharacterName
+        }
+
+        // No interests at all (no presets AND no freeform): seed the adventure around a random
+        // "off-interest" scene the learner would not normally land on. The scene's label becomes the
+        // freeform interest so EVERY prompt (start, beats, question re-theme, scene match) builds the
+        // story around it, and the scene is forced as the opening image so it actually shows.
+        let forcedOpeningScene: SceneId | undefined
+        const noInterestsChosen =
+          themeForStart.interestIds.length === 0 && !(themeForStart.freeformInterest ?? '').trim()
+        if (noInterestsChosen) {
+          forcedOpeningScene = pickRandomOffInterestScene()
+          themeForStart.freeformInterest = getSceneLabel(forcedOpeningScene)
+        }
+
+        const ai = await ensureAi()
+        let premise = themeForStart.premise
+        let protagonist = themeForStart.protagonist
+        // null until/unless startStory succeeds. Because startStory now THROWS on failure (instead of
+        // silently returning a canned opening + "the Explorer"), the catch below is LIVE: it leaves
+        // openingGenerated null so resolveBeatText commits the theme-aware opening fallback.
+        let openingGenerated: string | null = null
+        if (ai) {
+          try {
+            const started = await ai.startStory(themeForStart)
+            premise = started.premise
+            protagonist = started.protagonist
+            openingGenerated = started.opening
+          } catch {
+            // start failed -> theme-aware opening + interest-aware protagonist fallbacks below
+          }
+        }
+        // When a main-character name was chosen (displayName/custom), it is AUTHORITATIVE and
+        // overrides the model's protagonist; for random/unset we keep the LLM's (safe) protagonist,
+        // or — when start failed — an INTEREST-AWARE fallback (e.g. sports -> "the Captain") instead
+        // of a hardcoded "the Explorer".
+        const safeProtagonist =
+          isOutputSafe(protagonist) && protagonist.trim() ? protagonist.trim() : fallbackProtagonist(themeForStart)
+        const fullTheme: StoryTheme = {
+          ...themeForStart,
+          premise: isOutputSafe(premise) && premise.trim() ? premise.trim() : DEFAULT_PREMISE,
+          protagonist: resolved.protagonistOverride ?? safeProtagonist,
+        }
+        // A brand-new session gets a fresh id and becomes the active one; any previous session
+        // stays saved in the library (saveStorySession is keyed by id), so nothing is lost.
+        const id = createStorySessionId()
+        let next = createInitialSession(fullTheme, user.id, nowIso(), id)
+        // Resolve the opening beat against the now-final theme; on start-failure this yields the
+        // reachable, theme-aware opening fallback, and a theme-appropriate scene so the first chapter
+        // is never visually broken even when the AI (incl. the scene matcher) is down.
+        const { text: openingText, isFallback: openingIsFallback } = resolveBeatText(next, openingGenerated, 'opening')
+        // When seeded from the off-interest pool, force that scene as the opening image; otherwise
+        // match/derive one as usual.
+        const openingScene = forcedOpeningScene ?? (await sceneForBeat(ai, fullTheme, openingText, openingIsFallback))
+        next = appendSegment(next, { text: openingText, sceneId: openingScene })
+        await persist(next)
+        await backend.story.setActiveStorySessionId(user.id, id)
+        commitSession(next)
+        await refreshLibrary(user.id)
+        // The opening beat goes to the checkpoint screen for the learner's FIRST choice. Do NOT
+        // prefetch the first question here — it must be themed against that choice + its outcome,
+        // which only exist after submitCheckpointChoice (which starts the prefetch then).
+        navigate('story-checkpoint')
+      } catch (error) {
+        setStoryError(messageFrom(error, 'Story Mode could not start. Please try again.'))
+      } finally {
+        busyRef.current = false
+        setStoryBusy(false)
+      }
+    },
+    [user, backend, ensureAi, persist, refreshLibrary, navigate, commitSession],
+  )
+
+  // A correctly-solved question (routed here from the reused step view, NOT to completeStep).
+  // Increments counters, then either fires a checkpoint or advances to the next themed question.
+  const submitQuestionResult = useCallback(async () => {
+    const current = sessionRef.current
+    if (!user || !current || !current.currentQuestion || busyRef.current) return
+    // PURE REVIEW: a result from a reviewed (past) question must never count or advance. Only
+    // the live edge can solve. (The screen already renders past questions read-only; this is
+    // defense-in-depth.)
+    if (!isAtLiveEdge(current)) return
+    busyRef.current = true
+    setStoryBusy(true)
+    setStoryError('')
+    try {
+      // Record the solved question's anti-repeat key via the SHARED `questionKey` so an architecture
+      // question records exactly `arch:<id>` (matching `selectNextArchitecture`'s `servedKeys`) while
+      // a legacy question keeps the `${lessonId}:${stepId}` form. `recordSolved` stores it opaquely.
+      const key = questionKey(current.currentQuestion)
+      let next = recordSolved(current, key)
+
+      if (isCheckpointDue(next)) {
+        next = resetCheckpoint(clearCurrentQuestion(next))
+        const ai = await ensureAi()
+        let written: string | null = null
+        if (ai) {
+          try {
+            written = await ai.writeSegment({
+              theme: next.theme,
+              recentNarrative: recentNarrative(next),
+              questionsSolved: next.questionsSolvedTotal,
+            })
+          } catch {
+            // writeSegment now throws on failure; fall back to a distinct, theme-aware bridge beat.
+            written = null
+          }
+        }
+        const { text: beat, isFallback } = resolveBeatText(next, written, 'bridge')
+        const beatScene = await sceneForBeat(ai, next.theme, beat, isFallback)
+        next = appendSegment(next, { text: beat, sceneId: beatScene })
+        next = await maybeCompact(next)
+        await persist(next)
+        commitSession(next)
+        navigate('story-checkpoint')
+        return
+      }
+
+      const themedQuestion = await takeNextQuestion(next)
+      if (!themedQuestion) {
+        await persist(next)
+        commitSession(next)
+        setStoryError('Finish more lessons to unlock more practice questions.')
+        navigate('story-question')
+        return
+      }
+      next = setCurrentQuestion(next, themedQuestion)
+      await persist(next)
+      commitSession(next)
+      navigate('story-question')
+      startPrefetchWithinChapter(next)
+    } catch (error) {
+      setStoryError(messageFrom(error, 'Could not continue the story. Please try again.'))
+    } finally {
+      busyRef.current = false
+      setStoryBusy(false)
+    }
+  }, [user, ensureAi, persist, navigate, commitSession, takeNextQuestion, startPrefetchWithinChapter, maybeCompact])
+
+  // The learner typed what they do next at a checkpoint: sanitize/moderate, then generate the
+  // OUTCOME of that action (the continuation describing its consequences). Rejected input
+  // re-prompts without burning a generation. We DON'T jump straight back to questions here —
+  // instead we append the outcome beat and stop on the outcome page so the learner can read the
+  // result of their choice; `continueFromOutcome` resumes questions only once they acknowledge it.
+  // Crucially, the next-question prefetch is (re)started HERE, after the choice + outcome are
+  // committed, so the first question of the new chapter is themed against them (not stale,
+  // pre-choice state) while still being ready by the time "Continue the adventure" is tapped.
+  const submitCheckpointChoice = useCallback(
+    async (text: string) => {
+      const current = sessionRef.current
+      if (!user || !current || busyRef.current) return
+      const moderated = moderateUserInput(text)
+      if (!moderated.ok) {
+        setStoryError(choiceRejectionMessage(moderated.reason))
+        return
+      }
+      busyRef.current = true
+      setStoryBusy(true)
+      setStoryError('')
+      try {
+        // Record the learner's action on the latest beat AND surface it immediately — BEFORE the
+        // slow generation — so the checkpoint's loading view can echo the move they just committed
+        // instead of going blank while the outcome is written. This is an in-memory commit only;
+        // the full state (with the appended outcome) is the one persisted further below.
+        let next = setLatestSegmentChoice(current, moderated.sanitized)
+        commitSession(next)
+        const ai = await ensureAi()
+        let written: string | null = null
+        if (ai) {
+          try {
+            written = await ai.continueStory({
+              theme: next.theme,
+              recentNarrative: recentNarrative(next),
+              userChoice: moderated.sanitized,
+            })
+          } catch {
+            // continueStory now throws on failure; the OUTCOME falls back to a distinct, theme-aware
+            // beat that is NEVER byte-identical to the opening/bridge, so a learner's choice can never
+            // "reprint the same paragraph" and look like it did nothing.
+            written = null
+          }
+        }
+        const { text: continuation, isFallback } = resolveBeatText(next, written, 'outcome')
+        const outcomeScene = await sceneForBeat(ai, next.theme, continuation, isFallback)
+        next = appendSegment(next, { text: continuation, sceneId: outcomeScene })
+        next = await maybeCompact(next)
+        await persist(next)
+        commitSession(next)
+        // Prefetch the first question of the NEW chapter NOW, against the just-committed choice +
+        // outcome, so it continues the chosen path (fixing the stale first-question bug). This
+        // replaces any earlier prefetch and runs while the learner reads the outcome.
+        startPrefetch(next)
+        navigate('story-outcome')
+      } catch (error) {
+        setStoryError(messageFrom(error, 'Could not continue the story. Please try again.'))
+      } finally {
+        busyRef.current = false
+        setStoryBusy(false)
+      }
+    },
+    [user, ensureAi, persist, navigate, commitSession, maybeCompact, startPrefetch],
+  )
+
+  // The learner read the outcome of their action and tapped "Continue the adventure": stage the
+  // next themed question (consuming the pre-fetch when ready) and return to solving. If the
+  // catalog is exhausted we stay on the outcome page with a gentle nudge rather than dropping
+  // them onto an empty question screen. PURE REVIEW is preserved — no counters/mastery are
+  // touched here; the outcome was already persisted, so a refresh mid-tap simply re-shows it.
+  const continueFromOutcome = useCallback(async () => {
+    const current = sessionRef.current
+    if (!user || !current || busyRef.current) return
+    busyRef.current = true
+    setStoryBusy(true)
+    setStoryError('')
+    try {
+      const themedQuestion = await takeNextQuestion(current)
+      if (!themedQuestion) {
+        await persist(current)
+        commitSession(current)
+        setStoryError('Finish more lessons to unlock more practice questions.')
+        navigate('story-outcome')
+        return
+      }
+      const next = setCurrentQuestion(current, themedQuestion)
+      await persist(next)
+      commitSession(next)
+      navigate('story-question')
+      startPrefetchWithinChapter(next)
+    } catch (error) {
+      setStoryError(messageFrom(error, 'Could not continue the story. Please try again.'))
+    } finally {
+      busyRef.current = false
+      setStoryBusy(false)
+    }
+  }, [user, persist, navigate, commitSession, takeNextQuestion, startPrefetchWithinChapter])
+
+  const endStory = useCallback(async () => {
+    const current = sessionRef.current
+    if (!user || !current) return
+    try {
+      const next = endSession(current)
+      await persist(next)
+      commitSession(next)
+    } catch (error) {
+      setStoryError(messageFrom(error, 'Could not end the adventure.'))
+    }
+  }, [user, persist, commitSession])
+
+  // Back/forward review navigation: move the view pointer only (no persist, no counters). The
+  // displayed question is derived below from `historyIndex`, so the screen re-renders read-only.
+  const goBack = useCallback(() => {
+    const current = sessionRef.current
+    if (!current) return
+    const next = reviewBack(current)
+    if (next !== current) commitSession(next)
+  }, [commitSession])
+
+  const goForward = useCallback(() => {
+    const current = sessionRef.current
+    if (!current) return
+    const next = reviewForward(current)
+    if (next !== current) commitSession(next)
+  }, [commitSession])
+
+  // Chapter-level review: jump the same view pointer to the previous/next chapter's first question
+  // so the learner can page through whole chapters, not just one question at a time.
+  const goBackChapter = useCallback(() => {
+    const current = sessionRef.current
+    if (!current) return
+    const next = reviewBackChapter(current)
+    if (next !== current) commitSession(next)
+  }, [commitSession])
+
+  const goForwardChapter = useCallback(() => {
+    const current = sessionRef.current
+    if (!current) return
+    const next = reviewForwardChapter(current)
+    if (next !== current) commitSession(next)
+  }, [commitSession])
+
+  const dismissError = useCallback(() => setStoryError(''), [])
+
+  // The question on display: the reviewed history entry, or the live question at the edge.
+  const rehydrated = useMemo(() => {
+    if (!session) return null
+    const question = displayedQuestion(session)
+    return question ? rehydrateQuestion(question) : null
+  }, [session])
+
+  const reviewing = session ? !isAtLiveEdge(session) : false
+
+  return {
+    session,
+    library,
+    savedCount: library.length,
+    currentStep: rehydrated?.step ?? null,
+    currentThemed: rehydrated?.themed ?? false,
+    reviewing,
+    canGoBack: session ? canReviewBack(session) : false,
+    canGoForward: session ? canReviewForward(session) : false,
+    // Chapter surfacing + chapter-level navigation (a pure view over the question history).
+    chapter: session ? displayedChapter(session) : 1,
+    chapterCount: session ? latestChapter(session) : 1,
+    canGoBackChapter: session ? canReviewBackChapter(session) : false,
+    canGoForwardChapter: session ? canReviewForwardChapter(session) : false,
+    storyBusy,
+    storyError,
+    providerConfigured,
+    hasActiveSession: session?.status === 'active',
+    questionNumberInChapter: (session?.questionsSinceCheckpoint ?? 0) + 1,
+    openStory,
+    openLibrary,
+    startNewStory,
+    switchToStory,
+    deleteStory,
+    beginAdventure,
+    submitQuestionResult,
+    submitCheckpointChoice,
+    continueFromOutcome,
+    goBack,
+    goForward,
+    goBackChapter,
+    goForwardChapter,
+    endStory,
+    dismissError,
+  }
+}

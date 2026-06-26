@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth'
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -20,24 +21,39 @@ import {
 import {
   isAttemptEvent,
   isSkillMastery,
+  legacyStorySessionId,
   normalizeLessonProgress,
+  normalizeStorySession,
   normalizeUserProfile,
+  validateDisplayNameInput,
   validateSignUpInput,
   type Backend,
   type SignUpInput,
 } from './backend'
 import { PASSWORD_MIN_LENGTH } from './authValidation'
-import type { AttemptEvent, LessonId, LessonProgress, SkillId, SkillMastery, UserProfile } from './domain'
+import type {
+  AttemptEvent,
+  LessonId,
+  LessonProgress,
+  SkillId,
+  SkillMastery,
+  StorySession,
+  UserProfile,
+} from './domain'
 import {
   assertVerifiedEmailForWrite,
   firebaseAttemptPath,
   firebaseMasteryPath,
   firebaseProgressPath,
+  firebaseStoryPath,
+  firebaseStorySessionPath,
   firebaseUserPath,
   requireMatchingUserId,
   toFirestoreAttemptEvent,
   toFirestoreLessonProgress,
   toFirestoreSkillMastery,
+  toFirestoreStoryPointer,
+  toFirestoreStorySession,
   toFirestoreUserProfile,
 } from './firebaseBackendCore'
 import type { FirebaseServices } from './firebaseServices'
@@ -146,6 +162,28 @@ export class FirebaseBackend implements Backend {
 
       return this.getOrCreateUserProfile(refreshed)
     },
+    updateDisplayName: async (name: string) => {
+      // Validate/sanitize before touching Auth or Firestore so a bad name fails fast.
+      const displayName = validateDisplayNameInput(name)
+      await this.waitForAuthReady()
+      const user = this.firebaseAuth.currentUser
+      if (!user) {
+        throw new Error('Sign in before updating your display name.')
+      }
+
+      // Same owner + verified-email guard as every other user-scoped write.
+      const uid = await this.requireVerifiedUid(user.uid)
+      await updateProfile(user, { displayName })
+
+      // Pin the validated name onto the profile (authoritative over the live Auth field) and
+      // persist it to users/{uid}, matching how sign-up / getOrCreate store the profile doc.
+      const profile: UserProfile = { ...profileFromFirebaseUser(user), displayName }
+      await setDoc(doc(this.firestore, firebaseUserPath(uid)), toFirestoreUserProfile(uid, profile), {
+        merge: true,
+      })
+
+      return profile
+    },
   }
 
   progress = {
@@ -235,6 +273,88 @@ export class FirebaseBackend implements Backend {
         .filter((item): item is AttemptEvent => isAttemptEvent(item) && item.userId === uid)
         .sort((first, second) => first.at.localeCompare(second.at))
     },
+  }
+
+  story = {
+    // The saved-stories library: every session under story/{uid}/sessions. When the subcollection
+    // is empty we fall back to a legacy single-session doc at story/{uid} and surface it migrated
+    // (read-only in memory; the next save persists it into the subcollection, see saveStorySession).
+    listStorySessions: async (userId: string) => {
+      const uid = await this.requireActiveUid(userId)
+      const snapshot = await getDocs(collection(this.firestore, 'story', uid, 'sessions'))
+      const sessions = snapshot.docs
+        .map((item) => normalizeStorySession(item.data(), item.id))
+        .filter((session): session is StorySession => session !== null && session.userId === uid)
+      if (sessions.length > 0) return sessions
+
+      const legacy = await this.readLegacyStorySession(uid)
+      return legacy ? [legacy] : []
+    },
+    getStorySession: async (userId: string, sessionId: string) => {
+      const uid = await this.requireActiveUid(userId)
+      const snapshot = await getDoc(doc(this.firestore, firebaseStorySessionPath(uid, sessionId)))
+      if (snapshot.exists()) {
+        const session = normalizeStorySession(snapshot.data(), sessionId)
+        return session?.userId === uid ? session : null
+      }
+      // Migration fallback: a legacy single-session doc surfaces under its derived legacy id.
+      const legacy = await this.readLegacyStorySession(uid)
+      return legacy && legacy.id === sessionId ? legacy : null
+    },
+    saveStorySession: async (session: StorySession) => {
+      const uid = await this.requireVerifiedUid(session.userId)
+      // One whole document per session at story/{uid}/sessions/{id} (small payload, written
+      // whole), matching how progress docs are written. The serializer stamps the authenticated
+      // uid onto the payload; the stored id matches the path so the rules id-guard passes.
+      await setDoc(
+        doc(this.firestore, firebaseStorySessionPath(uid, session.id)),
+        toFirestoreStorySession(uid, session),
+      )
+    },
+    deleteStorySession: async (userId: string, sessionId: string) => {
+      const uid = await this.requireVerifiedUid(userId)
+      await deleteDoc(doc(this.firestore, firebaseStorySessionPath(uid, sessionId)))
+      // A never-resumed legacy session still lives at the parent doc (not the subcollection), so
+      // clear it to a null pointer for the delete to actually stick.
+      if (sessionId === legacyStorySessionId(uid) && (await this.readLegacyStorySession(uid))) {
+        await setDoc(doc(this.firestore, firebaseStoryPath(uid)), toFirestoreStoryPointer(uid, null))
+      }
+    },
+    getActiveStorySessionId: async (userId: string) => {
+      const uid = await this.requireActiveUid(userId)
+      const snapshot = await getDoc(doc(this.firestore, firebaseStoryPath(uid)))
+      if (!snapshot.exists()) return null
+
+      const data = snapshot.data()
+      const activeSessionId = (data as { activeSessionId?: unknown }).activeSessionId
+      if (typeof activeSessionId === 'string') return activeSessionId
+      // Legacy single-session doc: its migrated id is the active one until a pointer is written.
+      const legacy = this.normalizeLegacyStoryDoc(data, uid)
+      return legacy ? legacy.id : null
+    },
+    setActiveStorySessionId: async (userId: string, sessionId: string | null) => {
+      const uid = await this.requireVerifiedUid(userId)
+      // Overwrites story/{uid} with the pointer body. When migrating, this replaces any legacy
+      // session data still living at the parent doc with the clean { userId, activeSessionId }.
+      await setDoc(doc(this.firestore, firebaseStoryPath(uid)), toFirestoreStoryPointer(uid, sessionId))
+    },
+  }
+
+  // Interpret the story/{uid} parent doc as a LEGACY single-session document, or null when it is
+  // the new pointer doc / not a usable session. Used to migrate pre-library data on read.
+  private normalizeLegacyStoryDoc(data: unknown, uid: string): StorySession | null {
+    if (!data || typeof data !== 'object') return null
+    // A new-shape pointer doc carries an `activeSessionId` key (string OR null once cleared); it
+    // is never a legacy session. Checking key presence avoids misreading a cleared pointer.
+    if ('activeSessionId' in data) return null
+    const session = normalizeStorySession(data, legacyStorySessionId(uid))
+    return session?.userId === uid ? session : null
+  }
+
+  private async readLegacyStorySession(uid: string): Promise<StorySession | null> {
+    const snapshot = await getDoc(doc(this.firestore, firebaseStoryPath(uid)))
+    if (!snapshot.exists()) return null
+    return this.normalizeLegacyStoryDoc(snapshot.data(), uid)
   }
 
   private async waitForAuthReady() {

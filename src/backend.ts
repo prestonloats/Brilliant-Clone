@@ -5,8 +5,12 @@ export type { Backend, SignUpInput } from './backend/types'
 export {
   isAttemptEvent,
   isSkillMastery,
+  legacyStorySessionId,
   normalizeLessonProgress,
+  normalizeStoryLibrary,
+  normalizeStorySession,
   normalizeUserProfile,
+  validateDisplayNameInput,
   validateSignUpInput,
 } from './backend/validation'
 

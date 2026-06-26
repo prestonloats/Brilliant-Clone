@@ -8,9 +8,10 @@ import type {
   LocalDatabase,
   LocalMasteryRepository,
   LocalProgressRepository,
+  LocalStoryRepository,
   LocalUser,
 } from './types'
-import { emptyDatabase, normalizeDatabase, validateSignUpInput } from './validation'
+import { emptyDatabase, normalizeDatabase, validateDisplayNameInput, validateSignUpInput } from './validation'
 import { DEFAULT_LEGACY_PASSWORD, hashPassword, verifyPassword } from '../auth/passwordCredential'
 import { PASSWORD_MIN_LENGTH } from '../authValidation'
 
@@ -46,6 +47,7 @@ export class LocalBackend implements Backend {
   progress: LocalProgressRepository
   mastery: LocalMasteryRepository
   attempts: LocalAttemptRepository
+  story: LocalStoryRepository
 
   // Cache the parsed/validated database keyed on the raw stored string so we
   // avoid re-running JSON.parse + full normalization on every read. The raw
@@ -124,6 +126,21 @@ export class LocalBackend implements Backend {
         // Local demo accounts have no email to verify, so this is intentionally a no-op.
       },
       reloadCurrentUser: () => this.auth.getCurrentUser(),
+      updateDisplayName: (name) => {
+        // Active-user requirement, mirroring the other repositories: there must be a signed-in
+        // local profile to update (its id is the only write target).
+        const currentUserId = this.getCurrentUserId()
+        const db = this.read()
+        const user = currentUserId ? db.users[currentUserId] : undefined
+        if (!user) {
+          throw new Error('Sign in before updating your display name.')
+        }
+
+        user.displayName = validateDisplayNameInput(name)
+        db.users[user.id] = user
+        this.write(db)
+        return toPublicUser(user)
+      },
     }
 
     this.progress = {
@@ -188,6 +205,55 @@ export class LocalBackend implements Backend {
         this.requireActiveUser(userId)
         const db = this.read()
         return db.attempts.filter((attempt) => attempt.userId === userId)
+      },
+    }
+
+    this.story = {
+      // The library: every saved session owned by the active user. Legacy single-session data
+      // is already migrated into `db.story` (keyed by session id) by normalizeDatabase on read.
+      listStorySessions: (userId) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        return Object.values(db.story).filter((session) => session.userId === userId)
+      },
+      getStorySession: (userId, sessionId) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        const session = db.story[sessionId]
+        return session && session.userId === userId ? session : null
+      },
+      saveStorySession: (session) => {
+        this.requireActiveUser(session.userId)
+        const db = this.read()
+        // One whole document per session, keyed by its stable id (mirrors the progress write).
+        db.story[session.id] = session
+        this.write(db)
+      },
+      deleteStorySession: (userId, sessionId) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        const session = db.story[sessionId]
+        if (!session || session.userId !== userId) return
+        delete db.story[sessionId]
+        if (db.storyActive[userId] === sessionId) delete db.storyActive[userId]
+        this.write(db)
+      },
+      getActiveStorySessionId: (userId) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        const sessionId = db.storyActive[userId]
+        // Only return a pointer that still resolves to one of the user's saved sessions.
+        return sessionId && db.story[sessionId]?.userId === userId ? sessionId : null
+      },
+      setActiveStorySessionId: (userId, sessionId) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        if (sessionId === null) {
+          delete db.storyActive[userId]
+        } else {
+          db.storyActive[userId] = sessionId
+        }
+        this.write(db)
       },
     }
   }

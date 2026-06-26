@@ -1,0 +1,67 @@
+// Story Mode question architecture: one-step "order the steps" sequence (WAVE 2).
+//
+// Mirrors the bundled one-step ordering questions (e.g. `input-add-six`): four tiles holding the
+// correct inverse move, the `x = solution` tile, a wrong-direction move distractor, and an
+// `x = right-hand-side` value distractor. The equation is built FROM a chosen solution, and the
+// graded `correctOrder` (plus the identical `answer`) is the [undo move, solution] pair. The
+// matching `checkSequenceStep` accepts the exact ordered tile ids.
+
+import { pick, randInt } from '../architectureTypes'
+import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
+import type { LessonStep } from '../../../../domain'
+import type { Rng } from '../../randomizeQuestionNumbers'
+
+type SequenceStep = Extract<LessonStep, { type: 'sequence' }>
+
+// Inclusive integer in [min, max] excluding 0 (assumes min < 0 < max), drawing the rng once.
+const nonzeroInt = (rng: Rng, min: number, max: number): number => {
+  const negatives = -min
+  const index = randInt(rng, 0, negatives + max - 1)
+  return index < negatives ? min + index : index - negatives + 1
+}
+
+export const oneStepSequenceArchitecture: QuestionArchitecture = {
+  id: 'one-step-sequence',
+  requiredLessonId: 'one-step-equations',
+  skillId: 'one-step-equations',
+  stepType: 'sequence',
+  slots: [
+    { name: 'a', min: 1, max: 15, note: 'addend/subtrahend undone by the inverse move' },
+    { name: 's', min: -9, max: 9, note: 'nonzero solution shown on the answer tile' },
+  ],
+  generate(rng: Rng): GeneratedQuestion {
+    const op = pick(rng, ['add', 'sub'] as const)
+    const a = randInt(rng, 1, 15)
+    const s = nonzeroInt(rng, -9, 9)
+    const b = op === 'add' ? s + a : s - a
+
+    const equation = op === 'add' ? `x + ${a} = ${b}` : `x - ${a} = ${b}`
+    const undoLabel = op === 'add' ? `Subtract ${a} from both sides` : `Add ${a} to both sides`
+    const wrongLabel = op === 'add' ? `Add ${a} to both sides` : `Subtract ${a} from both sides`
+
+    const tiles = [
+      { id: 'undo-move', label: undoLabel },
+      { id: 'solution-value', label: `x = ${s}` },
+      { id: 'wrong-move', label: wrongLabel },
+      { id: 'rhs-value', label: `x = ${b}` },
+    ]
+    const correctOrder = ['undo-move', 'solution-value']
+
+    const step: SequenceStep = {
+      id: 'one-step-sequence',
+      type: 'sequence',
+      prompt: `Tap the steps in order to solve ${equation}.`,
+      equation,
+      tiles,
+      correctOrder,
+      feedback: {
+        correct: `Correct. ${undoLabel}, then x = ${s}.`,
+        incorrect: 'Undo the operation on both sides first, then name the value of x.',
+        incomplete: 'Choose the inverse move first, then the resulting value of x.',
+        reveal: `Tap "${undoLabel}", then "x = ${s}".`,
+      },
+    }
+
+    return { step, answer: [...correctOrder] }
+  },
+}

@@ -1,0 +1,1361 @@
+/* Story Mode screens. Reuses the shared design tokens from index.css and the base
+   .card / .primary-action / .eyebrow / .screen-stack primitives; only Story-specific
+   layout lives here. */
+
+/* --- Shared story column ---------------------------------------------------- */
+/* Every Story surface centers in one comfortable reading column. 760px matches the
+   .hero-card / .lesson-card width in base.css, so on the Path screen the entry card
+   lines up edge-to-edge with the progress-overview (hero) card above it, and the
+   experience screens (interest / question / checkpoint) share a single cohesive
+   measure with the question card the StepRenderer injects. */
+.story-entry-card,
+.story-interests-card,
+.story-gate-card,
+.story-segment-card,
+.story-question-shell {
+  margin-inline: auto;
+  max-width: 760px;
+  width: 100%;
+}
+
+/* A tight, consistent header rhythm (eyebrow -> title -> lead) shared by the
+   interest, gate, and checkpoint screens. */
+.story-screen-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.story-screen-head .eyebrow,
+.story-screen-head h1 {
+  margin: 0;
+}
+
+.story-screen-head h1 {
+  font-size: clamp(28px, 5vw, 40px);
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+}
+
+.story-screen-head .lead {
+  margin: 4px 0 0;
+}
+
+/* The back link on the interest setup screen. It hugs the left (the lesson player
+   relies on grid `justify-self`, which does nothing inside these flex shells) and renders as a
+   flush text link — no pill background, zero inline padding — so its label shares the exact left
+   edge as the "Story Mode" eyebrow / title block below it. (A padded pill's inset text read
+   as a random offset from the heading.) */
+.story-interests-card > .back-button {
+  align-self: flex-start;
+  background: none;
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  padding-inline: 0;
+  transition: color 0.15s ease;
+}
+
+.story-interests-card > .back-button:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* On the active story screen (question + checkpoint) and the saved-stories library, the back
+   control reads clearest as a real boxed button — matching the back/forward review controls
+   (`.story-history-button`) — rather than a flush text link. */
+.story-screen-nav > .back-button,
+.story-library-card > .back-button {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 7px 14px;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.story-screen-nav > .back-button:hover,
+.story-library-card > .back-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- In-story nav row (question + checkpoint screens) ----------------------- */
+/* Back-to-path on the left, secondary "Saved stories" / "New story" links on the right, so the
+   learner can switch adventures or start a fresh one without leaving the question/checkpoint. */
+.story-screen-nav {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.story-screen-nav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+/* Boxed to match the "Back to path" control beside them, so the whole in-story nav row reads
+   as a consistent set of buttons rather than a button plus two text links. */
+.story-nav-link {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 7px 14px;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.story-nav-link:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.story-nav-link:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* --- Entry card (CourseMap path screen) ------------------------------------- */
+/* A compact, scannable entry into Story Mode: an icon badge, a tight title + one
+   state-specific line, and a single call-to-action. The long pitch lives on the interest
+   screen, so this card stays clean on the Path view. Built on the shared `.card` primitive
+   plus the design tokens in index.css. */
+.story-entry-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: clamp(14px, 3vw, 20px);
+  padding: clamp(18px, 4vw, 26px);
+  background:
+    linear-gradient(135deg, var(--accent-soft), rgba(255, 255, 255, 0.55)),
+    var(--surface);
+  border: 1px solid var(--border);
+}
+
+/* Gated states read calmer than the ready (accent-tinted) state. */
+.story-entry-card--locked,
+.story-entry-card--needs-provider {
+  background:
+    linear-gradient(135deg, var(--surface-strong), rgba(255, 255, 255, 0.5)),
+    var(--surface);
+}
+
+.story-entry-icon {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-radius: 16px;
+  display: grid;
+  flex: 0 0 auto;
+  font-size: 26px;
+  height: 52px;
+  line-height: 1;
+  place-items: center;
+  width: 52px;
+}
+
+.story-entry-card--locked .story-entry-icon,
+.story-entry-card--needs-provider .story-entry-icon {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+.story-entry-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.story-entry-copy .eyebrow {
+  margin: 0;
+}
+
+.story-entry-copy h2 {
+  color: var(--text-h);
+  font-size: clamp(20px, 3vw, 25px);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.story-entry-tagline {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.story-entry-cta {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+/* Override the full-width .primary-action so the CTA hugs its label beside the copy. */
+.story-entry-action {
+  padding-inline: 22px;
+  white-space: nowrap;
+  width: auto;
+}
+
+.story-entry-pill {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Stack the call-to-action under the title on narrow screens (the repo targets ~375px). */
+@media (max-width: 560px) {
+  .story-entry-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .story-entry-cta {
+    grid-column: 1 / -1;
+  }
+
+  .story-entry-action,
+  .story-entry-pill {
+    text-align: center;
+    width: 100%;
+  }
+}
+
+/* --- Gate + interest screens (shared card shell) ---------------------------- */
+.story-interests-card,
+.story-gate-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(22px, 5vw, 40px);
+  text-align: left;
+}
+
+/* The locked / no-provider screens are calm, centered empty-states. */
+.story-gate-card {
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.story-gate-card .story-screen-head {
+  align-items: center;
+}
+
+.story-gate-card .primary-action {
+  max-width: 280px;
+}
+
+/* Slate badge mirrors the gated entry-card icon, tying the two "not yet" states together. */
+.story-gate-icon {
+  align-items: center;
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  border-radius: 20px;
+  box-shadow: 0 10px 24px rgba(71, 85, 105, 0.28);
+  display: grid;
+  flex: 0 0 auto;
+  font-size: 30px;
+  height: 64px;
+  line-height: 1;
+  place-items: center;
+  width: 64px;
+}
+
+/* --- Interest selection ----------------------------------------------------- */
+.interest-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.story-legend {
+  align-items: baseline;
+  color: var(--text-h);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 700;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.story-legend-hint {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.interest-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.interest-card {
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  color: var(--text-h);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 104px;
+  padding: 16px;
+  position: relative;
+  text-align: left;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease,
+    background 0.15s ease;
+}
+
+.interest-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
+  transform: translateY(-2px);
+}
+
+.interest-card.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.interest-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.interest-emoji {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.interest-label {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.interest-check {
+  align-items: center;
+  background: var(--accent);
+  border-radius: 999px;
+  color: #fff;
+  display: grid;
+  font-size: 13px;
+  font-weight: 800;
+  height: 24px;
+  place-items: center;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 24px;
+}
+
+.story-freeform {
+  color: var(--text-h);
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.story-freeform-optional {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.story-freeform input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text-h);
+  font: inherit;
+  font-weight: 400;
+  padding: 12px 14px;
+}
+
+/* --- Add-your-own custom interests ------------------------------------------ */
+/* Mirrors the custom-character add pattern: a labeled input + Add button turns typed text into
+   removable accent pills (consistent with the selected interest cards). On submit the chips are
+   comma-joined into the single freeformInterest string, so this stays a UI-only layer. */
+.custom-interest-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.custom-interest-fieldset .story-legend {
+  margin-bottom: 0;
+}
+
+.custom-interest-fieldset .story-note {
+  margin-top: -4px;
+}
+
+/* The added interests: compact accent pills in a wrapping row, each with an accessible remove. */
+.custom-interest-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.custom-interest-chip {
+  align-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.12);
+  display: inline-flex;
+  gap: 4px;
+  padding: 5px 6px 5px 14px;
+}
+
+.custom-interest-chip-label {
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* The remove control is a true 22px circle. The global `button` rule (buttons.css) sets
+   min-height:44px + padding:10px 16px; left unreset those would stretch this into a tall
+   oval and push the glyph off-center, so both are zeroed here. The × is an SVG centered on
+   the viewBox so it stays optically centered and crisp at any size, becoming a red fill on
+   hover to signal removal. */
+.custom-interest-remove {
+  align-items: center;
+  background: transparent;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 22px;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  width: 22px;
+}
+
+.custom-interest-remove svg {
+  display: block;
+  height: 13px;
+  width: 13px;
+}
+
+.custom-interest-remove:hover:not(:disabled),
+.custom-interest-remove:focus-visible {
+  background: #dc2626;
+  color: #fff;
+}
+
+.custom-interest-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* The add row: input grows, Add button hugs its label; stacks on narrow screens. */
+.custom-interest-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-interest-add-row {
+  display: flex;
+  gap: 10px;
+}
+
+.custom-interest-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text-h);
+  flex: 1 1 auto;
+  font: inherit;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.custom-interest-input:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid rgba(37, 99, 235, 0.36);
+  outline-offset: 2px;
+}
+
+/* --- Custom characters + main-character chooser ----------------------------- */
+/* Both reuse the .interest-fieldset reset (zero border/margin/padding); here we stack their
+   inner blocks with a consistent rhythm. The legend's own bottom margin is zeroed so the gap
+   is the single source of vertical spacing. */
+.character-fieldset,
+.character-main-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.character-fieldset .story-legend,
+.character-main-fieldset .story-legend {
+  margin-bottom: 0;
+}
+
+.character-fieldset .story-note {
+  margin-top: -4px;
+}
+
+/* The added supporting cast: one chip per character with its optional preset tags + a remove. */
+.character-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.character-chip {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.character-chip-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.character-chip-name {
+  color: var(--text-h);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.character-chip-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.character-chip-tag {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+}
+
+.character-remove {
+  background: none;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.character-remove:hover:not(:disabled) {
+  color: #dc2626;
+  text-decoration: underline;
+}
+
+.character-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* The add row: name + two preset selects + an Add button on one line, collapsing to a stack on
+   narrow screens. align-items:end keeps the controls' bottoms flush below their labels. */
+.character-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.character-add-fields {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.character-field {
+  color: var(--text-h);
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 6px;
+  min-width: 0;
+}
+
+.character-field input,
+.character-field select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-h);
+  font: inherit;
+  font-weight: 400;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.character-add-button,
+.custom-interest-add-button {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  color: var(--accent-strong);
+  font-weight: 700;
+  padding: 10px 18px;
+  white-space: nowrap;
+}
+
+.character-add-button:hover:not(:disabled),
+.custom-interest-add-button:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.character-add-button:disabled,
+.custom-interest-add-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.character-error {
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* The main-character chooser: a card per option (radio + label + hint), accent-highlighted when
+   chosen to match the interest cards. */
+.character-main-options {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.character-main-option {
+  align-items: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  column-gap: 10px;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  padding: 12px 14px;
+  row-gap: 2px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.character-main-option:hover {
+  border-color: var(--accent);
+}
+
+.character-main-option.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.character-main-option > input {
+  grid-row: 1 / span 2;
+  margin: 2px 0 0;
+}
+
+.character-main-label {
+  color: var(--text-h);
+  font-weight: 700;
+  grid-column: 2;
+}
+
+.character-main-hint {
+  color: var(--muted);
+  font-size: 13px;
+  grid-column: 2;
+  line-height: 1.4;
+}
+
+.character-main-custom {
+  margin-top: 2px;
+}
+
+/* Match the app focus ring on the new inputs/selects and the option cards. */
+.character-field input:focus-visible,
+.character-field select:focus-visible,
+.character-main-custom input:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid rgba(37, 99, 235, 0.36);
+  outline-offset: 2px;
+}
+
+.character-main-option:focus-within {
+  border-color: var(--accent);
+  outline: 3px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 1px;
+}
+
+/* Stack the add rows on narrow screens (the repo targets ~375px). */
+@media (max-width: 560px) {
+  .character-add-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-interest-add-row {
+    flex-direction: column;
+  }
+
+  .character-add-button,
+  .custom-interest-add-button {
+    width: 100%;
+  }
+}
+
+/* --- Two-step setup action rows -------------------------------------------- */
+/* The interest setup screen runs as two steps (interests, then cast). Each step ends in an
+   action row: step 1 is a single full-width "Continue"; step 2 pairs a secondary "Back"
+   (to step 1) with the primary "Begin adventure". The primary grows to fill the row while
+   Back hugs its label; both wrap onto their own lines on narrow screens. */
+.story-step-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.story-step-actions .primary-action {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* Boxed secondary "Back", matching the in-story nav back control (.story-screen-nav > .back-button)
+   so the two-step flow stays visually consistent with the rest of Story Mode. */
+.story-step-back {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 18px;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.story-step-back:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Question screen -------------------------------------------------------- */
+.story-question-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The shared StepRenderer injects its question card (`.lesson-card`) with the prompt as an
+   <h1>, which lesson.css sizes at clamp(28px, 5.5vw, 42px) — a display size tuned for the
+   standalone lesson player. Story Mode's themed prompts are usually only a sentence or two,
+   so that size reads oversized sitting below the premise banner and progress bar. Scope a
+   tighter, better-proportioned heading to the Story question screen only (the lesson player
+   keeps its larger heading). `build-prompt` steps (manipulative / slider / balance) already
+   carry their own reduced long-prompt sizing, so they're excluded. Min 20px stays readable
+   at ~375px. */
+.story-question-shell .lesson-card h1:not(.build-prompt) {
+  font-size: clamp(20px, 3.4vw, 26px);
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+/* The current-premise banner: an accent-tinted card with a small badge, the protagonist
+   as an eyebrow, and the running premise. */
+.story-banner {
+  align-items: center;
+  background:
+    linear-gradient(135deg, var(--accent-soft), rgba(255, 255, 255, 0.6)),
+    var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.story-banner-icon {
+  align-items: center;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
+  display: grid;
+  flex: 0 0 auto;
+  font-size: 24px;
+  height: 48px;
+  line-height: 1;
+  place-items: center;
+  width: 48px;
+}
+
+.story-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.story-banner-copy .eyebrow {
+  margin: 0;
+}
+
+.story-banner-premise {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* "Showing the original question" — a quiet, intentional callout for the LLM fallback. */
+.story-original-note {
+  align-items: center;
+  align-self: flex-start;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  padding: 8px 14px;
+}
+
+/* --- Checkpoint screen ------------------------------------------------------ */
+.story-checkpoint-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.story-segment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(22px, 5vw, 40px);
+  text-align: left;
+}
+
+.story-chapter-head {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 16px;
+}
+
+.story-chapter-head .eyebrow {
+  margin: 0;
+}
+
+.story-chapter-title {
+  font-size: clamp(30px, 5vw, 46px);
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin: 0;
+}
+
+/* The outcome page's small kicker under the chapter title ("What happens next…"), signalling the
+   beat is the result of the learner's last action rather than a fresh checkpoint prompt. */
+.story-outcome-kicker {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 2px 0 0;
+  text-transform: uppercase;
+}
+
+/* The background image the LLM matched to a story beat (checkpoint + outcome pages). A wide,
+   rounded banner above the prose; it self-removes when there is no match or the asset fails to
+   load, so the layout is unchanged when no image is shown. */
+.story-scene {
+  margin: 0;
+}
+
+.story-scene-image {
+  aspect-ratio: 16 / 9;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
+.story-segment {
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-size: 17px;
+  gap: 14px;
+  line-height: 1.7;
+}
+
+.story-segment p {
+  margin: 0;
+}
+
+.story-choice {
+  color: var(--text-h);
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.story-choice textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text-h);
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+  min-height: 96px;
+  padding: 14px 16px;
+  resize: vertical;
+}
+
+/* The learner's committed action, echoed back read-only so it stays on screen while the next beat
+   generates — on the checkpoint's loading view (in place of the cleared textarea) and on the
+   outcome page (above its consequence). Mirrors the .story-choice label-above-field rhythm. */
+.story-choice-made {
+  color: var(--text-h);
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.story-choice-echo {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 16px;
+  color: var(--text-h);
+  font-weight: 500;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+}
+
+/* --- Shared notes, status + focus ------------------------------------------ */
+.story-note {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* The interest screen's "same math, same grading" reassurance reads as an info panel. */
+.story-reassure {
+  background: var(--surface-strong);
+  border-radius: 14px;
+  color: var(--text);
+  padding: 12px 14px;
+}
+
+.story-inline-status {
+  align-items: center;
+  align-self: flex-start;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 10px;
+  padding: 8px 14px;
+}
+
+.story-spinner {
+  animation: story-spin 0.7s linear infinite;
+  border: 2px solid rgba(37, 99, 235, 0.25);
+  border-radius: 50%;
+  border-top-color: var(--accent);
+  flex: 0 0 auto;
+  height: 15px;
+  width: 15px;
+}
+
+@keyframes story-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Match the app's focus ring (buttons.css uses a 3px translucent-accent outline) on the
+   Story free-text inputs, and add an accent border so the active field is unmistakable. */
+.story-freeform input:focus-visible,
+.story-choice textarea:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid rgba(37, 99, 235, 0.36);
+  outline-offset: 2px;
+}
+
+/* --- Responsive (repo targets ~375px) -------------------------------------- */
+@media (max-width: 480px) {
+  .story-banner {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .story-banner-icon {
+    font-size: 20px;
+    height: 42px;
+    width: 42px;
+  }
+}
+
+/* --- Entry-card "Saved stories" secondary action --------------------------- */
+/* Sits under the primary CTA in the entry card's action column. Quiet text button so the
+   primary Start/Resume stays the focal point. */
+.story-entry-cta {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.story-entry-library {
+  background: none;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.story-entry-library:hover:not(:disabled) {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+@media (max-width: 560px) {
+  .story-entry-library {
+    text-align: center;
+    width: 100%;
+  }
+}
+
+/* --- Saved-stories library -------------------------------------------------- */
+.story-library-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.story-library-card,
+.story-library-shell {
+  margin-inline: auto;
+  max-width: 760px;
+  width: 100%;
+}
+
+.story-library-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(22px, 5vw, 40px);
+  text-align: left;
+}
+
+.story-library-new {
+  align-self: flex-start;
+  padding-inline: 22px;
+  width: auto;
+}
+
+.story-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.story-library-item {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  display: grid;
+  gap: clamp(12px, 3vw, 18px);
+  grid-template-columns: auto 1fr auto;
+  padding: clamp(14px, 3vw, 20px);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.story-library-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.1);
+}
+
+.story-library-item.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.story-library-emoji {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-radius: 14px;
+  display: grid;
+  flex: 0 0 auto;
+  font-size: 24px;
+  height: 50px;
+  line-height: 1;
+  place-items: center;
+  width: 50px;
+}
+
+.story-library-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.story-library-titlerow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.story-library-title {
+  color: var(--text-h);
+  font-size: clamp(17px, 2.6vw, 20px);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.story-library-badge {
+  background: var(--accent);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  text-transform: uppercase;
+}
+
+.story-library-premise {
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+  overflow: hidden;
+}
+
+.story-library-meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.story-library-actions {
+  align-items: flex-end;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.story-library-resume {
+  padding-inline: 18px;
+  white-space: nowrap;
+  width: auto;
+}
+
+.story-library-delete {
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 6px;
+}
+
+.story-library-delete:hover:not(:disabled) {
+  color: #dc2626;
+  text-decoration: underline;
+}
+
+/* Stack the library card body on narrow screens (the repo targets ~375px). */
+@media (max-width: 560px) {
+  .story-library-item {
+    grid-template-columns: auto 1fr;
+  }
+
+  .story-library-actions {
+    align-items: stretch;
+    flex-direction: row;
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .story-library-resume {
+    flex: 1 1 auto;
+  }
+}
+
+/* --- Back / forward question review ----------------------------------------- */
+.story-history-nav {
+  background: var(--surface-strong);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+/* The per-question Back / chapter-label / Forward row. */
+.story-history-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+/* The optional second row of chapter-level jumps, separated from the per-question row above. */
+.story-chapter-row {
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 10px;
+}
+
+.story-history-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 14px;
+  white-space: nowrap;
+}
+
+.story-history-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.story-history-button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.story-history-status {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 2px;
+  text-align: center;
+}
+
+/* The surfaced chapter marker ("Chapter 2 of 3"), emphasized over the muted review state below it. */
+.story-history-chapter {
+  color: var(--accent-strong);
+}
+
+.story-history-state {
+  color: var(--muted);
+}
+
+/* The read-only review card reuses the lesson-card shell; tone it down so it reads as a recap,
+   not an active question, and list options/tiles statically. */
+.story-review-card .story-review-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.story-review-card .story-review-options li {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-h);
+  font-weight: 600;
+  padding: 10px 14px;
+}
+
+.story-review-tiles {
+  flex-direction: row !important;
+  flex-wrap: wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-spinner {
+    animation-duration: 2s;
+  }
+}

@@ -3,6 +3,7 @@ import { createAttemptEvent, type Backend } from '../backend'
 import {
   applyStepResult,
   getRecommendedNextLesson,
+  hasCompletedLesson,
   isLessonUnlocked,
   restartLessonProgress,
   type ProgressByLesson,
@@ -27,10 +28,28 @@ import { LessonPlayer } from '../lesson/LessonPlayer'
 import type { CompleteOptions } from '../lesson/types'
 import { CompleteScreen } from '../screens/CompleteScreen'
 import { ProfileScreen } from '../screens/ProfileScreen'
+import { useStorySession } from '../story/useStorySession'
+import { InterestSelectionScreen } from '../story/InterestSelectionScreen'
+import { StoryQuestionScreen } from '../story/StoryQuestionScreen'
+import { StoryCheckpointScreen } from '../story/StoryCheckpointScreen'
+import { StoryOutcomeScreen } from '../story/StoryOutcomeScreen'
+import { StoryLibraryScreen } from '../story/StoryLibraryScreen'
 
 export function LearningApp({ backend }: { backend: Backend }) {
   const [user, setUser] = useState<UserProfile | null>(null)
-  const [view, setView] = useState<'auth' | 'verify-email' | 'course' | 'lesson' | 'complete' | 'profile'>('auth')
+  const [view, setView] = useState<
+    | 'auth'
+    | 'verify-email'
+    | 'course'
+    | 'lesson'
+    | 'complete'
+    | 'profile'
+    | 'story-interests'
+    | 'story-question'
+    | 'story-checkpoint'
+    | 'story-outcome'
+    | 'story-library'
+  >('auth')
   const [activeLessonId, setActiveLessonId] = useState<LessonId>(algebraCourse.lessonOrder[0])
   const [progress, setProgress] = useState<LessonProgress | null>(null)
   const [mastery, setMastery] = useState<SkillMastery[]>([])
@@ -41,6 +60,21 @@ export function LearningApp({ backend }: { backend: Backend }) {
   const activeLesson = lessons[activeLessonId]
   const currentStep = progress ? activeLesson.steps[progress.currentStepIndex] : null
   const recommendation = getRecommendedNextLesson(activeLesson, mastery, algebraCourse, lessons, progressByLesson)
+
+  // Story Mode unlocks only after the first two lessons are completed (plan section 8). It is a
+  // PURE-REVIEW feature: the controller below persists only its own `story` session and never
+  // calls `completeStep`, so it can never write LessonProgress, mastery, streaks, or attempts.
+  const storyUnlocked =
+    hasCompletedLesson(progressByLesson['balancing-equations']) &&
+    hasCompletedLesson(progressByLesson['one-step-equations'])
+  const story = useStorySession({
+    backend,
+    user,
+    progressByLesson,
+    mastery,
+    attempts,
+    navigate: (storyView) => setView(storyView),
+  })
 
   const applySession = useCallback(
     (sessionUser: UserProfile, session: Awaited<ReturnType<typeof getInitialLessonSession>>) => {
@@ -223,6 +257,14 @@ export function LearningApp({ backend }: { backend: Backend }) {
     await loadSignedInSession(refreshed)
   }
 
+  // Persist the new display name through the Backend contract, then update the single `user`
+  // state so the change is reflected app-wide immediately (profile heading, Story Mode "Use my
+  // name", etc.). Errors propagate to the ProfileScreen for inline display.
+  const handleSaveDisplayName = async (name: string) => {
+    const updated = await backend.auth.updateDisplayName(name)
+    setUser(updated)
+  }
+
   const handleSignOut = async () => {
     setRuntimeError('')
     try {
@@ -302,6 +344,14 @@ export function LearningApp({ backend }: { backend: Backend }) {
             </button>
             <button
               type="button"
+              className={view.startsWith('story-') ? 'nav-active' : ''}
+              aria-current={view.startsWith('story-') ? 'page' : undefined}
+              onClick={() => void story.openStory()}
+            >
+              Story
+            </button>
+            <button
+              type="button"
               className={view === 'profile' ? 'nav-active' : ''}
               aria-current={view === 'profile' ? 'page' : undefined}
               onClick={() => setView('profile')}
@@ -333,6 +383,13 @@ export function LearningApp({ backend }: { backend: Backend }) {
           mastery={mastery}
           onLaunchLesson={launchLesson}
           onRetakeLesson={retakeLesson}
+          storyUnlocked={storyUnlocked}
+          storyProviderConfigured={story.providerConfigured}
+          storyHasActiveSession={story.hasActiveSession}
+          storySavedCount={story.savedCount}
+          storyBusy={story.storyBusy}
+          onOpenStory={() => void story.openStory()}
+          onOpenStoryLibrary={() => void story.openLibrary()}
         />
       )}
       {view === 'lesson' && user && progress && currentStep && (
@@ -354,7 +411,82 @@ export function LearningApp({ backend }: { backend: Backend }) {
         />
       )}
       {view === 'profile' && user && (
-        <ProfileScreen user={user} mastery={mastery} attempts={attempts} backendProvider={backend.provider} />
+        <ProfileScreen
+          user={user}
+          mastery={mastery}
+          attempts={attempts}
+          backendProvider={backend.provider}
+          onSaveDisplayName={handleSaveDisplayName}
+        />
+      )}
+      {view === 'story-interests' && user && (
+        <InterestSelectionScreen
+          unlocked={storyUnlocked}
+          providerConfigured={story.providerConfigured}
+          busy={story.storyBusy}
+          error={story.storyError}
+          onBegin={(theme) => void story.beginAdventure(theme)}
+          onBackToPath={() => setView('course')}
+        />
+      )}
+      {view === 'story-question' && user && story.session && story.currentStep && (
+        <StoryQuestionScreen
+          session={story.session}
+          step={story.currentStep}
+          themed={story.currentThemed}
+          reviewing={story.reviewing}
+          canGoBack={story.canGoBack}
+          canGoForward={story.canGoForward}
+          chapter={story.chapter}
+          chapterCount={story.chapterCount}
+          canChapterBack={story.canGoBackChapter}
+          canChapterForward={story.canGoForwardChapter}
+          questionNumber={story.questionNumberInChapter}
+          busy={story.storyBusy}
+          error={story.storyError}
+          onResult={() => void story.submitQuestionResult()}
+          onBack={() => story.goBack()}
+          onForward={() => story.goForward()}
+          onChapterBack={() => story.goBackChapter()}
+          onChapterForward={() => story.goForwardChapter()}
+          onOpenLibrary={() => void story.openLibrary()}
+          onNewStory={() => void story.startNewStory()}
+          onBackToPath={() => setView('course')}
+        />
+      )}
+      {view === 'story-checkpoint' && user && story.session && (
+        <StoryCheckpointScreen
+          session={story.session}
+          busy={story.storyBusy}
+          error={story.storyError}
+          onContinue={(choice) => void story.submitCheckpointChoice(choice)}
+          onOpenLibrary={() => void story.openLibrary()}
+          onNewStory={() => void story.startNewStory()}
+          onBackToPath={() => setView('course')}
+        />
+      )}
+      {view === 'story-outcome' && user && story.session && (
+        <StoryOutcomeScreen
+          session={story.session}
+          busy={story.storyBusy}
+          error={story.storyError}
+          onContinue={() => void story.continueFromOutcome()}
+          onOpenLibrary={() => void story.openLibrary()}
+          onNewStory={() => void story.startNewStory()}
+          onBackToPath={() => setView('course')}
+        />
+      )}
+      {view === 'story-library' && user && (
+        <StoryLibraryScreen
+          sessions={story.library}
+          activeSessionId={story.session?.id ?? null}
+          busy={story.storyBusy}
+          error={story.storyError}
+          onResume={(sessionId) => void story.switchToStory(sessionId)}
+          onNewStory={() => void story.startNewStory()}
+          onDelete={(sessionId) => void story.deleteStory(sessionId)}
+          onBackToPath={() => setView('course')}
+        />
       )}
     </main>
   )

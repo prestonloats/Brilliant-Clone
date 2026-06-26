@@ -46,3 +46,28 @@ export {
   getCourseProgressSummary,
   getRecommendedPathLessonId,
 } from './engine/graph'
+
+export { selectNextQuestion, storyCandidateKey } from './engine/storyMode/selectNextQuestion'
+export type { SelectNextInput, StoryCandidate } from './engine/storyMode/selectNextQuestion'
+
+export {
+  createVariantSeed,
+  mulberry32,
+  randomizeQuestionNumbers,
+} from './engine/storyMode/randomizeQuestionNumbers'
+export type { Rng } from './engine/storyMode/randomizeQuestionNumbers'
+
+export { isThemedStepCoherent } from './engine/storyMode/themedCoherence'
+
+// Story Mode question-architecture bank (WAVE 3): the code-authoritative catalog, the lesson-gated
+// selector, and the pure rebuild/key helpers the story layer drives from.
+export { ARCHITECTURE_CATALOG } from './engine/storyMode/questionBank/catalog'
+export { selectNextArchitecture } from './engine/storyMode/questionBank/selectArchitecture'
+export type { SelectArchitectureInput } from './engine/storyMode/questionBank/selectArchitecture'
+export { architectureKey, generateForArchitecture } from './engine/storyMode/questionBank/rebuild'
+export type {
+  ArchitectureStepType,
+  GeneratedQuestion,
+  ParamSlot,
+  QuestionArchitecture,
+} from './engine/storyMode/questionBank/architectureTypes'

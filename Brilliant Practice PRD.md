@@ -31,7 +31,13 @@ lesson is an ordered sequence of typed, interactive steps, not a blob of HTML �
 which is what lets us add lessons fast and, later, lets AI generate them.
 Progress and mastery persist across sessions and devices, and the whole
 experience is built mobile-first, because that is where a teenager actually
-learns.
+learns. Once that core stands on its own, the first AI layer — **Story Mode**,
+an endless, interest-themed review wrapped in a choose-your-own-adventure
+narrative — builds directly on the same content model and client-side checker.
+It is **pure review** (it never touches mastery or course progress), unlocks
+after the first two lessons, and runs on a **free LLM** (the Google Gemini
+Developer API free tier) that works in local development first (Phase 2; see
+Milestones).
 
 ## Problem
 
@@ -109,6 +115,12 @@ decision is made for Maya first.)
   step, so I always know what to do next without choosing from a giant menu.
 - As a learner who keeps missing one idea, I want the app to give me an easier
   review before pushing on, so my gaps don't pile up and sink me later.
+- As a learner who has finished the first couple of lessons, I want to keep
+  practicing inside a story themed to things I like — space, soccer, dragons — so
+  reviewing old material feels like play instead of a worksheet. *(Story Mode · Phase 2)*
+- As a learner at a story checkpoint, I want to type what my character does next
+  and have the story respond, so I stay invested enough to keep practicing.
+  *(Story Mode · Phase 2)*
 
 ## Requirements
 
@@ -177,6 +189,22 @@ allows / fast-follow, **P2** = later phase.
 | R29 | Capture **per-attempt signals** (step id, correct/incorrect, attempt count, time-to-answer) to feed mastery now and adaptivity later. | P1 |
 | R30 | On finishing a lesson, the learner sees a **sensible recommended next step** in the course. | P0 |
 
+**Story Mode (Phase 2 · AI)**
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| R31 | **Interest selection**: on entering Story Mode the learner picks (and can later edit) a few interests from a curated list and/or free text, used to theme the story and the problems. | P2 |
+| R32 | **LLM integration** for Story Mode uses a **free LLM** — the Google Gemini Developer API free tier (e.g. `gemini-flash-latest`); **no Blaze/Vertex billing** is required for v1. It is **local-first**: in local dev the client calls Gemini directly with a gitignored key (`VITE_GEMINI_API_KEY`, acceptable for local dev only); at deploy the same call moves behind a thin server proxy / Cloud Function (or Firebase AI Logic + App Check) so the key never reaches the client — the same app-owned adapter either way. It re-themes problems and generates narrative, and **never** checks answers. | P2 |
+| R33 | **Next-question selection** draws **only from steps in lessons the learner has already completed**, favoring skills due for review or weakly mastered — a review surface, not new material. | P2 |
+| R34 | **LLM re-theming**: only the step's **display text** is rewritten to fit the learner's interests and story; the **answer key stays in the original bundled step** (numbers, structure, answer, and step `type` preserved), yielding a valid content-model `Step` graded by the existing client-side checker. A bad rewrite can never make a wrong answer pass. | P2 |
+| R35 | **Story checkpoint**: after every **10** solved questions, present a longer **1–2 paragraph** narrative beat that reflects the learner's interests and prior choices. | P2 |
+| R36 | **Choose-your-own-adventure input**: at each checkpoint the learner types, in free text, what they do next, and the LLM continues the narrative from that input. | P2 |
+| R37 | **Endless mode**: Story Mode has no fixed end — it keeps generating new themed questions and story segments indefinitely. | P2 |
+| R38 | **Story persistence**: interests, the running narrative + learner choices, solved-count, and progress toward the next checkpoint persist across sessions/devices and support pause/resume. | P2 |
+| R39 | **Teen-appropriate safety (first-class)**: strict system-prompt constraints (age-appropriate; no violence, sexual, self-harm, hateful, or dangerous content; stay on the educational story), Gemini safety settings set to block harmful categories, learner free-text **sanitized + moderated before** it reaches the model and **filtered on output**, **no personal info collected** from typed input, and a **safe fallback** when content is blocked. The model may not alter a problem's math or reveal its answer. Local v1 relies on model safety settings + prompt constraints + client checks; deployment adds server-side moderation via the proxy/Cloud Function. | P2 |
+| R40 | **Unlock gate**: Story Mode unlocks only after the learner completes the **first two lessons** of Algebra Foundations — **Balancing Equations** and **One-Step Equations**. Until then the entry point is shown locked with a prompt to finish them. | P2 |
+| R41 | **Pure review (no progress effects)**: Story Mode **never** writes mastery, lesson progress, streaks, or course completion — it persists only its own story state. It may read mastery/attempt signals to choose questions but cannot advance or alter the course path. | P2 |
+
 ### Non-Functional Requirements
 
 **Performance**
@@ -217,6 +245,13 @@ allows / fast-follow, **P2** = later phase.
 | N12 | Secure credential storage (hashed + salted, handled by the auth provider) and **encrypted transport (HTTPS/TLS)**. Minimal PII; age-appropriate, COPPA-aware sign-up for the teen audience. | P0 |
 | N13 | **Deployed and public** at a stable URL. | P0 |
 
+**AI & Story Mode (Phase 2)**
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| N14 | **Story Mode latency & quota**: LLM-dependent content (a re-themed question, a checkpoint narrative) is generated behind a graceful loading state and prefetched where possible — called directly from the client in local dev, and from the deploy-time proxy / Firebase AI Logic in production. **Free-tier rate/quota limits are a real constraint**: handle `429`/quota-exceeded gracefully (backoff + a friendly fallback to the un-themed question) and never hard-block the learner. The **underlying answer check stays client-side and < 100ms**, since a themed item is still a content-model step. | P2 |
+| N15 | **AI content safety (teen audience)**: prompts and model outputs are constrained and filtered for age-appropriate content, Gemini safety settings block harmful categories, free-text input is sanitized and moderated before the model sees it, and no personal info is collected from typed input. A client-embedded model key is used **only** in local dev (gitignored `.env.local`); on deploy the key stays off the client (server proxy / Cloud Function or Firebase AI Logic + App Check) and server-side moderation is added. | P2 |
+
 ## Design / Flows
 
 ### Screens (inventory)
@@ -234,6 +269,10 @@ allows / fast-follow, **P2** = later phase.
 - **Lesson Complete** — what you learned, mastery changes, and the
   **recommended next step**.
 - **Profile / Progress** — display name, avatar, and a per-skill mastery view.
+- **Story Mode (P2)** — an **interest picker**; a **themed problem player** that
+  reuses the lesson-player components to render LLM-re-themed steps; and a
+  **story checkpoint** card showing the 1–2 paragraph narrative beat plus a
+  free-text "what do you do next?" input.
 
 ### The flagship lesson — "Balancing Equations" (concrete content model)
 
@@ -303,6 +342,80 @@ These are exactly how the MVP will be evaluated; each maps to requirements above
 - The whole thing runs on a **phone-sized screen** with touch. *(N7)*
 - Under **multiple concurrent learners**, the deployed app stays responsive.
   *(N9)*
+
+### Story Mode — AI-themed, endless practice (Phase 2)
+
+The first AI feature layered on the working core. **Story Mode** turns review
+into a narrative: the learner picks a few **interests**, and the app wraps an
+endless stream of practice problems — drawn only from lessons they have already
+completed — inside a **choose-your-own-adventure** story themed to those
+interests. It brings *retrieval practice* (a Phase 3 goal) forward in a form
+that feels like play rather than a worksheet, and gives a learner who has
+mastered the path a reason to keep returning. It **unlocks after the first two
+lessons** (Balancing Equations and One-Step Equations) and is **pure review** —
+it never changes mastery or course progress. Crucially it sits **on top of** the
+existing content model and client-side checker: the LLM only *re-themes* a
+problem and *narrates* between sets — it never grades answers — so the sub-100ms
+answer loop (N2) is untouched. It runs on a **free LLM** (the Gemini Developer
+API free tier) and works in local development first.
+
+**Flow:**
+
+1. **Pick interests (onboarding).** On entering Story Mode the learner selects a
+   few interests from a curated list (e.g. *space*, *soccer*, *dragons*,
+   *cooking*) and/or types their own; these seed the story's setting and the
+   flavor of every problem (R31). Interests persist with the run and stay
+   editable.
+2. **Select the next question (review algorithm).** A client-side selector picks
+   the next item **only from steps in lessons the learner has already
+   completed** (R33), favoring skills due for review or weakly mastered — reusing
+   the same `mastery` and `attempts` signals the MVP already records. Story Mode
+   is therefore a *review* surface and never introduces unlearned material.
+3. **Re-theme it with the LLM.** Only the selected step's *display text* — names,
+   setting, prose — is rewritten to fit the learner's interests and the running
+   story, while the **answer key stays in the bundled step** (numbers, structure,
+   answer, and step `type` preserved) (R34). In local dev the client calls the
+   **free Gemini Developer API directly** (key in a gitignored `.env.local`); at
+   deploy the same call moves behind a thin proxy / Cloud Function (or Firebase AI
+   Logic + App Check) so the key never ships — the same adapter either way (R32).
+   The result is a normal content-model `Step`, so the same renderer and the same
+   **client-side checker** evaluate it (N2/N14): a re-skinned `2x + 4 = 10` is
+   still checked exactly like an authored one.
+4. **Solve, with the usual feedback.** The learner answers with the normal
+   interactive components and gets the same instant, specific feedback. Story Mode
+   is **pure review**: it does **not** update mastery, lesson progress, streaks, or
+   course completion — only its own story state advances (R41).
+5. **Story checkpoint every 10 solved (read).** After **10** solved questions
+   the LLM advances the narrative with a longer beat — roughly **1–2
+   paragraphs** — picking up the learner's interests and earlier choices (R35).
+6. **Choose your own adventure (write).** At each checkpoint the learner **types
+   what they do next** in free text; the LLM continues the story from that input
+   (R36), and the loop returns to step 2 for the next set of ten. The running
+   narrative, the choices, and progress toward the next checkpoint all persist
+   (R38), so a run pauses and resumes like any lesson (R25).
+7. **Endless by design.** There is no fixed ending — questions and story
+   segments generate indefinitely (R37). A compact "story so far" summary is
+   kept so prompts stay bounded as a run grows long.
+
+**Safety & guardrails (teen-appropriate, first-class).** Everything must be safe
+for teens (R39, N15). Prompts carry strict system constraints (age-appropriate;
+no violence, sexual, self-harm, hateful, or dangerous content; stay on the
+educational story), Gemini **safety settings** block harmful categories, and the
+learner's free text is **sanitized and moderated before** it reaches the model and
+**filtered on output**; typed interests pass the same checks so a custom interest
+cannot smuggle in unsafe themes. **No personal information** is collected from
+typed input, and when content is blocked the app shows a **safe fallback** instead
+of erroring. The model may never alter a problem's math or reveal its answer.
+Local v1 leans on model safety settings + prompt constraints + client checks;
+deployment adds **server-side moderation** via the same proxy/Cloud Function.
+
+**Edge cases.** Story Mode stays **locked until the first two lessons** are
+complete; those two lessons supply only a **small pool** (~12 re-themable steps),
+so the endless loop intentionally reuses them with fresh re-theming until later
+lessons widen the pool. An **LLM, network, or free-tier quota failure**
+(`429`/quota-exceeded) backs off and falls back to the un-themed authored problem
+and a canned narrative beat so practice never blocks; and a skipped checkpoint
+simply carries the narrative forward with a neutral default.
 
 ## Tech Stack
 
@@ -374,6 +487,20 @@ mastery/{uid}/skills/{skillId}
   lastPracticedAt                        // (Phase 3: decay / spaced repetition)
 attempts/{uid}/events/{eventId}          // implicit signals (R29)
   stepId, lessonId, correct, attemptCount, msToAnswer, at
+storyMode/{uid}                          // Phase 2 — Story Mode run state. PURE REVIEW: Story Mode
+                                         // writes ONLY here, never to progress/ or mastery/ (R41).
+                                         // Local-first dev mirrors this same shape to browser storage.
+  interests: [string, ...]               // chosen themes (R31)
+  status: active|paused
+  solvedCount, sinceCheckpoint           // sinceCheckpoint 0–10 → triggers a beat (R35)
+  storySummary                           // compact "story so far" (bounds prompts, R37)
+  createdAt, updatedAt
+storyMode/{uid}/segments/{segmentId}     // narrative log + learner choices (R36/R38)
+  kind: narrative|choice, text, at
+storyMode/{uid}/items/{itemId}           // themed questions (cache + history)
+  sourceLessonId, sourceStepId           // the completed-lesson step it reuses (R33)
+  themedStep                             // LLM-rewritten content-model Step (R34)
+  correct|null, at
 ```
 
 The content model `Step` is a tagged union — concretely:
@@ -404,10 +531,14 @@ with the bundle or via Cloud Storage.
   to Firestore (guarded by Security Rules). This is deliberate: it is what keeps
   feedback < 100ms (N2) and lets the app scale to many concurrent learners with
   no per-answer server work (N9).
-- **Reserved for later phases:** Phase 2 AI (problem generation, adaptive hints,
-  tutor) runs in Cloud Functions so model API keys never touch the client; Phase
-  3 may aggregate cross-session signals server-side for spaced-repetition
-  scheduling.
+- **Reserved for later phases:** Phase 2 AI's **Story Mode** is **local-first**
+  and needs **no Cloud Functions for the initial build** — in local dev the client
+  calls the free Gemini Developer API directly with a gitignored key. A thin Cloud
+  Function / server proxy (or Firebase AI Logic + App Check) is the **deploy-time**
+  path that keeps the model key off the client and hosts server-side moderation,
+  behind the same app-owned adapter (N15). Other Phase 2 AI (problem generation,
+  adaptive hints, tutor) and Phase 3 cross-session signal aggregation can likewise
+  move server-side when needed.
 
 ### Measurement & Tuning
 
@@ -451,8 +582,16 @@ with the bundle or via Cloud Storage.
   move to fetch-and-cache as the library grows.
 - **Age gating / COPPA** specifics for under-13 (N12) — do we cap the audience at
   13+ like a typical teen app, or add guardian consent?
-- **Phase 2 AI provider** — Firebase AI Logic / Vertex AI vs. a direct LLM API
-  via Cloud Functions; decide when Phase 2 starts, not now.
+- **Re-theming fidelity** — how do we guarantee the LLM never changes a
+  problem's numbers or answer (R34)? Likely validate the generated `Step`
+  against the source and reject/retry on drift — and prefetch/cache to keep
+  per-question latency and cost in check (N14).
+- **Narrative coherence over a long run** — what "story so far" summarization
+  keeps an endless run (R37) coherent without unbounded prompt growth?
+- **Free-tier headroom** — the exact current Gemini Developer API free-tier
+  limits (requests/min and /day) and the resulting questions/day ceiling per
+  learner; verify against Google's live docs and tune the model
+  (`gemini-flash-latest` vs `gemini-flash-lite-latest`) and prefetch accordingly.
 
 ## Resolved Decisions
 
@@ -467,6 +606,12 @@ with the bundle or via Cloud Storage.
 | **Backend** | Reuse existing **Firebase** scaffold in `vite/` | Auth, Firestore, Hosting, Security Rules already wired; no servers to run; deploy = public URL (N13). |
 | **Cloud Functions in MVP** | **None** | Keeps the answer loop fast and the architecture simple; Functions reserved for Phase 2 AI. |
 | **Habit / retention mechanics** | **Out of scope (Non-Goal)** | Streaks, daily goals, XP, and milestones are descoped for this version; focus stays on the core learn-by-doing loop and mastery. May be revisited later. |
+| **First AI feature (Phase 2)** | **Story Mode** — interest-themed, endless review with a choose-your-own-adventure narrative | Reuses the MVP content model and client-side checker; the LLM only re-themes display text and narrates (never grades), so the sub-100ms answer loop and overall architecture are unchanged. |
+| **Story Mode LLM & cost** | **Free** — Google **Gemini Developer API free tier** (`gemini-flash-latest`; `gemini-flash-lite-latest` fallback) | No Blaze/Vertex billing for v1. Free-tier rate/quota limits are a design constraint — handle `429`/quota-exceeded with backoff and a friendly fallback (R32, N14). |
+| **Story Mode local-vs-deploy** | **Local-first**, one app-owned adapter | Local dev calls Gemini directly with a gitignored `VITE_GEMINI_API_KEY` (a client key is OK for local dev only); deploy keeps the key off the client via a server proxy / Cloud Function (or Firebase AI Logic + App Check) behind the same adapter, selected by env (R32, N15). |
+| **Story Mode & progress** | **Pure review** — no mastery/progress writes | Never writes mastery, lesson progress, streaks, or course completion; it persists only its own story state (R41). |
+| **Story Mode unlock** | After the **first two lessons** (Balancing Equations, One-Step Equations) | Eligibility uses the existing `hasCompletedLesson` helper; the small early pool (~12 re-themable steps) is reused with fresh re-theming (R40). |
+| **Story Mode teen safety** | **First-class, multi-layer** | System-prompt constraints + Gemini safety settings + input sanitization/moderation + output filtering + no PII + safe fallback; deploy adds server-side moderation (R39, N15). |
 
 ## Milestones
 
@@ -506,9 +651,20 @@ depth — not lesson count — is what decides Phase 1.
 
 ### Phase 2 — AI features (by Friday) · built **on top** of a working core
 
-Decide what AI should genuinely improve, then build it (all model calls behind
-Cloud Functions, never in the client):
+Decide what AI should genuinely improve, then build it. Story Mode is built
+**local-first** on a **free LLM**; any client-embedded key is gitignored and used
+only in local dev, and the deploy path keeps keys off the client (server proxy /
+Cloud Function or Firebase AI Logic + App Check):
 
+- **Story Mode** — the first AI feature: an endless, interest-themed **review**
+  mode. The learner picks interests; a selector pulls the next problem only from
+  **already-completed** lessons; the LLM **re-themes** it to their story while
+  preserving the math; and every **10** solved questions unlocks a **1–2
+  paragraph** narrative beat the learner steers by **typing what they do next**
+  (choose-your-own-adventure). It unlocks after the **first two lessons**, is
+  **pure review** (never writes mastery or progress), runs on the **free Gemini
+  Developer API** (no Blaze), and is **teen-safe** by design. Reuses the content
+  model and client-side checker. *(R31–R41, N14, N15)*
 - **Problem generation** — generate new practice items *in the content-model
   schema* (e.g. fresh one-/two-step equations at a target difficulty), so the
   same renderer and client-side checker apply.

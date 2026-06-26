@@ -183,6 +183,7 @@
   background: var(--accent);
   color: white;
   display: grid;
+  flex: 0 0 auto;
   height: 42px;
   place-items: center;
   width: 42px;
@@ -525,6 +526,12 @@
 .graph-node.is-mastered .status-pill {
   background: #fde68a;
   color: #92400e;
+}
+
+/* Reserve room on the title row for the corner trophy so long lesson titles (e.g. the
+   multi-step equation lessons) wrap before running underneath the badge. */
+.graph-node.is-mastered .graph-node-head {
+  padding-right: 46px;
 }
 
 /* A trophy chip pinned to the node's top-right corner. It rests fully visible (so reduced

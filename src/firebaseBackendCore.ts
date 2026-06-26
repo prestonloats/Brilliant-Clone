@@ -1,5 +1,13 @@
 import type { BackendProvider } from './firebaseConfigCore'
-import type { AttemptEvent, LessonId, LessonProgress, SkillId, SkillMastery, UserProfile } from './domain'
+import type {
+  AttemptEvent,
+  LessonId,
+  LessonProgress,
+  SkillId,
+  SkillMastery,
+  StorySession,
+  UserProfile,
+} from './domain'
 
 const assertSafeDocumentId = (value: string, label: string) => {
   if (!value.trim() || value.includes('/')) {
@@ -49,6 +57,16 @@ export const firebaseMasteryPath = (uid: string, skillId: SkillId) =>
 export const firebaseAttemptPath = (uid: string, attemptId: string) =>
   `attempts/${assertSafeDocumentId(uid, 'uid')}/events/${assertSafeDocumentId(attemptId, 'attemptId')}`
 
+// The per-user Story parent document at story/{uid}. In schema v2 it holds the active-session
+// POINTER ({ userId, activeSessionId }); under the legacy schema it held the single session doc,
+// which the reader migrates into the sessions subcollection below.
+export const firebaseStoryPath = (uid: string) => `story/${assertSafeDocumentId(uid, 'uid')}`
+
+// The per-user saved-stories collection: one whole session document per id at
+// story/{uid}/sessions/{sessionId} (small payload, read/written whole), mirroring progress docs.
+export const firebaseStorySessionPath = (uid: string, sessionId: string) =>
+  `story/${assertSafeDocumentId(uid, 'uid')}/sessions/${assertSafeDocumentId(sessionId, 'sessionId')}`
+
 // `emailVerified` is intentionally omitted: the source of truth is the live Firebase Auth
 // user / ID token claim, so persisting it to Firestore would only create a stale copy.
 export const toFirestoreUserProfile = (uid: string, profile: UserProfile): UserProfile => ({
@@ -72,4 +90,21 @@ export const toFirestoreSkillMastery = (uid: string, mastery: SkillMastery): Ski
 export const toFirestoreAttemptEvent = (uid: string, event: AttemptEvent): AttemptEvent => ({
   ...event,
   userId: uid,
+})
+
+// Stamp the authenticated uid onto the session so a payload can never persist story data under
+// a different user id (mirrors `toFirestoreLessonProgress`). Read back via `normalizeStorySession`.
+export const toFirestoreStorySession = (uid: string, session: StorySession): StorySession => ({
+  ...session,
+  userId: uid,
+})
+
+// The active-session pointer document body written to story/{uid}. Carries the authenticated uid
+// (so the `writesUserId` rule guard passes) and the chosen session id (null clears the pointer).
+export const toFirestoreStoryPointer = (
+  uid: string,
+  activeSessionId: string | null,
+): { userId: string; activeSessionId: string | null } => ({
+  userId: uid,
+  activeSessionId,
 })
