@@ -10,7 +10,8 @@
 
 import type { FirebaseServices } from '../firebaseServices'
 import { isOutputSafe, moderateUserInput } from './safety'
-import type { RethemeRequest, RethemeResult, StoryAI } from './storyAi'
+import { buildSceneMatchPrompt } from './sceneMatchPrompt'
+import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
 import {
   RETHEME_FALLBACK,
   STORY_MODELS,
@@ -175,6 +176,14 @@ export async function createFirebaseStoryAI(
     async pickScene(input) {
       // One catalog id (or "none"); a failure/timeout or unknown id parses to null -> no image.
       const raw = await run(sceneModels, buildScenePrompt(input), STORY_TIMEOUTS.scene)
+      return parseSceneId(raw)
+    },
+
+    async matchSceneToInterests(req: SceneMatchRequest) {
+      // Closest-match picker (rules 5 & 6): same tiny single-id classification as pickScene, matched
+      // against the candidate shortlist + interests. A failure/timeout, the NO_SCENE sentinel, or an
+      // unknown id all parse to null -> no image when nothing is close enough.
+      const raw = await run(sceneModels, buildSceneMatchPrompt(req), STORY_TIMEOUTS.scene)
       return parseSceneId(raw)
     },
 

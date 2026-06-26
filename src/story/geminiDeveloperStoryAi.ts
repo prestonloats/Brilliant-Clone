@@ -11,7 +11,8 @@
 // to a public bundle — use `firebaseStoryAi.ts` (App Check) or a proxy at deploy.
 
 import { isOutputSafe, moderateUserInput } from './safety'
-import type { RethemeRequest, RethemeResult, StoryAI } from './storyAi'
+import { buildSceneMatchPrompt } from './sceneMatchPrompt'
+import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
 import {
   RETHEME_FALLBACK,
   STORY_MODELS,
@@ -188,6 +189,19 @@ export async function createGeminiDeveloperStoryAI(
       // an unknown id parses to null, so the caller just shows no image.
       const raw = await generate(
         buildScenePrompt(input),
+        { temperature: 0, maxOutputTokens: 32 },
+        STORY_TIMEOUTS.scene,
+      )
+      return parseSceneId(raw)
+    },
+
+    async matchSceneToInterests(req: SceneMatchRequest) {
+      // Closest-match picker (rules 5 & 6): same tiny single-id classification as pickScene, but
+      // matched against the candidate shortlist + interests. A failure/timeout, the NO_SCENE
+      // sentinel, or an unknown id all parse to null -> the caller shows no image when nothing is
+      // close enough.
+      const raw = await generate(
+        buildSceneMatchPrompt(req),
         { temperature: 0, maxOutputTokens: 32 },
         STORY_TIMEOUTS.scene,
       )

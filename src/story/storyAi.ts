@@ -24,6 +24,18 @@ export type RethemeResult = {
   themedTiles?: { id: string; label: string }[]
 }
 
+// Closest-match scene request (rules 5 & 6). Given a CANDIDATE shortlist of catalog scenes, pick the
+// ONE whose setting most closely RESEMBLES the theme's interests — EMPHASIZING the learner's custom
+// (freeform) topics over the suggested presets when `emphasizeCustom` is set — or signal "none is
+// close enough" (the adapters map that to null). `candidates` is the set the model may choose among
+// (e.g. the on-interest pool from `scenesForInterests`), kept small so this is a cheap, single-token
+// classification like `pickScene`.
+export type SceneMatchRequest = {
+  theme: StoryTheme
+  candidates: readonly SceneId[]
+  emphasizeCustom: boolean
+}
+
 export type StoryAI = {
   startStory(theme: StoryTheme): Promise<{ premise: string; protagonist: string; opening: string }>
   rethemeQuestion(req: RethemeRequest): Promise<RethemeResult>
@@ -51,6 +63,14 @@ export type StoryAI = {
     interestScenes?: readonly SceneId[]
     previousSceneId?: SceneId
   }): Promise<SceneId | null>
+  // OPTIONAL closest-match scene picker (rules 5 & 6): choose the ONE candidate scene that most
+  // closely resembles the theme's interests (emphasizing the custom/freeform topics when asked), or
+  // resolve to null when NONE is close enough — the "not close enough" threshold — so the caller
+  // shows no image. `null` is the single not-matched signal (it covers the NO_SCENE sentinel, an
+  // unknown id, and any failure/timeout). Like `pickScene` this is pure CLASSIFICATION — it never
+  // authors text. Kept OPTIONAL + additive so existing/mock implementers need not provide it; the
+  // four SDK adapters do.
+  matchSceneToInterests?(req: SceneMatchRequest): Promise<SceneId | null>
   // Context-window compaction (plan section 8).
   summarize(input: { narrative: string }): Promise<string>
 }
