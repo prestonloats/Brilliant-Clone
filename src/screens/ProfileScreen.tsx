@@ -1,23 +1,29 @@
 import { useState } from 'react'
-import { skills, type UserProfile } from '../domain'
+import { skills, type StorySession, type UserProfile } from '../domain'
 import type { Backend } from '../backend'
 import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '../authValidation'
+import { computeStoryModeStats } from '../story/storyStats'
+import { capitalizeFirst } from '../story/storyLibrary'
 
 export function ProfileScreen({
   user,
   mastery,
   attempts,
+  storySessions,
   backendProvider,
   onSaveDisplayName,
 }: {
   user: UserProfile
   mastery: { skillId: string; score: number; attempts: number; correct: number }[]
   attempts: { id: string }[]
+  // Every saved Story Mode adventure for this user; aggregated into the highlights panel below.
+  storySessions: StorySession[]
   backendProvider: Backend['provider']
   // Persists the new display name through the Backend contract and updates app-wide user state.
   onSaveDisplayName: (name: string) => Promise<void>
 }) {
   const providerLabel = backendProvider === 'firebase' ? 'Firebase user ID' : 'Local demo profile ID'
+  const storyStats = computeStoryModeStats(storySessions)
 
   const [name, setName] = useState(user.displayName)
   const [saving, setSaving] = useState(false)
@@ -134,6 +140,73 @@ export function ProfileScreen({
           )
         })}
       </div>
+
+      <section className="story-stats card" aria-labelledby="story-stats-heading">
+        <p className="eyebrow">Story Mode</p>
+        <h2 id="story-stats-heading">Your adventures</h2>
+        {storyStats.hasPlayed ? (
+          <>
+            <p className="story-stats-sub">
+              {storyStats.activeStories} active · {storyStats.completedStories} completed
+            </p>
+            <div className="story-stat-grid">
+              <div className="story-stat">
+                <span className="story-stat-value">{storyStats.storiesStarted}</span>
+                <span className="story-stat-label">
+                  {storyStats.storiesStarted === 1 ? 'Story started' : 'Stories started'}
+                </span>
+              </div>
+              <div className="story-stat">
+                <span className="story-stat-value">{storyStats.questionsSolved}</span>
+                <span className="story-stat-label">Questions solved</span>
+              </div>
+              <div className="story-stat">
+                <span className="story-stat-value">{storyStats.chaptersReached}</span>
+                <span className="story-stat-label">Chapters explored</span>
+              </div>
+              <div className="story-stat">
+                <span className="story-stat-value">{storyStats.scenesExplored}</span>
+                <span className="story-stat-label">Scenes discovered</span>
+              </div>
+              <div className="story-stat">
+                <span className="story-stat-value">{storyStats.storyBeats}</span>
+                <span className="story-stat-label">Story beats</span>
+              </div>
+              <div className="story-stat">
+                <span className="story-stat-value">{storyStats.charactersCreated}</span>
+                <span className="story-stat-label">Characters created</span>
+              </div>
+            </div>
+
+            {storyStats.topInterests.length > 0 && (
+              <div className="story-faves">
+                <h3>Favorite themes</h3>
+                <ul className="story-fave-list">
+                  {storyStats.topInterests.slice(0, 3).map((interest) => (
+                    <li className="story-fave" key={interest.id}>
+                      <span aria-hidden="true">{interest.emoji}</span>
+                      {interest.label}
+                      <span className="story-fave-count">{interest.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {storyStats.longestAdventure && (
+              <p className="story-longest">
+                Longest adventure: <strong>{capitalizeFirst(storyStats.longestAdventure.title)}</strong> —{' '}
+                {storyStats.longestAdventure.questionsSolved}{' '}
+                {storyStats.longestAdventure.questionsSolved === 1 ? 'question' : 'questions'} across{' '}
+                {storyStats.longestAdventure.chapters}{' '}
+                {storyStats.longestAdventure.chapters === 1 ? 'chapter' : 'chapters'}.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="story-empty">No adventures yet — head to Story Mode to start your first one.</p>
+        )}
+      </section>
 
       <p className="fine-print">Recorded {backendProvider} attempt events: {attempts.length}</p>
     </section>

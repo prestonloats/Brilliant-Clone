@@ -415,6 +415,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
           user={user}
           mastery={mastery}
           attempts={attempts}
+          storySessions={story.library}
           backendProvider={backend.provider}
           onSaveDisplayName={handleSaveDisplayName}
         />

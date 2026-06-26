@@ -93,6 +93,111 @@
   padding-top: 24px;
 }
 
+/* Story Mode highlights panel on the profile (mirrors the .profile-card width/padding). */
+.story-stats {
+  margin: 0 auto;
+  max-width: 760px;
+  padding: clamp(22px, 5vw, 44px);
+}
+
+.story-stats h2 {
+  margin: 0 0 6px;
+}
+
+.story-stats-sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+/* auto-fit keeps the tiles responsive (3-up, then wrapping) without a media query. */
+.story-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.story-stat {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  text-align: left;
+}
+
+.story-stat-value {
+  color: var(--text-h);
+  font-size: clamp(24px, 4vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.story-stat-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.story-faves {
+  margin-top: 22px;
+}
+
+.story-faves h3 {
+  color: var(--text-h);
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+
+.story-fave-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.story-fave {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+  padding: 6px 12px;
+}
+
+.story-fave-count {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  font-size: 12px;
+  min-width: 20px;
+  padding: 1px 7px;
+  text-align: center;
+}
+
+.story-longest {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text);
+  margin-top: 22px;
+  padding: 14px 16px;
+}
+
+.story-longest strong {
+  color: var(--text-h);
+}
+
+.story-empty {
+  color: var(--muted);
+}
+
 .screen-stack,
 .lesson-shell {
   display: grid;
