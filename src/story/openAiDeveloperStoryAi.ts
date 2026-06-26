@@ -19,7 +19,8 @@
 
 import { OPENAI_MODERATION_MODEL, extractCompletionText, extractModerationFlag } from './openAiProxyProtocol'
 import { isOutputSafe, moderateUserInput } from './safety'
-import type { RethemeRequest, RethemeResult, StoryAI } from './storyAi'
+import { buildSceneMatchPrompt } from './sceneMatchPrompt'
+import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
 import {
   RETHEME_FALLBACK,
   STORY_TIMEOUTS,
@@ -196,6 +197,14 @@ export async function createOpenAiDeveloperStoryAI(
     async pickScene(input) {
       // One catalog id (or "none"); a failure/timeout or unknown id parses to null -> no image.
       const raw = await generate(buildScenePrompt(input), { maxOutputTokens: MAX_TOKENS.scene }, STORY_TIMEOUTS.scene)
+      return parseSceneId(raw)
+    },
+
+    async matchSceneToInterests(req: SceneMatchRequest) {
+      // Closest-match picker (rules 5 & 6): same tiny single-id classification as pickScene, matched
+      // against the candidate shortlist + interests. A failure/timeout, the NO_SCENE sentinel, or an
+      // unknown id all parse to null -> no image when nothing is close enough.
+      const raw = await generate(buildSceneMatchPrompt(req), { maxOutputTokens: MAX_TOKENS.scene }, STORY_TIMEOUTS.scene)
       return parseSceneId(raw)
     },
 
