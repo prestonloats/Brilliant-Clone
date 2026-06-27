@@ -20,6 +20,64 @@ const OPENAI_MODERATION_MODEL = 'omni-moderation-latest'
 
 // --- protocol mapping (mirrors the pure helpers in src/story/openAiProxyProtocol.ts) ---------
 
+// SECURITY: this proxy is PUBLIC and unauthenticated, forwarding to OpenAI with the owner's billable
+// key, so the body is untrusted. These ceilings (mirroring PROXY_LIMITS in openAiProxyProtocol.ts)
+// bound per-request cost — maxInstances above bounds concurrency. Legit Story Mode calls sit well
+// under them, so real play is unaffected; a hostile client cannot demand huge output/inputs.
+const PROXY_LIMITS = {
+  maxOutputTokens: 4096,
+  maxModelChars: 64,
+  maxSystemChars: 8_000,
+  maxPromptChars: 24_000,
+  maxModerationInputChars: 8_000,
+}
+
+const clampOutputTokens = (value) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const tokens = Math.floor(value)
+  if (tokens < 1) return undefined
+  return Math.min(tokens, PROXY_LIMITS.maxOutputTokens)
+}
+
+const isBoundedString = (value, max) =>
+  typeof value === 'string' && value.length > 0 && value.length <= max
+
+// Validate + clamp an untrusted body; returns { ok, request } or { ok:false, status, error }.
+const normalizeProxyRequest = (raw) => {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, status: 400, error: 'request body must be a JSON object' }
+  }
+  if (raw.op === 'generate') {
+    if (!isBoundedString(raw.model, PROXY_LIMITS.maxModelChars)) {
+      return { ok: false, status: 400, error: 'generate requires a non-empty model within the size limit' }
+    }
+    if (!isBoundedString(raw.system, PROXY_LIMITS.maxSystemChars)) {
+      return { ok: false, status: 400, error: 'generate requires a system prompt within the size limit' }
+    }
+    if (!isBoundedString(raw.prompt, PROXY_LIMITS.maxPromptChars)) {
+      return { ok: false, status: 400, error: 'generate requires a prompt within the size limit' }
+    }
+    if (raw.json !== undefined && typeof raw.json !== 'boolean') {
+      return { ok: false, status: 400, error: 'generate json flag must be a boolean' }
+    }
+    if (raw.maxOutputTokens !== undefined && typeof raw.maxOutputTokens !== 'number') {
+      return { ok: false, status: 400, error: 'generate maxOutputTokens must be a number' }
+    }
+    const request = { op: 'generate', model: raw.model, system: raw.system, prompt: raw.prompt }
+    if (raw.json === true) request.json = true
+    const maxTokens = clampOutputTokens(raw.maxOutputTokens)
+    if (maxTokens !== undefined) request.maxOutputTokens = maxTokens
+    return { ok: true, request }
+  }
+  if (raw.op === 'moderate') {
+    if (!isBoundedString(raw.input, PROXY_LIMITS.maxModerationInputChars)) {
+      return { ok: false, status: 400, error: 'moderate requires an input within the size limit' }
+    }
+    return { ok: true, request: { op: 'moderate', input: raw.input } }
+  }
+  return { ok: false, status: 400, error: 'unknown op' }
+}
+
 const toChatCompletionsBody = (req) => {
   const body = {
     model: req.model,
@@ -29,7 +87,8 @@ const toChatCompletionsBody = (req) => {
     ],
   }
   if (req.json) body.response_format = { type: 'json_object' }
-  if (typeof req.maxOutputTokens === 'number') body.max_completion_tokens = req.maxOutputTokens
+  const maxTokens = clampOutputTokens(req.maxOutputTokens)
+  if (maxTokens !== undefined) body.max_completion_tokens = maxTokens
   return body
 }
 
@@ -75,7 +134,13 @@ export const storyProxy = onRequest(
     }
 
     // onRequest auto-parses a JSON body (Content-Type: application/json), which the client always sends.
-    const body = req.body && typeof req.body === 'object' ? req.body : {}
+    // Validate + clamp the untrusted body BEFORE spending the key (token ceiling, size caps, types).
+    const parsed = normalizeProxyRequest(req.body)
+    if (!parsed.ok) {
+      res.status(parsed.status).json({ error: parsed.error })
+      return
+    }
+    const body = parsed.request
 
     try {
       if (body.op === 'generate') {
