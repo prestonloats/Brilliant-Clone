@@ -13,8 +13,8 @@ import {
   OPENAI_MODERATION_MODEL,
   extractCompletionText,
   extractModerationFlag,
+  normalizeProxyRequest,
   toChatCompletionsBody,
-  type ProxyRequest,
 } from '../src/story/openAiProxyProtocol'
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
@@ -56,13 +56,21 @@ const handleProxyRequest = async (req: IncomingMessage, res: ServerResponse, api
     return
   }
 
-  let body: ProxyRequest
+  let raw: unknown
   try {
-    body = (await readJsonBody(req)) as ProxyRequest
+    raw = await readJsonBody(req)
   } catch (error) {
     sendJson(res, 400, { error: error instanceof Error ? error.message : 'bad request' })
     return
   }
+
+  // Validate + clamp the untrusted body BEFORE spending the key (token ceiling, size caps, types).
+  const parsed = normalizeProxyRequest(raw)
+  if (!parsed.ok) {
+    sendJson(res, parsed.status, { error: parsed.error })
+    return
+  }
+  const body = parsed.request
 
   try {
     if (body.op === 'generate') {

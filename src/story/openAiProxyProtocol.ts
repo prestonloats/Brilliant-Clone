@@ -38,6 +38,31 @@ export type ProxyRequest = ProxyGenerateRequest | ProxyModerateRequest
 export type ProxyGenerateResponse = { text: string | null }
 export type ProxyModerateResponse = { flagged: boolean }
 
+// --- Server-side abuse limits (the proxy is PUBLIC and unauthenticated) ------
+
+// The deployed /api/story proxy forwards to OpenAI with the owner's BILLABLE key, and any origin can
+// POST to it, so its body is fully untrusted: a hostile client could otherwise demand a huge
+// `maxOutputTokens` or a megabyte-long prompt purely to run up the bill. These ceilings bound the
+// per-request cost (maxInstances in functions/ bounds concurrency). Legitimate Story Mode calls
+// (<=1200 output tokens; prompts a few KB long) sit far below them, so real play is unaffected.
+export const PROXY_LIMITS = {
+  maxOutputTokens: 4096,
+  maxModelChars: 64,
+  maxSystemChars: 8_000,
+  maxPromptChars: 24_000,
+  maxModerationInputChars: 8_000,
+} as const
+
+// Clamp a client-supplied output-token budget to a finite integer within [1, ceiling]. Returns
+// undefined for anything non-numeric or < 1 so the request body omits the field entirely (OpenAI's
+// model default then applies) — a hostile or garbage value can never pass through unbounded.
+export const clampOutputTokens = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const tokens = Math.floor(value)
+  if (tokens < 1) return undefined
+  return Math.min(tokens, PROXY_LIMITS.maxOutputTokens)
+}
+
 // --- OpenAI Chat Completions mapping (pure + testable) -----------------------
 
 // Minimal Chat Completions body. Note: `max_completion_tokens` (not the deprecated `max_tokens`) is
@@ -60,8 +85,63 @@ export const toChatCompletionsBody = (req: ProxyGenerateRequest): ChatCompletion
     ],
   }
   if (req.json) body.response_format = { type: 'json_object' }
-  if (typeof req.maxOutputTokens === 'number') body.max_completion_tokens = req.maxOutputTokens
+  // Always clamp here too (defense in depth) so the ceiling holds even if a caller skips
+  // normalizeProxyRequest; an in-range value is passed through unchanged, an unset one omitted.
+  const maxTokens = clampOutputTokens(req.maxOutputTokens)
+  if (maxTokens !== undefined) body.max_completion_tokens = maxTokens
   return body
+}
+
+// --- Untrusted request validation (shared by both proxies) -------------------
+
+export type ProxyValidationResult =
+  | { ok: true; request: ProxyRequest }
+  | { ok: false; status: number; error: string }
+
+const isBoundedString = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= max
+
+// Validate + normalize an untrusted proxy request body, returning either the typed request or a
+// { status, error } the caller can send verbatim. Centralizing the policy here keeps the dev proxy
+// (devProxy/) and the deployed Cloud Function (functions/, which mirrors these constants) enforcing
+// IDENTICAL bounds, so neither becomes an unbounded relay to the billable OpenAI API.
+export const normalizeProxyRequest = (raw: unknown): ProxyValidationResult => {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, status: 400, error: 'request body must be a JSON object' }
+  }
+  const body = raw as Record<string, unknown>
+
+  if (body.op === 'generate') {
+    if (!isBoundedString(body.model, PROXY_LIMITS.maxModelChars)) {
+      return { ok: false, status: 400, error: 'generate requires a non-empty model within the size limit' }
+    }
+    if (!isBoundedString(body.system, PROXY_LIMITS.maxSystemChars)) {
+      return { ok: false, status: 400, error: 'generate requires a system prompt within the size limit' }
+    }
+    if (!isBoundedString(body.prompt, PROXY_LIMITS.maxPromptChars)) {
+      return { ok: false, status: 400, error: 'generate requires a prompt within the size limit' }
+    }
+    if (body.json !== undefined && typeof body.json !== 'boolean') {
+      return { ok: false, status: 400, error: 'generate json flag must be a boolean' }
+    }
+    if (body.maxOutputTokens !== undefined && typeof body.maxOutputTokens !== 'number') {
+      return { ok: false, status: 400, error: 'generate maxOutputTokens must be a number' }
+    }
+    const request: ProxyGenerateRequest = { op: 'generate', model: body.model, system: body.system, prompt: body.prompt }
+    if (body.json === true) request.json = true
+    const maxTokens = clampOutputTokens(body.maxOutputTokens)
+    if (maxTokens !== undefined) request.maxOutputTokens = maxTokens
+    return { ok: true, request }
+  }
+
+  if (body.op === 'moderate') {
+    if (!isBoundedString(body.input, PROXY_LIMITS.maxModerationInputChars)) {
+      return { ok: false, status: 400, error: 'moderate requires an input within the size limit' }
+    }
+    return { ok: true, request: { op: 'moderate', input: body.input } }
+  }
+
+  return { ok: false, status: 400, error: 'unknown op' }
 }
 
 // Pull the assistant text out of an OpenAI Chat Completions response, tolerating the unknown wire
