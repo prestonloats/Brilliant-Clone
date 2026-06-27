@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   DEFAULT_LEGACY_PASSWORD,
   hashPassword,
+  needsRehash,
   sha256Hex,
   verifyPassword,
   type PasswordCredential,
@@ -62,4 +63,34 @@ test('verifyPassword never throws on malformed credentials', () => {
     verifyPassword('hunter2', undefined as unknown as PasswordCredential),
     false,
   )
+})
+
+test('hashPassword records the iteration count it used', () => {
+  const cred = hashPassword('hunter2')
+  assert.equal(typeof cred.iterations, 'number')
+  assert.ok((cred.iterations ?? 0) > 1000, 'current cost should exceed the legacy 1000 rounds')
+})
+
+test('verifyPassword reproduces a credential at its own (explicit) iteration count', () => {
+  // A custom, low cost round-trips when the credential carries that exact count.
+  const cred = hashPassword('hunter2', 'aabbccdd', 10)
+  assert.equal(cred.iterations, 10)
+  assert.equal(verifyPassword('hunter2', cred), true)
+  assert.equal(verifyPassword('nope', cred), false)
+})
+
+test('verifyPassword treats a missing iteration count as the legacy 1000-round cost', () => {
+  // Reproduce what an OLD stored credential looked like: hashed at 1000 rounds, no `iterations` field.
+  const legacy = hashPassword(DEFAULT_LEGACY_PASSWORD, 'fixedsalt12345678', 1000)
+  const withoutIterations: PasswordCredential = { hash: legacy.hash, salt: legacy.salt }
+  assert.equal(verifyPassword(DEFAULT_LEGACY_PASSWORD, withoutIterations), true)
+  assert.equal(verifyPassword('wrong', withoutIterations), false)
+})
+
+test('needsRehash flags legacy / lower-cost credentials and clears for current-cost ones', () => {
+  assert.equal(needsRehash(hashPassword('hunter2')), false)
+  assert.equal(needsRehash(hashPassword('hunter2', 'aabbccdd', 1000)), true)
+  // A credential with no recorded iterations is assumed legacy and should be upgraded.
+  const current = hashPassword('hunter2')
+  assert.equal(needsRehash({ hash: current.hash, salt: current.salt }), true)
 })

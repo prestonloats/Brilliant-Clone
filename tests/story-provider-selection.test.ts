@@ -53,3 +53,21 @@ test('nothing configured -> null (createStoryAI then returns null and the entry 
   assert.equal(selectStoryProvider({}), null)
   assert.equal(selectStoryProvider({ OPENAI_API_KEY: '', VITE_GEMINI_API_KEY: '' }), null)
 })
+
+// --- production refuses client-side key providers (no billable key shipped to visitors) -------
+
+test('a production build refuses the client-side OpenAI and Gemini key providers', () => {
+  assert.equal(selectStoryProvider({ OPENAI_API_KEY: OPENAI_KEY, PROD: true }), null)
+  assert.equal(selectStoryProvider({ VITE_OPENAI_API_KEY: OPENAI_KEY, PROD: true }), null)
+  assert.equal(selectStoryProvider({ VITE_GEMINI_API_KEY: GEMINI_KEY, PROD: true }), null)
+})
+
+test('a production build still allows the explicit server-side providers', () => {
+  assert.equal(selectStoryProvider({ VITE_STORY_AI_PROVIDER: 'proxy', PROD: true }), 'proxy')
+  assert.equal(selectStoryProvider({ VITE_STORY_AI_PROVIDER: 'firebase', PROD: true }), 'firebase')
+  // An explicit proxy/firebase provider wins even with a stray client key present in a prod build.
+  assert.equal(
+    selectStoryProvider({ VITE_STORY_AI_PROVIDER: 'proxy', OPENAI_API_KEY: OPENAI_KEY, PROD: true }),
+    'proxy',
+  )
+})

@@ -294,6 +294,7 @@ test('backend provider selection fails closed for firebase mode', () => {
     progress: localBackend.progress,
     mastery: localBackend.mastery,
     attempts: localBackend.attempts,
+    practice: localBackend.practice,
     story: localBackend.story,
   }
 

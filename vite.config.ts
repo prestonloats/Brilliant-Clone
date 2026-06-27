@@ -16,15 +16,13 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    // SECURITY: only the VITE_ prefix is exposed to the client bundle. OPENAI_API_KEY is deliberately
-    // NOT exposed, so a billable `sk-...` secret can never be inlined into the public build. The key
-    // lives ONLY server-side: the dev proxy reads it via loadEnv('') (see devProxy/), and the deployed
-    // Cloud Function reads it from Secret Manager (see functions/). The browser only ever talks to the
-    // same-origin /api/story proxy (VITE_STORY_AI_PROVIDER=proxy), never to api.openai.com.
+    // SECURITY: only the VITE_ prefix is exposed to the client bundle, so a billable `sk-...` secret
+    // can never be inlined into the public build. Production Story Mode uses Firebase AI Logic
+    // (VITE_STORY_AI_PROVIDER=firebase): the Gemini key stays on Firebase's server (the free Gemini
+    // Developer API tier, which runs on the no-Blaze Spark plan), so no AI key ever ships to the browser.
     envPrefix: ['VITE_'],
-    // storyAiProxyPlugin only mounts during `vite dev` (apply: 'serve'); it also reads OPENAI_API_KEY
-    // server-side for the same-origin proxy path. In production the same /api/story path is served by
-    // the Cloud Function in functions/ (wired via the Hosting rewrite in firebase.json).
+    // storyAiProxyPlugin is an OPTIONAL local-dev OpenAI proxy (apply: 'serve'; reads OPENAI_API_KEY
+    // server-side). It is unused unless VITE_STORY_AI_PROVIDER=proxy — the deployed app needs no proxy.
     plugins: [react(), storyAiProxyPlugin()],
     build: {
       rollupOptions: {

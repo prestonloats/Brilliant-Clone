@@ -35,6 +35,8 @@ export const lineValueArchitecture: QuestionArchitecture = {
   requiredLessonId: 'graphing-lines',
   skillId: 'graphing-lines',
   stepType: 'input',
+  // Mastery learning: evaluating a line unlocks only once the coordinate plane is genuinely mastered.
+  masteryPrereqs: ['coordinate-plane'],
   slots: [
     { name: 'm', min: -4, max: 4, note: 'nonzero slope' },
     { name: 'b', min: -6, max: 6, note: 'y-intercept' },

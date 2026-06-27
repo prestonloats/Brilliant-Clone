@@ -20,6 +20,8 @@ export const twoStepLinearArchitecture: QuestionArchitecture = {
   requiredLessonId: 'two-step-equations',
   skillId: 'two-step-equations',
   stepType: 'input',
+  // Mastery learning: two-step practice unlocks only once one-step is genuinely mastered.
+  masteryPrereqs: ['one-step-equations'],
   slots: [
     { name: 'a', min: 2, max: 9, note: 'coefficient of x' },
     { name: 'k', min: 1, max: 15, note: 'constant added or subtracted' },

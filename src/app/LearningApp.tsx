@@ -16,6 +16,7 @@ import {
   type LessonProgress,
   type LessonStep,
   type SkillMastery,
+  type SkillPracticeState,
   type UserProfile,
 } from '../domain'
 import { isEmailVerificationRequired } from '../firebaseBackendCore'
@@ -58,15 +59,19 @@ export function LearningApp({ backend }: { backend: Backend }) {
   const [mastery, setMastery] = useState<SkillMastery[]>([])
   const [progressByLesson, setProgressByLesson] = useState<ProgressByLesson>({})
   const [attempts, setAttempts] = useState<AttemptEvent[]>([])
+  // Phase 3 Story Mode learning-science practice state (spaced-repetition + mastery estimate).
+  const [practice, setPractice] = useState<SkillPracticeState[]>([])
   const [loading, setLoading] = useState(true)
   const [runtimeError, setRuntimeError] = useState('')
   const activeLesson = lessons[activeLessonId]
   const currentStep = progress ? activeLesson.steps[progress.currentStepIndex] : null
   const recommendation = getRecommendedNextLesson(activeLesson, mastery, algebraCourse, lessons, progressByLesson)
 
-  // Story Mode unlocks only after the first two lessons are completed (plan section 8). It is a
-  // PURE-REVIEW feature: the controller below persists only its own `story` session and never
-  // calls `completeStep`, so it can never write LessonProgress, mastery, streaks, or attempts.
+  // Story Mode unlocks only after the first two lessons are completed (plan section 8). Phase 3
+  // narrows its old pure-review wall: the controller below still never calls `completeStep` (so it
+  // never writes LessonProgress or lesson mastery), but it now records a DEDICATED practice store
+  // (spaced-repetition + mastery estimate) and `source:'story'` attempts. `onLearnerDataChanged`
+  // refreshes the attempt/practice data that drives the next question's selection.
   const storyUnlocked =
     hasCompletedLesson(progressByLesson['balancing-equations']) &&
     hasCompletedLesson(progressByLesson['one-step-equations'])
@@ -76,7 +81,11 @@ export function LearningApp({ backend }: { backend: Backend }) {
     progressByLesson,
     mastery,
     attempts,
+    practice,
     navigate: (storyView) => setView(storyView),
+    onLearnerDataChanged: () => {
+      if (user) void refreshLearnerData(user)
+    },
   })
 
   const applySession = useCallback(
@@ -87,6 +96,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
       setProgressByLesson(session.progressByLesson)
       setMastery(session.mastery)
       setAttempts(session.attempts)
+      setPractice(session.practice)
       setView('course')
     },
     [],
@@ -97,6 +107,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
     setProgressByLesson({})
     setMastery([])
     setAttempts([])
+    setPractice([])
   }
 
   useEffect(() => {
@@ -144,14 +155,16 @@ export function LearningApp({ backend }: { backend: Backend }) {
   }, [backend, applySession])
 
   const refreshLearnerData = async (signedInUser: UserProfile, progressOverride?: LessonProgress) => {
-    const [nextMastery, nextProgressByLesson, nextAttempts] = await Promise.all([
+    const [nextMastery, nextProgressByLesson, nextAttempts, nextPractice] = await Promise.all([
       backend.mastery.getUserMastery(signedInUser.id),
       getProgressByLesson(backend, signedInUser.id),
       backend.attempts.getAttempts(signedInUser.id),
+      backend.practice.getUserPractice(signedInUser.id),
     ])
 
     setMastery(nextMastery)
     setAttempts(nextAttempts)
+    setPractice(nextPractice)
     setProgressByLesson(
       progressOverride
         ? { ...nextProgressByLesson, [progressOverride.lessonId]: progressOverride }
@@ -478,6 +491,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
           busy={story.storyBusy}
           error={story.storyError}
           onResult={() => void story.submitQuestionResult()}
+          onAttempt={(correct) => story.recordPracticeAttempt(correct)}
           onBack={() => story.goBack()}
           onForward={() => story.goForward()}
           onChapterBack={() => story.goBackChapter()}
@@ -504,6 +518,8 @@ export function LearningApp({ backend }: { backend: Backend }) {
             busy={story.storyBusy}
             error={story.storyError}
             canReview={story.canReview}
+            practiceSummary={story.practiceSummary}
+            retention={story.retention}
             onLookBack={() => story.openReview()}
             onContinue={(choice) => void story.submitCheckpointChoice(choice)}
             onOpenLibrary={() => void story.openLibrary()}

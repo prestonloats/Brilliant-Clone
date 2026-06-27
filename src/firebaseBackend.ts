@@ -21,6 +21,7 @@ import {
 import {
   isAttemptEvent,
   isSkillMastery,
+  isSkillPracticeState,
   legacyStorySessionId,
   normalizeLessonProgress,
   normalizeStorySession,
@@ -35,15 +36,20 @@ import type {
   AttemptEvent,
   LessonId,
   LessonProgress,
+  PracticeOutcome,
   SkillId,
   SkillMastery,
+  SkillPracticeState,
   StorySession,
   UserProfile,
 } from './domain'
+import { applyPracticeOutcome } from './engine/practice/applyOutcome'
+import { createInitialPracticeState } from './engine/practice/mastery'
 import {
   assertVerifiedEmailForWrite,
   firebaseAttemptPath,
   firebaseMasteryPath,
+  firebasePracticePath,
   firebaseProgressPath,
   firebaseStoryPath,
   firebaseStorySessionPath,
@@ -52,6 +58,7 @@ import {
   toFirestoreAttemptEvent,
   toFirestoreLessonProgress,
   toFirestoreSkillMastery,
+  toFirestoreSkillPracticeState,
   toFirestoreStoryPointer,
   toFirestoreStorySession,
   toFirestoreUserProfile,
@@ -245,6 +252,36 @@ export class FirebaseBackend implements Backend {
         }
 
         transaction.set(masteryRef, toFirestoreSkillMastery(uid, updated))
+        return updated
+      })
+    },
+  }
+
+  practice = {
+    getUserPractice: async (userId: string) => {
+      const uid = await this.requireActiveUid(userId)
+      const snapshot = await getDocs(collection(this.firestore, 'practice', uid, 'skills'))
+
+      return snapshot.docs
+        .map((item) => item.data())
+        .filter((item): item is SkillPracticeState => isSkillPracticeState(item) && item.userId === uid)
+    },
+    // Transactional read-modify-write of ONE skill's practice state, mirroring updateSkillMastery
+    // but delegating the math to the shared pure `applyPracticeOutcome` (no duplicated formula).
+    updatePractice: async (userId: string, skillId: SkillId, outcome: PracticeOutcome) => {
+      const uid = await this.requireVerifiedUid(userId)
+      const practiceRef = doc(this.firestore, firebasePracticePath(uid, skillId))
+
+      return runTransaction(this.firestore, async (transaction) => {
+        const snapshot = await transaction.get(practiceRef)
+        const current = snapshot.exists() ? snapshot.data() : null
+        const existing =
+          isSkillPracticeState(current) && current.userId === uid && current.skillId === skillId
+            ? current
+            : createInitialPracticeState(uid, skillId, outcome.at)
+
+        const updated = applyPracticeOutcome(existing, outcome)
+        transaction.set(practiceRef, toFirestoreSkillPracticeState(uid, updated))
         return updated
       })
     },

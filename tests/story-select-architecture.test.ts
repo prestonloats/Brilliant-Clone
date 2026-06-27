@@ -186,65 +186,78 @@ test('excludeKey never empties a tiny pool (a lone on-screen architecture can st
 
 test('weights struggling skills up and mastered skills down', () => {
   const linear = byId('one-step-linear') // skill: one-step-equations
-  const line = byId('line-value') // skill: graphing-lines
+  const walk = byId('coordinate-walk') // skill: coordinate-plane (no mastery prerequisite)
   const progressByLesson: ProgressByLesson = {
     'one-step-equations': completed('one-step-equations'),
-    'graphing-lines': completed('graphing-lines'),
+    'coordinate-plane': completed('coordinate-plane'),
   }
-  // one-step-equations below threshold -> struggle x2; graphing-lines above -> mastered x0.75.
-  // Pool order [linear, line]: weights [2, 0.75], total 2.75.
-  const mastery = [makeMastery('one-step-equations', 0.2), makeMastery('graphing-lines', 0.9)]
-  const args = { pool: [linear, line], progressByLesson, mastery }
+  // one-step-equations below threshold -> struggle x2; coordinate-plane above -> mastered x0.75.
+  // Pool order [linear, walk]: weights [2, 0.75], total 2.75.
+  const mastery = [makeMastery('one-step-equations', 0.2), makeMastery('coordinate-plane', 0.9)]
+  const args = { pool: [linear, walk], progressByLesson, mastery }
 
   assert.equal(select({ ...args, rng: () => 0 })?.id, 'one-step-linear') // 0 -> [0, 2)
   assert.equal(select({ ...args, rng: () => 0.7 })?.id, 'one-step-linear') // 1.925 < 2
-  assert.equal(select({ ...args, rng: () => 0.95 })?.id, 'line-value') // 2.6125 -> [2, 2.75)
+  assert.equal(select({ ...args, rng: () => 0.95 })?.id, 'coordinate-walk') // 2.6125 -> [2, 2.75)
 })
 
 test('boosts an architecture whose most recent attempt was incorrect', () => {
   const linear = byId('one-step-linear')
-  const line = byId('line-value')
+  const walk = byId('coordinate-walk')
   const progressByLesson: ProgressByLesson = {
     'one-step-equations': completed('one-step-equations'),
-    'graphing-lines': completed('graphing-lines'),
+    'coordinate-plane': completed('coordinate-plane'),
   }
-  const mastery = [makeMastery('one-step-equations', 0.2), makeMastery('graphing-lines', 0.9)]
-  const args = { pool: [linear, line], progressByLesson, mastery }
+  const mastery = [makeMastery('one-step-equations', 0.2), makeMastery('coordinate-plane', 0.9)]
+  const args = { pool: [linear, walk], progressByLesson, mastery }
 
-  // Baseline (no attempts): linear 2, line 0.75; rng 0.7 -> 1.925 < 2 -> linear.
+  // Baseline (no attempts): linear 2, walk 0.75; rng 0.7 -> 1.925 < 2 -> linear.
   assert.equal(select({ ...args, rng: () => 0.7 })?.id, 'one-step-linear')
 
-  // The MOST RECENT attempt for line-value is incorrect -> line x1.5 = 1.125 (total 3.125).
-  // rng 0.7 -> 2.1875 lands in line-value's band, so the miss flips the pick.
+  // The MOST RECENT attempt for coordinate-walk is incorrect -> walk x1.5 = 1.125 (total 3.125).
+  // rng 0.7 -> 2.1875 lands in coordinate-walk's band, so the miss flips the pick.
   const attempts = [
-    makeAttempt(architectureKey('line-value'), true, '2026-06-20T00:00:00.000Z'),
-    makeAttempt(architectureKey('line-value'), false, '2026-06-24T00:00:00.000Z'),
+    makeAttempt(architectureKey('coordinate-walk'), true, '2026-06-20T00:00:00.000Z'),
+    makeAttempt(architectureKey('coordinate-walk'), false, '2026-06-24T00:00:00.000Z'),
   ]
-  assert.equal(select({ ...args, attempts, rng: () => 0.7 })?.id, 'line-value')
+  assert.equal(select({ ...args, attempts, rng: () => 0.7 })?.id, 'coordinate-walk')
 })
 
-test('downweights the skill of the immediately previous served architecture', () => {
+test('interleaving never repeats the previous skill when another skill is available', () => {
   const linear = byId('one-step-linear') // skill: one-step-equations
   const sequence = byId('one-step-sequence') // skill: one-step-equations
-  const line = byId('line-value') // skill: graphing-lines
+  const walk = byId('coordinate-walk') // skill: coordinate-plane (no mastery prerequisite)
   const progressByLesson: ProgressByLesson = {
     'one-step-equations': completed('one-step-equations'),
-    'graphing-lines': completed('graphing-lines'),
+    'coordinate-plane': completed('coordinate-plane'),
   }
-  // Pool [linear, sequence, line]; one-step-linear just served (previous skill = one-step-equations).
-  // Anti-repeat removes linear; fresh = [sequence, line]. sequence shares the previous skill -> x0.6
-  // => sequence 0.6, line 1.0 (total 1.6).
+  // one-step-linear just served (previous skill = one-step-equations). Anti-repeat removes linear;
+  // fresh = [sequence (SAME skill), walk (different)]. Hard interleaving drops the same-skill
+  // sequence, leaving only coordinate-walk regardless of rng — a mixed session, not a blocked one.
   const args = {
-    pool: [linear, sequence, line],
+    pool: [linear, sequence, walk],
     progressByLesson,
     servedKeys: [architectureKey('one-step-linear')],
   }
+  for (let i = 0; i < 30; i += 1) {
+    assert.equal(select({ ...args, rng: () => i / 30 })?.id, 'coordinate-walk')
+  }
+})
 
-  // rng 0.3 -> 0.48 -> sequence band [0, 0.6).
-  assert.equal(select({ ...args, rng: () => 0.3 })?.id, 'one-step-sequence')
-  // rng 0.45 -> 0.72 -> line-value. Without the x0.6 penalty (weights 1,1 total 2) 0.45 -> 0.9 would
-  // have stayed on sequence, so landing on line-value proves the same-skill variety penalty applies.
-  assert.equal(select({ ...args, rng: () => 0.45 })?.id, 'line-value')
+test('interleaving relaxes when only the previous skill remains in the pool', () => {
+  const linear = byId('one-step-linear') // skill: one-step-equations
+  const sequence = byId('one-step-sequence') // skill: one-step-equations
+  const progressByLesson: ProgressByLesson = { 'one-step-equations': completed('one-step-equations') }
+  // Both architectures share ONE skill; sequence just served. Anti-repeat removes sequence -> [linear].
+  // Interleaving would avoid the previous skill, but that is all there is, so it relaxes and still
+  // serves linear rather than emptying the pool.
+  const result = select({
+    pool: [linear, sequence],
+    progressByLesson,
+    servedKeys: [architectureKey('one-step-sequence')],
+    rng: () => 0.5,
+  })
+  assert.equal(result?.id, 'one-step-linear')
 })
 
 // --- Determinism ----------------------------------------------------------------------------

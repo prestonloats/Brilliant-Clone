@@ -34,6 +34,7 @@ import {
   buildSummarizePrompt,
   callWithBackoff,
   isStringRecord,
+  isTransientError,
   parseRethemeResult,
   parseSceneId,
   withTimeout,
@@ -44,15 +45,36 @@ export type OpenAiStoryAiOptions = {
   fallbackModel?: string
 }
 
+// A 200 proxy response whose `text` is empty — the dominant intermittent failure: a reasoning model
+// that spent its whole `max_completion_tokens` budget on hidden reasoning (or a blank/filtered
+// output) returns no visible text. Modeled as its own error so the retry policy can treat it as
+// transient WITHOUT matching on real response content.
+class EmptyCompletionError extends Error {
+  constructor() {
+    super('openai-proxy returned an empty completion')
+    this.name = 'EmptyCompletionError'
+  }
+}
+
+// Retry policy for generation: the shared transient set (429/5xx/timeout/network) PLUS an empty
+// completion. An empty result therefore RETRIES the same model and, if it still comes back empty,
+// `generate` falls through to the fallback (nano) model — instead of instantly returning null and
+// dropping the learner onto the offline default beat.
+const EMPTY_AWARE_RETRY = {
+  retries: STORY_RETRY.retries,
+  isRetryable: (error: unknown) => error instanceof EmptyCompletionError || isTransientError(error),
+} as const
+
 // Output-token budgets. GPT-5.x are reasoning models whose `max_completion_tokens` budget also covers
-// hidden reasoning tokens, so tiny caps could starve the visible answer; these leave headroom while
-// staying cheap for a dev workload.
+// hidden reasoning tokens, so tiny caps could starve the visible answer. These are generous so even a
+// turn that does some reasoning still has plenty of room for the actual text; the model is billed for
+// tokens it actually uses (a short beat stays cheap), the budget is just the ceiling.
 const MAX_TOKENS = {
-  start: 1200,
-  prose: 1200,
-  retheme: 800,
-  scene: 256,
-  summarize: 512,
+  start: 4000,
+  prose: 4000,
+  retheme: 2000,
+  scene: 1000,
+  summarize: 1500,
 } as const
 
 export function createOpenAiStoryAI(proxyUrl: string, options: OpenAiStoryAiOptions = {}): StoryAI {
@@ -100,8 +122,14 @@ export function createOpenAiStoryAI(proxyUrl: string, options: OpenAiStoryAiOpti
           maxOutputTokens: opts.maxOutputTokens,
         }
         const res = await postToProxy<ProxyGenerateResponse>(req, timeoutMs)
-        return res.text
-      }, STORY_RETRY)
+        const text = typeof res.text === 'string' ? res.text : ''
+        // A 200 with EMPTY text is the main intermittent failure (a reasoning model whose hidden
+        // reasoning ate the whole token budget). Throw so the backoff retries this model — and, if
+        // it stays empty, the catch below falls through to the fallback model — rather than letting
+        // a single blank reply collapse straight to the offline default beat.
+        if (text.trim() === '') throw new EmptyCompletionError()
+        return text
+      }, EMPTY_AWARE_RETRY)
     try {
       return await attempt(primary)
     } catch {

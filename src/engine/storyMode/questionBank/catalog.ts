@@ -6,6 +6,7 @@
 // filters, and `rebuild.ts` resolves a persisted `architectureId` against the map. New
 // architectures append to the END so persisted keys / deterministic ordering stay stable.
 
+import type { SkillId } from '../../../domain'
 import type { QuestionArchitecture } from './architectureTypes'
 import { oneStepLinearArchitecture } from './architectures/oneStepLinear'
 import { oneStepSequenceArchitecture } from './architectures/oneStepSequence'
@@ -31,3 +32,7 @@ export const ARCHITECTURE_CATALOG: QuestionArchitecture[] = [
 export const ARCHITECTURE_BY_ID: Map<string, QuestionArchitecture> = new Map(
   ARCHITECTURE_CATALOG.map((architecture) => [architecture.id, architecture]),
 )
+
+// The skill an architecture trains, by id, or undefined for an unknown id. Lets the story layer map
+// a served architecture question back to the skill whose practice state its outcome should update.
+export const skillForArchitecture = (id: string): SkillId | undefined => ARCHITECTURE_BY_ID.get(id)?.skillId

@@ -17,7 +17,7 @@
 // generation has no inline safety filter (unlike Gemini's safetySettings), the untrusted user choice
 // also gets a free OpenAI Moderations pass in addition to the local safety helpers.
 
-import { OPENAI_MODERATION_MODEL, extractCompletionText, extractModerationFlag } from './openAiProxyProtocol'
+import { OPENAI_MODERATION_MODEL, extractCompletionText, extractModerationFlag, isReasoningModel } from './openAiProxyProtocol'
 import { isOutputSafe, moderateUserInput } from './safety'
 import { buildSceneMatchPrompt } from './sceneMatchPrompt'
 import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
@@ -46,20 +46,35 @@ export type OpenAiDeveloperStoryAiOptions = {
   model?: string
 }
 
-// Bounded retries on TRANSIENT failures (429/5xx/timeout/network), mirroring the Gemini adapter so
-// the session-start burst recovers instead of dropping straight to bare fallbacks. Non-transient
-// errors (bad request / auth / safety) still fail fast.
-const STORY_RETRY = { retries: 2, isRetryable: isTransientError } as const
+// A response whose visible content is empty (a reasoning model that spent its whole
+// max_completion_tokens budget on hidden reasoning, or a blank/filtered output). Its own error type
+// so the retry policy can treat it as transient without matching on real response content.
+class EmptyCompletionError extends Error {
+  constructor() {
+    super('openai returned an empty completion')
+    this.name = 'EmptyCompletionError'
+  }
+}
 
-// Output-token budgets: generous enough for ~2-paragraph beats while staying cheap for a dev
-// workload. `max_completion_tokens` (not the deprecated `max_tokens`) is used so the request also
-// works on reasoning-class models whose budget also covers hidden reasoning tokens.
+// Bounded retries on TRANSIENT failures (429/5xx/timeout/network) PLUS an empty completion, mirroring
+// the proxy adapter so a reasoning model that returns no visible text is retried instead of dropping
+// straight to bare fallbacks. Non-transient errors (bad request / auth / safety) still fail fast.
+const STORY_RETRY = {
+  retries: 2,
+  isRetryable: (error: unknown) => error instanceof EmptyCompletionError || isTransientError(error),
+} as const
+
+// Output-token budgets: generous enough that a reasoning model (whose `max_completion_tokens` budget
+// also covers hidden reasoning tokens) still has plenty of room for the visible ~2-paragraph beat.
+// `max_completion_tokens` (not the deprecated `max_tokens`) is used for cross-model compatibility.
+// The model is billed only for tokens it actually uses, so a short beat stays cheap; this is just the
+// ceiling.
 const MAX_TOKENS = {
-  start: 1200,
-  prose: 1200,
-  retheme: 800,
-  scene: 256,
-  summarize: 512,
+  start: 4000,
+  prose: 4000,
+  retheme: 2000,
+  scene: 1000,
+  summarize: 1500,
 } as const
 
 const isStringRecord = (value: unknown): value is Record<string, unknown> =>
@@ -95,12 +110,19 @@ export async function createOpenAiDeveloperStoryAI(
               { role: 'user', content: prompt },
             ],
             max_completion_tokens: opts.maxOutputTokens,
+            // Keep reasoning LOW on reasoning-class models so hidden reasoning can't eat the whole
+            // budget and return empty text; gated so non-reasoning models aren't sent it. ('low', not
+            // 'minimal', which the gpt-5.4 models reject.)
+            ...(isReasoningModel(model) ? { reasoning_effort: 'low' as const } : {}),
             ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
           }),
           timeoutMs,
           'openai',
         )
-        return extractCompletionText(resp)
+        const text = extractCompletionText(resp)
+        // Treat an empty completion as retryable (see EmptyCompletionError) instead of returning null.
+        if (text === null || text.trim() === '') throw new EmptyCompletionError()
+        return text
       }, STORY_RETRY)
     } catch {
       return null

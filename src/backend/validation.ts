@@ -9,6 +9,7 @@ import type {
   LessonScore,
   MainCharacterSource,
   SkillMastery,
+  SkillPracticeState,
   StepResult,
   StoryInterestId,
   StorySegment,
@@ -34,12 +35,19 @@ export const emptyDatabase = (): LocalDatabase => ({
   progress: {},
   mastery: {},
   attempts: [],
+  practice: {},
   story: {},
   storyActive: {},
 })
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+// Keys that must never be used as map keys built from untrusted JSON: assigning to them can corrupt
+// an object's prototype chain (prototype pollution). JSON.parse creates `__proto__` as an own key, so
+// guard every place we copy parsed keys into a fresh record.
+const FORBIDDEN_MAP_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+const isSafeMapKey = (key: string): boolean => !FORBIDDEN_MAP_KEYS.has(key)
 
 const isString = (value: unknown): value is string => typeof value === 'string'
 
@@ -88,7 +96,7 @@ const normalizeRecordWith = <Value>(
 
   return Object.entries(value).reduce<Record<string, Value>>((record, [key, candidate]) => {
     const normalized = normalize(candidate)
-    if (normalized !== null) {
+    if (normalized !== null && isSafeMapKey(key)) {
       record[key] = normalized
     }
 
@@ -129,6 +137,11 @@ export const normalizeLocalUser = (value: unknown): LocalUser | null => {
     ...profile,
     ...(typeof value.passwordHash === 'string' ? { passwordHash: value.passwordHash } : {}),
     ...(typeof value.passwordSalt === 'string' ? { passwordSalt: value.passwordSalt } : {}),
+    // Preserve the key-stretching cost so a credential verifies with the same rounds it was hashed
+    // with; a missing/invalid value is dropped and treated as the legacy cost by verifyPassword.
+    ...(isNumber(value.passwordIterations) && value.passwordIterations > 0
+      ? { passwordIterations: value.passwordIterations }
+      : {}),
   }
 }
 
@@ -208,7 +221,32 @@ export const isAttemptEvent = (value: unknown): value is AttemptEvent => {
     typeof value.correct === 'boolean' &&
     isNumber(value.attemptCount) &&
     isNumber(value.msToAnswer) &&
-    isString(value.at)
+    isString(value.at) &&
+    // `source` is OPTIONAL/additive: absent (legacy/lesson) is fine; when present it must be a
+    // known surface so a stray value can never ride through into measurement.
+    (value.source === undefined || value.source === 'lesson' || value.source === 'story')
+  )
+}
+
+// A persisted Story Mode practice state. Mirrors `isSkillMastery` (accept-or-drop): every field
+// must be present and well-typed, so a malformed/partial record is dropped on read rather than
+// surfacing a half-initialized schedule. `dueAt`/`lastSeenAt`/`updatedAt` are ISO strings.
+export const isSkillPracticeState = (value: unknown): value is SkillPracticeState => {
+  if (!isRecord(value)) return false
+
+  return (
+    isString(value.userId) &&
+    isString(value.skillId) &&
+    isNumber(value.proficiency) &&
+    isNumber(value.streak) &&
+    isNumber(value.intervalDays) &&
+    isNumber(value.ease) &&
+    isString(value.dueAt) &&
+    isNumber(value.lapses) &&
+    isNumber(value.totalAttempts) &&
+    isNumber(value.firstTryCorrect) &&
+    isString(value.lastSeenAt) &&
+    isString(value.updatedAt)
   )
 }
 
@@ -530,6 +568,7 @@ export const normalizeStoryLibrary = (
       // Legacy entries are keyed by userId, so derive a stable legacy id from that key.
       const session = normalizeStorySession(candidate, ownId ?? legacyStorySessionId(key))
       if (!session) continue
+      if (!isSafeMapKey(session.id) || !isSafeMapKey(session.userId)) continue
       story[session.id] = session
       if (isLegacy && !(session.userId in derivedActive)) {
         derivedActive[session.userId] = session.id
@@ -541,7 +580,7 @@ export const normalizeStoryLibrary = (
   // Explicit pointers win, but only when they reference an existing session owned by that user.
   if (isRecord(rawActive)) {
     for (const [userId, sessionId] of Object.entries(rawActive)) {
-      if (isString(sessionId) && story[sessionId]?.userId === userId) {
+      if (isSafeMapKey(userId) && isString(sessionId) && story[sessionId]?.userId === userId) {
         storyActive[userId] = sessionId
       }
     }
@@ -566,6 +605,9 @@ export const normalizeDatabase = (value: unknown): LocalDatabase => {
       isSkillMastery(candidate) ? candidate : null,
     ),
     attempts: Array.isArray(value.attempts) ? value.attempts.filter(isAttemptEvent) : [],
+    practice: normalizeRecordWith(value.practice, (candidate) =>
+      isSkillPracticeState(candidate) ? candidate : null,
+    ),
     story,
     storyActive,
   }

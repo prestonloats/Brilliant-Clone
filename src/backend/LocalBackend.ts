@@ -7,12 +7,15 @@ import type {
   LocalAuthRepository,
   LocalDatabase,
   LocalMasteryRepository,
+  LocalPracticeRepository,
   LocalProgressRepository,
   LocalStoryRepository,
   LocalUser,
 } from './types'
+import { applyPracticeOutcome } from '../engine/practice/applyOutcome'
+import { createInitialPracticeState } from '../engine/practice/mastery'
 import { emptyDatabase, normalizeDatabase, validateDisplayNameInput, validateSignUpInput } from './validation'
-import { DEFAULT_LEGACY_PASSWORD, hashPassword, verifyPassword } from '../auth/passwordCredential'
+import { DEFAULT_LEGACY_PASSWORD, hashPassword, needsRehash, verifyPassword } from '../auth/passwordCredential'
 import { PASSWORD_MIN_LENGTH } from '../authValidation'
 
 export const STORAGE_KEY = 'balance-local-backend-v1'
@@ -47,6 +50,7 @@ export class LocalBackend implements Backend {
   progress: LocalProgressRepository
   mastery: LocalMasteryRepository
   attempts: LocalAttemptRepository
+  practice: LocalPracticeRepository
   story: LocalStoryRepository
 
   // Cache the parsed/validated database keyed on the raw stored string so we
@@ -83,6 +87,7 @@ export class LocalBackend implements Backend {
           createdAt: new Date().toISOString(),
           passwordHash: credential.hash,
           passwordSalt: credential.salt,
+          passwordIterations: credential.iterations,
         }
 
         db.users[user.id] = user
@@ -108,11 +113,27 @@ export class LocalBackend implements Backend {
           const migrated = hashPassword(DEFAULT_LEGACY_PASSWORD)
           user.passwordHash = migrated.hash
           user.passwordSalt = migrated.salt
+          user.passwordIterations = migrated.iterations
           this.write(db)
         }
 
-        if (!verifyPassword(password, { hash: user.passwordHash!, salt: user.passwordSalt! })) {
+        const credential = {
+          hash: user.passwordHash!,
+          salt: user.passwordSalt!,
+          iterations: user.passwordIterations,
+        }
+        if (!verifyPassword(password, credential)) {
           throw new Error('Incorrect password.')
+        }
+
+        // Upgrade-on-login: if the stored credential used fewer stretching rounds than the current
+        // cost (e.g. a legacy 1000-round hash), transparently re-hash it now that we have the
+        // plaintext and it verified.
+        if (needsRehash(credential)) {
+          const upgraded = hashPassword(password)
+          user.passwordHash = upgraded.hash
+          user.passwordSalt = upgraded.salt
+          user.passwordIterations = upgraded.iterations
         }
 
         this.setCurrentUserId(user.id)
@@ -205,6 +226,26 @@ export class LocalBackend implements Backend {
         this.requireActiveUser(userId)
         const db = this.read()
         return db.attempts.filter((attempt) => attempt.userId === userId)
+      },
+    }
+
+    this.practice = {
+      getUserPractice: (userId) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        return Object.values(db.practice).filter((practice) => practice.userId === userId)
+      },
+      // Advance ONE skill's practice state by a single outcome. Reads the existing record (or seeds
+      // a fresh one) and applies the SHARED pure `applyPracticeOutcome` so Local + Firebase agree.
+      updatePractice: (userId, skillId, outcome) => {
+        this.requireActiveUser(userId)
+        const db = this.read()
+        const key = this.practiceKey(userId, skillId)
+        const existing = db.practice[key] ?? createInitialPracticeState(userId, skillId, outcome.at)
+        const updated = applyPracticeOutcome(existing, outcome)
+        db.practice[key] = updated
+        this.write(db)
+        return updated
       },
     }
 
@@ -308,6 +349,10 @@ export class LocalBackend implements Backend {
   }
 
   private masteryKey(userId: string, skillId: SkillId) {
+    return `${userId}:${skillId}`
+  }
+
+  private practiceKey(userId: string, skillId: SkillId) {
     return `${userId}:${skillId}`
   }
 }

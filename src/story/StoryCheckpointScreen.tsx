@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import type { StorySession } from '../domain'
+import type { PracticeSummary, RetentionReport } from '../engine'
 import { MAX_USER_INPUT_LENGTH } from './safety'
 import { capitalizeFirst } from './storyLibrary'
+import { PracticeInsightsPanel } from './PracticeInsightsPanel'
 import { StorySceneImage } from './StorySceneImage'
 import { StoryScreenNav } from './StoryScreenNav'
 import { CHECKPOINT_INTERVAL } from './storySessionReducer'
@@ -12,6 +14,9 @@ type StoryCheckpointScreenProps = {
   error: string
   // Whether there is earlier story to look back at, and the handler that opens the read-only review.
   canReview: boolean
+  // Phase 3 learning-science summary shown at this natural pause (mastery meters + retention).
+  practiceSummary: PracticeSummary
+  retention: RetentionReport
   onLookBack: () => void
   onContinue: (choice: string) => void
   onOpenLibrary: () => void
@@ -24,6 +29,8 @@ export function StoryCheckpointScreen({
   busy,
   error,
   canReview,
+  practiceSummary,
+  retention,
   onLookBack,
   onContinue,
   onOpenLibrary,
@@ -112,6 +119,8 @@ export function StoryCheckpointScreen({
           {busy ? 'Continuing…' : 'Continue'}
         </button>
       </article>
+
+      <PracticeInsightsPanel summary={practiceSummary} retention={retention} />
     </section>
   )
 }

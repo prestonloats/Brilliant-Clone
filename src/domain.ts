@@ -86,6 +86,42 @@ export type SkillMastery = {
   lastPracticedAt: string
 }
 
+// Per-user, per-skill learning-science state for Story Mode practice (Phase 3). This is the
+// dedicated practice store the NARROWED pure-review invariant allows Story Mode to write: it is
+// kept SEPARATE from the lesson `SkillMastery` ratio (a naive cumulative correct/attempts) so the
+// spaced-repetition schedule + recency-weighted mastery estimate never corrupt lesson grading.
+export type SkillPracticeState = {
+  userId: string
+  skillId: SkillId
+  // Recency-weighted (EWMA) estimate of FIRST-TRY recall success, 0..1 — the retrieval-strength signal.
+  proficiency: number
+  // Consecutive first-try-correct retrievals; resets to 0 on any miss. Part of the mastery signal.
+  streak: number
+  // Spaced-repetition schedule (SM-2-lite): current interval, ease factor, and when it is next due.
+  intervalDays: number
+  ease: number
+  dueAt: string
+  // Times a scheduled item was missed (its interval reset); useful for insights + leech detection.
+  lapses: number
+  // Lifetime retrieval counts for insights / transparency.
+  totalAttempts: number
+  firstTryCorrect: number
+  lastSeenAt: string
+  updatedAt: string
+}
+
+// The signal recorded for ONE practiced question: whether the learner got it right on the FIRST
+// try (the retrieval-practice measure). `at` is injectable so the schedule + tests are deterministic.
+export type PracticeOutcome = {
+  firstTryCorrect: boolean
+  at?: string
+}
+
+// Which surface produced a retrieval attempt. Additive/optional for back-compat: legacy events and
+// ordinary lesson play omit it (treated as 'lesson'); Story Mode practice records 'story' so
+// learning-science measurement can separate guided lessons from spaced/interleaved practice.
+export type AttemptSource = 'lesson' | 'story'
+
 export type AttemptEvent = {
   id: string
   userId: string
@@ -95,4 +131,5 @@ export type AttemptEvent = {
   attemptCount: number
   msToAnswer: number
   at: string
+  source?: AttemptSource
 }

@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import type { StoryTheme } from '../src/domain'
 import type { RethemeRequest } from '../src/story/storyAi'
 import {
+  MAX_RAW_INPUT_LENGTH,
   MAX_USER_INPUT_LENGTH,
   containsProfanity,
   containsUnsafeContent,
@@ -64,6 +65,17 @@ test('sanitizeUserInput caps length to ~200 chars', () => {
   const out = sanitizeUserInput('a'.repeat(500))
   assert.ok(out.length <= MAX_USER_INPUT_LENGTH)
   assert.equal(out.length, MAX_USER_INPUT_LENGTH)
+})
+
+test('sanitizeUserInput bounds pathological input quickly (no ReDoS) and still caps output', () => {
+  // A long run of domain-like text with no terminating dot is the worst case for the URL/domain
+  // strippers; with the raw-length guard it must finish promptly and still return <= maxLength.
+  const hostile = 'a-'.repeat(2_000_000) // 4M chars, far above MAX_RAW_INPUT_LENGTH
+  const started = Date.now()
+  const out = sanitizeUserInput(hostile)
+  assert.ok(Date.now() - started < 1000, 'sanitize should not hang on hostile input')
+  assert.ok(out.length <= MAX_USER_INPUT_LENGTH)
+  assert.ok(MAX_RAW_INPUT_LENGTH >= MAX_USER_INPUT_LENGTH)
 })
 
 test('sanitizeUserInput strips control characters', () => {
@@ -161,6 +173,36 @@ test('moderateOutput returns a reason when it rejects', () => {
   const bad = moderateOutput('Well, shit, that went badly.')
   assert.equal(bad.ok, false)
   assert.ok(bad.reason)
+})
+
+test('isOutputSafe does NOT false-positive on common words that merely contain an unsafe substring', () => {
+  // Regression: the old despaced substring check flagged ordinary prose, discarding safe beats and
+  // forcing the offline "default text". Each of these contains a banned substring across/within
+  // words but is obviously safe, so all must pass: "something"/"method" ⊃ meth, "heroine" ⊃ heroin,
+  // "lucky stars"/"rocky shore" ⊃ kys.
+  assert.equal(isOutputSafe('You notice something strange near the old barn.'), true)
+  assert.equal(isOutputSafe('She used a clever method to fix the engine.'), true)
+  assert.equal(isOutputSafe('The heroine waved to the cheering crowd.'), true)
+  assert.equal(isOutputSafe('Lucky stars lit the sky above the rocky shore.'), true)
+  assert.equal(isOutputSafe('They made a plan and set off on the journey.'), true)
+})
+
+test('isOutputSafe still catches genuinely unsafe single words and phrases (no regression)', () => {
+  assert.equal(isOutputSafe('He grabbed a gun and ran.'), false) // weapon word
+  assert.equal(isOutputSafe('They planned a school shooting.'), false) // phrase + "shooting"
+  assert.equal(isOutputSafe('Here is how to make a bomb.'), false) // phrase + "bomb"
+  assert.equal(isOutputSafe('Just kill yourself.'), false) // self-harm phrase
+  assert.equal(isOutputSafe('He sold heroin on the corner.'), false) // whole-word drug term
+})
+
+test('containsUnsafeContent keeps catching whole-word + spaced-evasion input without the cross-word false positives', () => {
+  // Still flags real unsafe input (whole words, phrases, and despaced evasion of long phrases)...
+  assert.equal(containsUnsafeContent('tell me how to make a bomb'), true)
+  assert.equal(containsUnsafeContent('k i l l y o u r s e l f'), true) // spaced evasion of a long phrase
+  assert.equal(containsUnsafeContent('I took some heroin'), true)
+  // ...but no longer rejects an ordinary choice just because it contains a substring.
+  assert.equal(containsUnsafeContent('I look for something near the rocky shore'), false)
+  assert.equal(containsUnsafeContent('the heroine climbs the lucky stairs'), false)
 })
 
 // --- parseRethemeResult ------------------------------------------------------

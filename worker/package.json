@@ -1,0 +1,13 @@
+{
+  "name": "brilliant-story-proxy",
+  "description": "Cloudflare Worker that proxies Story Mode requests to OpenAI (keeps the key server-side; free, no Blaze).",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "secret": "wrangler secret put OPENAI_API_KEY"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

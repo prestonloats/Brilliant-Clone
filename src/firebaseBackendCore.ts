@@ -5,6 +5,7 @@ import type {
   LessonProgress,
   SkillId,
   SkillMastery,
+  SkillPracticeState,
   StorySession,
   UserProfile,
 } from './domain'
@@ -54,6 +55,11 @@ export const firebaseProgressPath = (uid: string, lessonId: LessonId) =>
 export const firebaseMasteryPath = (uid: string, skillId: SkillId) =>
   `mastery/${assertSafeDocumentId(uid, 'uid')}/skills/${assertSafeDocumentId(skillId, 'skillId')}`
 
+// The per-user Story Mode practice store: one document per skill at practice/{uid}/skills/{skillId},
+// mirroring the mastery layout (small payload, read/written whole, transactional update).
+export const firebasePracticePath = (uid: string, skillId: SkillId) =>
+  `practice/${assertSafeDocumentId(uid, 'uid')}/skills/${assertSafeDocumentId(skillId, 'skillId')}`
+
 export const firebaseAttemptPath = (uid: string, attemptId: string) =>
   `attempts/${assertSafeDocumentId(uid, 'uid')}/events/${assertSafeDocumentId(attemptId, 'attemptId')}`
 
@@ -84,6 +90,14 @@ export const toFirestoreLessonProgress = (uid: string, progress: LessonProgress)
 
 export const toFirestoreSkillMastery = (uid: string, mastery: SkillMastery): SkillMastery => ({
   ...mastery,
+  userId: uid,
+})
+
+export const toFirestoreSkillPracticeState = (
+  uid: string,
+  practice: SkillPracticeState,
+): SkillPracticeState => ({
+  ...practice,
   userId: uid,
 })
 

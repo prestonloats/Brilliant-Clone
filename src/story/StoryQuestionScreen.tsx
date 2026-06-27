@@ -26,6 +26,9 @@ type StoryQuestionScreenProps = {
   busy: boolean
   error: string
   onResult: () => void
+  // Reports the graded result of EACH submit (correct/incorrect) for learning-science capture; the
+  // controller keeps only the first attempt per question (the retrieval signal).
+  onAttempt: (correct: boolean) => void
   onBack: () => void
   onForward: () => void
   onChapterBack: () => void
@@ -52,6 +55,7 @@ export function StoryQuestionScreen({
   busy,
   error,
   onResult,
+  onAttempt,
   onBack,
   onForward,
   onChapterBack,
@@ -129,10 +133,11 @@ export function StoryQuestionScreen({
             // Remount per served question so the reused step view resets its own input/feedback state.
             key={`${step.id}:${session.questionsSolvedTotal}`}
             step={step}
-            onComplete={() => {
-              // PURE REVIEW: Story Mode never writes LessonProgress, mastery, streaks, or attempts.
-              // The reused step view's per-submit callback is intentionally a no-op here — only the
-              // learner's "Continue" (onAdvance, fired after a correct answer) advances the story.
+            onComplete={(correct) => {
+              // Story Mode never writes LessonProgress or lesson mastery here. It DOES capture the
+              // retrieval signal: each graded submit is reported to the controller, which keeps only
+              // the FIRST attempt per question (spaced-repetition + mastery practice store).
+              onAttempt(correct)
             }}
             onAdvance={() => onResult()}
           />

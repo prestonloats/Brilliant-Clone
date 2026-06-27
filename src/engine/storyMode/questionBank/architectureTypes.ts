@@ -54,6 +54,10 @@ export type QuestionArchitecture = {
   // MUST equal `generate(rng).step.type` for every rng (the catalog/tests assert this holds).
   stepType: ArchitectureStepType
   slots: ParamSlot[]
+  // Skills that must be PRACTICE-MASTERED before this architecture is served in Story Mode (Phase 3d
+  // mastery learning), ON TOP of `requiredLessonId` completion. Absent = entry-tier (no mastery
+  // prerequisite), so a harder skill stays locked until its prerequisite is genuinely mastered.
+  masteryPrereqs?: SkillId[]
   // PURE + deterministic per `rng`, and NEVER throws: fills the slots and computes the answer key
   // in code. Two calls driven by equally-seeded rngs return deep-equal results (resume safety).
   generate(rng: Rng): GeneratedQuestion

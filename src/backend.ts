@@ -5,6 +5,7 @@ export type { Backend, SignUpInput } from './backend/types'
 export {
   isAttemptEvent,
   isSkillMastery,
+  isSkillPracticeState,
   legacyStorySessionId,
   normalizeLessonProgress,
   normalizeStoryLibrary,

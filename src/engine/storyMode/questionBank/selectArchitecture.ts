@@ -12,9 +12,11 @@
 // not bundled lesson steps (keyed `${lessonId}:${stepId}`). The algorithm mirrors
 // `selectNextQuestion` step-for-step so the two selectors behave consistently.
 
-import type { AttemptEvent, SkillMastery } from '../../../domain'
+import type { AttemptEvent, SkillMastery, SkillPracticeState } from '../../../domain'
 import { MASTERY_READY_THRESHOLD, type ProgressByLesson } from '../../types'
 import { hasCompletedLesson } from '../../progress'
+import { isSkillMastered } from '../../practice/mastery'
+import { isDue, overdueScore } from '../../practice/scheduler'
 import type { Rng } from '../randomizeQuestionNumbers'
 import type { QuestionArchitecture } from './architectureTypes'
 import { ARCHITECTURE_CATALOG } from './catalog'
@@ -36,6 +38,12 @@ export type SelectArchitectureInput = {
   // Attempt history: boost an architecture whose most recent attempt was wrong. Matched on the
   // architecture key (`arch:<id>`) recorded in `AttemptEvent.stepId`. Defaults to [].
   attempts?: AttemptEvent[]
+  // Per-skill practice state (Phase 3): drives spaced-repetition DUE-FIRST selection + an overdue
+  // boost, and (when present) SUPERSEDES the lesson `mastery` score for struggle/mastered weighting.
+  // Defaults to []; with none, selection behaves exactly as it did before practice existed.
+  practice?: SkillPracticeState[]
+  // Injectable clock for due/overdue computation; defaults to the current time. Deterministic in tests.
+  now?: string
   // Candidate pool; defaults to the full ARCHITECTURE_CATALOG. Injectable for tests.
   pool?: QuestionArchitecture[]
   // Injectable for deterministic tests; defaults to Math.random.
@@ -54,6 +62,10 @@ const MASTERED_MULTIPLIER = 0.75
 const RECENT_MISS_MULTIPLIER = 1.5
 const SAME_SKILL_MULTIPLIER = 0.6
 
+// Cap the spaced-repetition overdue boost so a long-overdue skill is strongly preferred but can
+// never starve the rest of the (already interleaved) pool entirely.
+const OVERDUE_BOOST_CAP = 3
+
 // The most recent attempt (by timestamp) recorded against this architecture's key, if any.
 const mostRecentAttempt = (
   attempts: AttemptEvent[],
@@ -71,23 +83,34 @@ const mostRecentAttempt = (
 const architectureWeight = (
   architecture: QuestionArchitecture,
   masteryBySkill: Map<SkillMastery['skillId'], SkillMastery>,
+  practiceBySkill: Map<SkillPracticeState['skillId'], SkillPracticeState>,
   attempts: AttemptEvent[],
   previousSkillId: string | undefined,
+  now: string,
 ): number => {
   let weight = 1
 
-  // Mastery struggle/mastered for this architecture's skill: weak skills surface more, mastered
-  // skills less. A skill with no recorded mastery yet stays neutral.
-  const score = masteryBySkill.get(architecture.skillId)?.score
-  if (score !== undefined) {
-    weight *= score < MASTERY_READY_THRESHOLD ? STRUGGLE_MULTIPLIER : MASTERED_MULTIPLIER
+  // Struggle/mastered weighting for this architecture's skill: weak skills surface more, mastered
+  // skills less. The Phase 3 practice proficiency (recency-weighted) SUPERSEDES the lesson mastery
+  // ratio when present; otherwise fall back to it. A skill with neither stays neutral.
+  const practiceState = practiceBySkill.get(architecture.skillId)
+  const proficiency = practiceState?.proficiency ?? masteryBySkill.get(architecture.skillId)?.score
+  if (proficiency !== undefined) {
+    weight *= proficiency < MASTERY_READY_THRESHOLD ? STRUGGLE_MULTIPLIER : MASTERED_MULTIPLIER
+  }
+
+  // Spaced repetition: the further past due a skill is, the more it is boosted (0 when not due or
+  // never practiced), capped so it never fully starves the rest of the interleaved pool.
+  if (practiceState) {
+    weight *= 1 + Math.min(overdueScore(practiceState, now), OVERDUE_BOOST_CAP)
   }
 
   // Resurface an architecture whose most recent attempt was wrong.
   const latestAttempt = mostRecentAttempt(attempts, architecture)
   if (latestAttempt && !latestAttempt.correct) weight *= RECENT_MISS_MULTIPLIER
 
-  // Lightly vary the skill away from the immediately previous served architecture.
+  // Soft backstop for skill variety. The hard interleaving filter normally removes the previous
+  // skill outright; this only matters when it had to be relaxed (one skill left in the pool).
   if (previousSkillId !== undefined && architecture.skillId === previousSkillId) {
     weight *= SAME_SKILL_MULTIPLIER
   }
@@ -131,6 +154,8 @@ export function selectNextArchitecture(input: SelectArchitectureInput): Question
   const servedKeys = input.servedKeys ?? []
   const mastery = input.mastery ?? []
   const attempts = input.attempts ?? []
+  const practice = input.practice ?? []
+  const now = input.now ?? new Date().toISOString()
   const rng = input.rng ?? Math.random
 
   // 1. Eligible pool: architectures whose required lesson is completed (catalog order preserved).
@@ -139,28 +164,56 @@ export function selectNextArchitecture(input: SelectArchitectureInput): Question
   )
   if (eligible.length === 0) return null
 
-  // 2. Anti-repeat window. Cap N at eligible.length - 1 so we never filter to empty; the on-screen
-  //    `excludeKey` is also avoided, with "never empty the pool" preserved by relaxing in stages.
-  const windowSize = Math.max(0, Math.min(eligible.length - 1, MAX_RECENT_WINDOW))
+  // 1b. MASTERY LEARNING (Phase 3d): a harder architecture unlocks only once its prerequisite skills
+  //     are genuinely PRACTICE-mastered (on top of lesson completion). Self-relaxing: if gating would
+  //     leave nothing (defensive — the entry tier has no prereqs), fall back to the lesson-eligible
+  //     pool so the loop never stalls.
+  const masteredSkills = new Set(practice.filter(isSkillMastered).map((state) => state.skillId))
+  const unlocked = eligible.filter((architecture) =>
+    (architecture.masteryPrereqs ?? []).every((skillId) => masteredSkills.has(skillId)),
+  )
+  const gatedEligible = unlocked.length > 0 ? unlocked : eligible
+
+  // 2. Anti-repeat window. Cap N at gatedEligible.length - 1 so we never filter to empty; the
+  //    on-screen `excludeKey` is also avoided, with "never empty the pool" preserved by relaxing.
+  const windowSize = Math.max(0, Math.min(gatedEligible.length - 1, MAX_RECENT_WINDOW))
   const recent = new Set(windowSize > 0 ? servedKeys.slice(-windowSize) : [])
   const isExcluded = (architecture: QuestionArchitecture): boolean =>
     excludeKey !== undefined && architectureKey(architecture.id) === excludeKey
-  let candidates = eligible.filter(
+  let candidates = gatedEligible.filter(
     (architecture) => !recent.has(architectureKey(architecture.id)) && !isExcluded(architecture),
   )
   // Relax recency first (still avoiding the on-screen question), then drop even that as a last
   // resort, so a tiny pool (e.g. one architecture) always yields something rather than null.
-  if (candidates.length === 0) candidates = eligible.filter((architecture) => !isExcluded(architecture))
-  if (candidates.length === 0) candidates = eligible
+  if (candidates.length === 0) candidates = gatedEligible.filter((architecture) => !isExcluded(architecture))
+  if (candidates.length === 0) candidates = gatedEligible
 
-  // 3. Weight for difficulty/recency/variety using existing mastery + attempt signals.
   const masteryBySkill = new Map(mastery.map((entry) => [entry.skillId, entry]))
+  const practiceBySkill = new Map(practice.map((entry) => [entry.skillId, entry]))
   const previousKey = servedKeys[servedKeys.length - 1]
   const previousSkillId = architectureForKey(pool, previousKey)?.skillId
-  const weights = candidates.map((architecture) =>
-    architectureWeight(architecture, masteryBySkill, attempts, previousSkillId),
-  )
 
-  // 4. Weighted random pick (deterministic given `rng`).
+  // 3. INTERLEAVING (Phase 3c): never serve the SAME skill as the immediately previous question when
+  //    a different skill is available, so a session MIXES problem types instead of blocking them.
+  //    Self-relaxing: when every candidate shares one skill (e.g. only one lesson unlocked), it is
+  //    a no-op rather than emptying the pool.
+  if (previousSkillId !== undefined) {
+    const differentSkill = candidates.filter((architecture) => architecture.skillId !== previousSkillId)
+    if (differentSkill.length > 0) candidates = differentSkill
+  }
+
+  // 4. SPACED REPETITION (Phase 3b): prefer skills that are DUE (or never practiced) over ones whose
+  //    spacing interval has not yet elapsed. Only narrows when at least one due candidate exists, so
+  //    the pool never empties; the overdue boost in `architectureWeight` then ranks the most-overdue.
+  const dueCandidates = candidates.filter((architecture) => {
+    const state = practiceBySkill.get(architecture.skillId)
+    return !state || isDue(state, now)
+  })
+  if (dueCandidates.length > 0) candidates = dueCandidates
+
+  // 5. Weight for difficulty/recency/variety/overdue, then pick deterministically given `rng`.
+  const weights = candidates.map((architecture) =>
+    architectureWeight(architecture, masteryBySkill, practiceBySkill, attempts, previousSkillId, now),
+  )
   return weightedPick(candidates, weights, rng)
 }

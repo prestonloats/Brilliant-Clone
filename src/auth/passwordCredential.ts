@@ -7,11 +7,23 @@
 /** Legacy default used to migrate accounts that predate per-user passwords. */
 export const DEFAULT_LEGACY_PASSWORD = '123456'
 
-/** A stored password as a salt plus the salted, key-stretched hash. Plaintext is never kept. */
-export type PasswordCredential = { hash: string; salt: string }
+/**
+ * A stored password as a salt plus the salted, key-stretched hash. Plaintext is never kept.
+ * `iterations` records the stretching cost used so the cost can be raised over time while older
+ * credentials keep verifying (a missing value means the original pre-versioning cost).
+ */
+export type PasswordCredential = { hash: string; salt: string; iterations?: number }
 
-// Number of times SHA-256 is applied for mild key stretching. >= 1000 per the contract.
-const HASH_ITERATIONS = 1000
+// Number of times SHA-256 is applied for key stretching. Raised 20x from the original 1000 to slow
+// down offline brute-forcing if the localStorage blob is ever exfiltrated, while keeping sign-in
+// responsive: this is a SYNCHRONOUS main-thread loop, so a much larger count would visibly freeze the
+// UI on a low-end device during a login tap. (The real credential-security boundary is Firebase mode,
+// which hashes server-side; local mode is an on-device demo.)
+const HASH_ITERATIONS = 20000
+
+// The original cost, assumed for any stored credential written before `iterations` was recorded, so
+// those hashes still verify. Such credentials are transparently upgraded on next sign-in (needsRehash).
+const LEGACY_HASH_ITERATIONS = 1000
 
 // Salt size in bytes. 16 bytes => 32 lowercase hex chars (>= the 16-hex-char minimum).
 const SALT_BYTES = 16
@@ -168,16 +180,19 @@ const generateSalt = (): string => {
 }
 
 /**
- * Hash a password with a salt and mild key stretching. The result is deterministic for a given
- * (password, salt); when `salt` is omitted a fresh random salt of >= 16 hex chars is generated.
+ * Hash a password with a salt and key stretching. The result is deterministic for a given
+ * (password, salt, iterations); when `salt` is omitted a fresh random salt of >= 16 hex chars is
+ * generated, and when `iterations` is omitted the current cost (HASH_ITERATIONS) is used. The chosen
+ * iteration count is returned in the credential so verification can reproduce it exactly.
  */
-export function hashPassword(password: string, salt?: string): PasswordCredential {
+export function hashPassword(password: string, salt?: string, iterations: number = HASH_ITERATIONS): PasswordCredential {
   const resolvedSalt = salt ?? generateSalt()
+  const rounds = Number.isInteger(iterations) && iterations > 0 ? iterations : HASH_ITERATIONS
   let hash = sha256Hex(resolvedSalt + password)
-  for (let i = 1; i < HASH_ITERATIONS; i += 1) {
+  for (let i = 1; i < rounds; i += 1) {
     hash = sha256Hex(resolvedSalt + hash)
   }
-  return { hash, salt: resolvedSalt }
+  return { hash, salt: resolvedSalt, iterations: rounds }
 }
 
 // Length-safe constant-time string comparison: accumulates differences across the longer of the
@@ -194,17 +209,35 @@ const constantTimeEqual = (a: string, b: string): boolean => {
 }
 
 /**
- * Verify a password against a stored credential. Recomputes the hash with the credential's salt
- * and compares in constant time. Never throws; returns false for any malformed input.
+ * Verify a password against a stored credential. Recomputes the hash with the credential's salt and
+ * its own recorded iteration count (falling back to the legacy cost when absent) and compares in
+ * constant time. Never throws; returns false for any malformed input.
  */
 export function verifyPassword(password: string, credential: PasswordCredential): boolean {
   try {
     if (!credential || typeof credential.hash !== 'string' || typeof credential.salt !== 'string') {
       return false
     }
-    const recomputed = hashPassword(password, credential.salt).hash
+    const iterations =
+      typeof credential.iterations === 'number' && credential.iterations > 0
+        ? credential.iterations
+        : LEGACY_HASH_ITERATIONS
+    const recomputed = hashPassword(password, credential.salt, iterations).hash
     return constantTimeEqual(recomputed, credential.hash)
   } catch {
     return false
   }
+}
+
+/**
+ * True when a stored credential was hashed with fewer rounds than the current cost (including legacy
+ * credentials that predate the `iterations` field), so the caller can transparently re-hash it after
+ * the next successful sign-in.
+ */
+export function needsRehash(credential: PasswordCredential): boolean {
+  const iterations =
+    typeof credential.iterations === 'number' && credential.iterations > 0
+      ? credential.iterations
+      : LEGACY_HASH_ITERATIONS
+  return iterations < HASH_ITERATIONS
 }

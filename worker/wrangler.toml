@@ -1,0 +1,24 @@
+# Cloudflare Worker config for the Story Mode OpenAI proxy.
+#
+# Deploy (from this worker/ folder):
+#   npm install
+#   npx wrangler login
+#   npx wrangler secret put OPENAI_API_KEY   # paste your OpenAI key (stays server-side)
+#   npx wrangler deploy
+#
+# After deploy, your proxy URL is:
+#   https://brilliant-story-proxy.<your-subdomain>.workers.dev
+# Put that URL in .env.local as VITE_STORY_AI_PROXY_URL (see the chat instructions).
+
+name = "brilliant-story-proxy"
+main = "worker.js"
+compatibility_date = "2026-06-26"
+workers_dev = true
+
+# Per-IP rate limit for the proxy (abuse / denial-of-wallet control). The Worker calls
+# env.STORY_RATE_LIMITER.limit({ key: <client IP> }); when the limit is exceeded it returns HTTP 429.
+# namespace_id is any positive integer unique within your Cloudflare account. period must be 10 or 60.
+[[ratelimits]]
+name = "STORY_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }

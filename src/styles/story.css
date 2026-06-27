@@ -1469,3 +1469,126 @@
     animation-duration: 2s;
   }
 }
+
+/* --- Practice insights (Phase 3 learning-science panel) -------------------- */
+/* A compact mastery + retention summary shown at the checkpoint. Reuses the .card
+   primitive + shared design tokens; only the meters/badges are bespoke. */
+.practice-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-inline: auto;
+  max-width: 760px;
+  width: 100%;
+}
+
+.practice-insights-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.practice-insights-title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--text-h);
+}
+
+.practice-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.practice-badge {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--text-h);
+}
+
+.practice-badge.is-due {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.practice-meter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.practice-meter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.practice-meter-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.practice-meter-skill {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.practice-meter-level {
+  font-weight: 600;
+}
+
+.practice-meter-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.practice-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 240ms ease;
+}
+
+.practice-meter-row[data-level='learning'] .practice-meter-level {
+  color: #b45309;
+}
+.practice-meter-row[data-level='learning'] .practice-meter-fill {
+  background: #f59e0b;
+}
+.practice-meter-row[data-level='practiced'] .practice-meter-level {
+  color: var(--accent-strong);
+}
+.practice-meter-row[data-level='practiced'] .practice-meter-fill {
+  background: var(--accent);
+}
+.practice-meter-row[data-level='mastered'] .practice-meter-level {
+  color: #15803d;
+}
+.practice-meter-row[data-level='mastered'] .practice-meter-fill {
+  background: #16a34a;
+}
+
+.practice-retention {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .practice-meter-fill {
+    transition: none;
+  }
+}

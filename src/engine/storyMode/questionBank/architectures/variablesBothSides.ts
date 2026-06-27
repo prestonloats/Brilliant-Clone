@@ -21,6 +21,8 @@ export const variablesBothSidesArchitecture: QuestionArchitecture = {
   requiredLessonId: 'like-terms-variables-both-sides',
   skillId: 'variables-on-both-sides',
   stepType: 'input',
+  // Mastery learning: variables-on-both-sides unlocks only once two-step is genuinely mastered.
+  masteryPrereqs: ['two-step-equations'],
   slots: [
     { name: 'lx', min: 4, max: 12, note: 'left x-coefficient (kept above rx)' },
     { name: 'rx', min: 2, max: 10, note: 'right x-coefficient, drawn from [2, lx - 2]' },

@@ -10,10 +10,13 @@
 // while the learner answers, resumes by re-hydrating the persisted question, and compacts the
 // narrative once it grows past a threshold.
 //
-// PURE-REVIEW INVARIANT (critical): Story Mode NEVER writes LessonProgress, mastery, streaks, or
-// attempts. It only ever calls `backend.story.saveStorySession`. It reads progress/mastery/
-// attempts to drive selection, but writes nothing but its own session. Results from the reused
-// step views are routed here (`submitQuestionResult`), never to `LearningApp.completeStep`.
+// PRACTICE INVARIANT (Phase 3, narrowed): Story Mode NEVER writes LessonProgress or the lesson
+// `mastery` ratio, so lesson grading/unlocks are unaffected. It DOES now write a DEDICATED,
+// separate learning-science store — per-skill `practice` state (spaced repetition + recency-weighted
+// mastery estimate) and `source:'story'` attempt events — plus its own session via
+// `saveStorySession`. Results from the reused step views are routed here: `recordPracticeAttempt`
+// captures the FIRST-try retrieval signal, and `submitQuestionResult` advances the loop on a correct
+// answer — never to `LearningApp.completeStep`.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
@@ -25,15 +28,20 @@ import type {
   ThemedQuestion,
   UserProfile,
 } from '../domain'
-import type { AttemptEvent, SkillMastery } from '../domain'
+import type { AttemptEvent, SkillMastery, SkillPracticeState } from '../domain'
 import type { Backend } from '../backend'
+import { createAttemptEvent } from '../backend'
 import {
+  computeRetention,
   createVariantSeed,
   generateForArchitecture,
   isThemedStepCoherent,
   selectNextArchitecture,
+  skillForArchitecture,
+  skillForStepId,
+  summarizePractice,
 } from '../engine'
-import type { ProgressByLesson } from '../engine'
+import type { PracticeSummary, ProgressByLesson, RetentionReport } from '../engine'
 import { applyRetheme } from './applyRetheme'
 import { questionKey, rehydrateQuestion, toThemedQuestion } from './rehydrateQuestion'
 import { createStoryAI, type StoryAiEnv } from './createStoryAI'
@@ -96,7 +104,14 @@ type UseStorySessionInput = {
   progressByLesson: ProgressByLesson
   mastery: SkillMastery[]
   attempts: AttemptEvent[]
+  // Per-skill Story Mode practice state (Phase 3): drives spaced-repetition due-first selection,
+  // interleaving, the overdue boost, and (later) the mastery meters. Read-only here.
+  practice: SkillPracticeState[]
   navigate: (view: StoryView) => void
+  // Called after Story Mode writes a practice signal (a retrieval attempt), so the app can re-read
+  // the learner data (attempts/practice) that drives the next question's selection. Optional so the
+  // hook stays usable without it (e.g. in isolation/tests).
+  onLearnerDataChanged?: () => void | Promise<void>
 }
 
 export type UseStorySession = {
@@ -106,6 +121,10 @@ export type UseStorySession = {
   savedCount: number
   currentStep: LessonStep | null
   currentThemed: boolean
+  // Phase 3 "show the effect": per-skill mastery meters + headline counts, and the retention
+  // ("did it stick?") report. Derived read-only from the practice store + story attempt log.
+  practiceSummary: PracticeSummary
+  retention: RetentionReport
   // True while the learner is reviewing a PAST (already-answered) question read-only.
   reviewing: boolean
   // True while Back has landed on a chapter's STORY TEXT (read-only narrative review).
@@ -145,6 +164,9 @@ export type UseStorySession = {
   switchToStory: (sessionId: string) => Promise<void>
   deleteStory: (sessionId: string) => Promise<void>
   beginAdventure: (theme: StoryTheme) => Promise<void>
+  // Records the FIRST-try retrieval signal for the live question (correct/incorrect). Idempotent per
+  // question, no-op while reviewing — see the controller for details.
+  recordPracticeAttempt: (correct: boolean) => void
   submitQuestionResult: () => Promise<void>
   submitCheckpointChoice: (text: string) => Promise<void>
   continueFromOutcome: () => Promise<void>
@@ -324,7 +346,9 @@ export function useStorySession({
   progressByLesson,
   mastery,
   attempts,
+  practice,
   navigate,
+  onLearnerDataChanged,
 }: UseStorySessionInput): UseStorySession {
   const [session, setSession] = useState<StorySession | null>(null)
   const [library, setLibrary] = useState<StorySession[]>([])
@@ -349,6 +373,17 @@ export function useStorySession({
   const aiPromiseRef = useRef<Promise<StoryAI | null> | null | undefined>(undefined)
   // The next themed question, pre-fetched while the learner answers the current one.
   const prefetchRef = useRef<Promise<ThemedQuestion | null> | null>(null)
+  // Practice capture (Phase 3): when the live question became visible (for answer latency), the
+  // signature of the question whose FIRST attempt was already recorded (so a multi-try question
+  // records exactly one retrieval), and an always-current ref to the learner-data refresh callback.
+  const questionShownAtRef = useRef(0)
+  const lastRecordedQuestionRef = useRef<string | null>(null)
+  // Keep the latest refresh callback in a ref (updated in an effect, never during render) so the
+  // stable `recordPracticeAttempt` can call it without taking it as a dependency.
+  const onLearnerDataChangedRef = useRef(onLearnerDataChanged)
+  useEffect(() => {
+    onLearnerDataChangedRef.current = onLearnerDataChanged
+  }, [onLearnerDataChanged])
 
   const providerConfigured = useMemo(() => isProviderConfigured(STORY_AI_ENV), [])
 
@@ -356,6 +391,46 @@ export function useStorySession({
     sessionRef.current = next
     setSession(next)
   }, [])
+
+  // Stamp when the live question became visible so `recordPracticeAttempt` can derive answer latency.
+  const markQuestionShown = useCallback(() => {
+    questionShownAtRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  }, [])
+
+  // Record the FIRST graded submit of the LIVE question as one retrieval (Phase 3). First-try
+  // correctness is the retrieval-practice signal, so only the first attempt per question is captured
+  // (keyed by session + question + solve count); later retries of the SAME question are ignored, and
+  // reviewing a past question never records. Writes the dedicated `practice` state (spaced repetition
+  // + mastery estimate) and a `source:'story'` attempt event, then asks the app to refresh the
+  // learner data that feeds the next selection. Never throws into the play loop.
+  const recordPracticeAttempt = useCallback(
+    (correct: boolean) => {
+      const current = sessionRef.current
+      if (!user || !current || !current.currentQuestion || !isAtLiveEdge(current)) return
+      const question = current.currentQuestion
+      const skillId = question.architectureId ? skillForArchitecture(question.architectureId) : undefined
+      if (!skillId) return
+      const signature = `${current.id}:${questionKey(question)}:${current.questionsSolvedTotal}`
+      if (lastRecordedQuestionRef.current === signature) return
+      lastRecordedQuestionRef.current = signature
+      const clock = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      const msToAnswer = questionShownAtRef.current > 0 ? Math.max(0, Math.round(clock - questionShownAtRef.current)) : 0
+      void (async () => {
+        try {
+          await Promise.all([
+            backend.practice.updatePractice(user.id, skillId, { firstTryCorrect: correct }),
+            backend.attempts.recordAttempt(
+              createAttemptEvent(user.id, question.sourceLessonId, questionKey(question), correct, 1, msToAnswer, 'story'),
+            ),
+          ])
+          await onLearnerDataChangedRef.current?.()
+        } catch {
+          // Non-fatal: capturing the practice signal must never break the play loop.
+        }
+      })()
+    },
+    [user, backend],
+  )
 
   // Update the transient chapter-text review flag in both the ref (for callbacks) and state (render).
   const setReviewChapterText = useCallback((value: boolean) => {
@@ -445,6 +520,9 @@ export function useStorySession({
         servedKeys: current.servedStepIds,
         mastery,
         attempts,
+        // Phase 3: spaced-repetition due-first + interleaving + overdue/proficiency weighting.
+        practice,
+        now: nowIso(),
         // Exclude the on-screen question (not yet in servedStepIds, which only grows on solve) so a
         // prefetch can never re-pick the question currently being answered (the duplicate-question bug).
         ...(excludeKey ? { excludeKey } : {}),
@@ -488,7 +566,7 @@ export function useStorySession({
       const step = themed ? applied.step : canonicalStep
       return toThemedQuestion(arch, step, themed, paramSeed)
     },
-    [progressByLesson, mastery, attempts, ensureAi],
+    [progressByLesson, mastery, attempts, practice, ensureAi],
   )
 
   const startPrefetch = useCallback(
@@ -528,6 +606,7 @@ export function useStorySession({
       commitSession(atEdge)
       if (atEdge.currentQuestion && rehydrateQuestion(atEdge.currentQuestion)) {
         navigate('story-question')
+        markQuestionShown()
         // Only prefetch the next question if it stays in this chapter (not across a checkpoint).
         startPrefetchWithinChapter(atEdge)
       } else if (isAwaitingOutcomeAck(atEdge)) {
@@ -546,7 +625,7 @@ export function useStorySession({
         navigate('story-interests')
       }
     },
-    [commitSession, navigate, startPrefetch, startPrefetchWithinChapter, resetReview],
+    [commitSession, navigate, startPrefetch, startPrefetchWithinChapter, resetReview, markQuestionShown],
   )
 
   const takeNextQuestion = useCallback(
@@ -894,6 +973,7 @@ export function useStorySession({
       await persist(next)
       commitSession(next)
       navigate('story-question')
+      markQuestionShown()
       startPrefetchWithinChapter(next)
     } catch (error) {
       setStoryError(messageFrom(error, 'Could not continue the story. Please try again.'))
@@ -901,7 +981,7 @@ export function useStorySession({
       busyRef.current = false
       setStoryBusy(false)
     }
-  }, [user, ensureAi, persist, navigate, commitSession, takeNextQuestion, startPrefetchWithinChapter, maybeCompact])
+  }, [user, ensureAi, persist, navigate, commitSession, takeNextQuestion, startPrefetchWithinChapter, maybeCompact, markQuestionShown])
 
   // The learner typed what they do next at a checkpoint: sanitize/moderate, then generate the
   // OUTCOME of that action (the continuation describing its consequences). Rejected input
@@ -998,6 +1078,7 @@ export function useStorySession({
       await persist(next)
       commitSession(next)
       navigate('story-question')
+      markQuestionShown()
       startPrefetchWithinChapter(next)
     } catch (error) {
       setStoryError(messageFrom(error, 'Could not continue the story. Please try again.'))
@@ -1005,7 +1086,7 @@ export function useStorySession({
       busyRef.current = false
       setStoryBusy(false)
     }
-  }, [user, persist, navigate, commitSession, takeNextQuestion, startPrefetchWithinChapter])
+  }, [user, persist, navigate, commitSession, takeNextQuestion, startPrefetchWithinChapter, markQuestionShown])
 
   const endStory = useCallback(async () => {
     const current = sessionRef.current
@@ -1075,6 +1156,11 @@ export function useStorySession({
     return question ? rehydrateQuestion(question) : null
   }, [session])
 
+  // Phase 3 insights, derived from the learner-data props (refreshed after each practice attempt):
+  // the mastery-meter summary and the retention ("did it stick?") report over story attempts.
+  const practiceSummary = useMemo(() => summarizePractice(practice, nowIso()), [practice])
+  const retention = useMemo(() => computeRetention(attempts, skillForStepId), [attempts])
+
   // The current interleaved review position (question pointer + transient chapter-text flag), and
   // the chapter beat to render while Back has surfaced a chapter's story text (else null).
   const reviewPos: StoryReviewPos = { index: session?.historyIndex ?? 0, chapterText: showingChapterText }
@@ -1093,6 +1179,8 @@ export function useStorySession({
     savedCount: library.length,
     currentStep: rehydrated?.step ?? null,
     currentThemed: rehydrated?.themed ?? false,
+    practiceSummary,
+    retention,
     reviewing,
     showingChapterText: chapterTextBeat !== null,
     chapterText: chapterTextBeat,
@@ -1125,6 +1213,7 @@ export function useStorySession({
     switchToStory,
     deleteStory,
     beginAdventure,
+    recordPracticeAttempt,
     submitQuestionResult,
     submitCheckpointChoice,
     continueFromOutcome,

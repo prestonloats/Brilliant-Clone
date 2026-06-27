@@ -44,6 +44,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /practice/{uid}/skills/{skillId} {
+      allow read: if owns(uid);
+      // Story Mode learning-science practice state (spaced-repetition + mastery estimate). Same
+      // owner + verified-email write gate as mastery, and the stored skillId must match the path
+      // so a write cannot mislabel another skill's schedule.
+      allow create, update: if writesUserId(uid) && verifiedEmail()
+        && request.resource.data.skillId == skillId;
+      allow delete: if false;
+    }
+
     match /attempts/{uid}/events/{eventId} {
       allow read: if owns(uid);
       allow create: if writesUserId(uid) && verifiedEmail() && request.resource.data.id == eventId;

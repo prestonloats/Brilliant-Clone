@@ -1,6 +1,6 @@
 // Backend provider factory (`createBackend`, which refuses to fall back to local) and attempt-event builder.
 
-import type { AttemptEvent, LessonId } from '../domain'
+import type { AttemptEvent, AttemptSource, LessonId } from '../domain'
 import type { Backend, BackendProvider, CreateBackendOptions } from './types'
 import { createId, LocalBackend } from './LocalBackend'
 
@@ -23,6 +23,7 @@ export const createAttemptEvent = (
   correct: boolean,
   attemptCount: number,
   msToAnswer: number,
+  source?: AttemptSource,
 ): AttemptEvent => ({
   id: createId('attempt'),
   userId,
@@ -32,4 +33,7 @@ export const createAttemptEvent = (
   attemptCount,
   msToAnswer,
   at: new Date().toISOString(),
+  // Tag the surface only when provided; lesson play omits it (treated as 'lesson' downstream) so
+  // existing attempt payloads/shape are unchanged.
+  ...(source ? { source } : {}),
 })

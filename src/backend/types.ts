@@ -4,8 +4,10 @@ import type {
   AttemptEvent,
   LessonId,
   LessonProgress,
+  PracticeOutcome,
   SkillId,
   SkillMastery,
+  SkillPracticeState,
   StorySession,
   UserProfile,
 } from '../domain'
@@ -15,6 +17,10 @@ export type LocalDatabase = {
   progress: Record<string, LessonProgress>
   mastery: Record<string, SkillMastery>
   attempts: AttemptEvent[]
+  // Per-user, per-skill Story Mode practice state (Phase 3), keyed `${userId}:${skillId}`. The
+  // dedicated learning-science store (spaced-repetition schedule + recency-weighted mastery) that
+  // is kept separate from the lesson `mastery` map. Absent in legacy data -> defaults to {} on read.
+  practice: Record<string, SkillPracticeState>
   // Story Mode is now a LIBRARY: many saved sessions per user, keyed by `session.id` (schema
   // v2), plus a per-user active-session pointer. Legacy single-session data (keyed by userId
   // with no `id`) is migrated into this shape on read by `normalizeDatabase`.
@@ -22,7 +28,12 @@ export type LocalDatabase = {
   storyActive: Record<string, string> // userId -> active sessionId
 }
 
-export type LocalUser = UserProfile & { passwordHash?: string; passwordSalt?: string }
+export type LocalUser = UserProfile & {
+  passwordHash?: string
+  passwordSalt?: string
+  // Key-stretching cost stored with the hash so it can be raised over time; absent on legacy records.
+  passwordIterations?: number
+}
 
 export type SignUpInput = {
   email: string
@@ -53,6 +64,14 @@ export type MasteryRepository = {
   updateSkillMastery(userId: string, skillId: SkillId, correct: boolean): MaybePromise<SkillMastery>
 }
 
+// The Story Mode learning-science practice store (Phase 3): read the whole per-user set for
+// selection/insights, and advance ONE skill's state by a single practiced-question outcome. The
+// update math lives in the pure `applyPracticeOutcome` so both backends stay in lockstep.
+export type PracticeRepository = {
+  getUserPractice(userId: string): MaybePromise<SkillPracticeState[]>
+  updatePractice(userId: string, skillId: SkillId, outcome: PracticeOutcome): MaybePromise<SkillPracticeState>
+}
+
 export type AttemptRepository = {
   recordAttempt(event: AttemptEvent): MaybePromise<void>
   getAttempts(userId: string): MaybePromise<AttemptEvent[]>
@@ -78,6 +97,7 @@ export type Backend = {
   progress: ProgressRepository
   mastery: MasteryRepository
   attempts: AttemptRepository
+  practice: PracticeRepository
   story: StoryRepository
 }
 
@@ -99,6 +119,11 @@ export type LocalProgressRepository = {
 export type LocalMasteryRepository = {
   getUserMastery(userId: string): SkillMastery[]
   updateSkillMastery(userId: string, skillId: SkillId, correct: boolean): SkillMastery
+}
+
+export type LocalPracticeRepository = {
+  getUserPractice(userId: string): SkillPracticeState[]
+  updatePractice(userId: string, skillId: SkillId, outcome: PracticeOutcome): SkillPracticeState
 }
 
 export type LocalAttemptRepository = {

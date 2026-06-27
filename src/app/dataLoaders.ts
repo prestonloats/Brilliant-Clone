@@ -3,10 +3,11 @@ import { algebraCourse, lessons, type LessonId, type UserProfile } from '../doma
 import { createInitialProgress, getRecommendedPathLessonId, type ProgressByLesson } from '../engine'
 
 export async function getInitialLessonSession(backend: Backend, user: UserProfile) {
-  const [progressByLesson, mastery, attempts] = await Promise.all([
+  const [progressByLesson, mastery, attempts, practice] = await Promise.all([
     getProgressByLesson(backend, user.id),
     backend.mastery.getUserMastery(user.id),
     backend.attempts.getAttempts(user.id),
+    backend.practice.getUserPractice(user.id),
   ])
   const activeLessonId = getRecommendedPathLessonId(algebraCourse, lessons, progressByLesson, algebraCourse.lessonOrder[0])
   // Only surface progress that was actually saved. A brand-new learner sees "Start" with
@@ -20,6 +21,7 @@ export async function getInitialLessonSession(backend: Backend, user: UserProfil
     progressByLesson,
     mastery,
     attempts,
+    practice,
   }
 }
 
