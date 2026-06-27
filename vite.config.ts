@@ -29,13 +29,32 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          // Split the rarely-changing third-party runtime (React, etc.) into its own
-          // chunk so returning visitors can reuse it from cache across app deploys
-          // instead of re-downloading the whole bundle on every release.
+          // Chunking strategy (PERF): keep the first load small. A blanket
+          // `node_modules -> 'vendor'` rule swept the heavy, DYNAMICALLY-imported SDKs
+          // (Firebase ~566kB, plus the OpenAI and Google GenAI Story-Mode SDKs) into one
+          // eager chunk that index.html modulepreloads, so the default offline/local mode
+          // downloaded all of them up front even though nothing imports them until a
+          // backend/AI provider is actually used. Instead we:
+          //   - group the EAGER, rarely-changing runtime (React) into its own stable chunk
+          //     so returning visitors reuse it from cache across deploys;
+          //   - isolate KaTeX (pulled in eagerly by MathText for lesson rendering) so its
+          //     large render/font code is a separately-cacheable chunk, not vendor bloat;
+          //   - give each heavy, lazy-only SDK its OWN chunk so it stays a LAZY download —
+          //     fetched only when that provider/path runs, never on first load.
+          // Everything else returns undefined so the bundler places it by real reachability:
+          // eager deps fold into the entry/shared chunks, while deps used ONLY by the lazy
+          // SDKs ride along in their lazy chunks. We deliberately avoid a `vendor` catch-all,
+          // which would force those lazy-only transitive deps back onto the first load.
           manualChunks(id) {
-            if (id.includes('node_modules')) {
-              return 'vendor'
+            if (!id.includes('node_modules')) return
+            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) {
+              return 'react'
             }
+            if (id.includes('/katex/')) return 'katex'
+            if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase'
+            if (id.includes('/openai/')) return 'openai'
+            if (id.includes('/@google/genai/')) return 'genai'
+            return undefined
           },
         },
       },
