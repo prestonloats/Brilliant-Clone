@@ -5,7 +5,7 @@
 // weighs `total` and whose right pan holds a known weight plus a mystery `m`; the learner finds `m`.
 // The mystery weight is computed here in code (total - known) and is the answer key.
 
-import { randInt } from '../architectureTypes'
+import { numericAccept, randInt } from '../architectureTypes'
 import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
 import type { LessonStep } from '../../../../domain'
 import type { Rng } from '../../randomizeQuestionNumbers'
@@ -32,7 +32,7 @@ export const balanceEqualityArchitecture: QuestionArchitecture = {
       type: 'input',
       prompt: `A balance scale is level. The left pan weighs ${total}. The right pan holds a ${known} weight plus a mystery weight m. What is m?`,
       equation,
-      accept: Array.from(new Set([String(mystery), `m=${mystery}`, `m = ${mystery}`])),
+      accept: numericAccept(mystery, 'm'),
       feedback: {
         correct: `Correct. Both pans weigh the same, so m = ${total} - ${known} = ${mystery}.`,
         incorrect: 'Both pans must weigh the same. Subtract the known weight from the total to find m.',

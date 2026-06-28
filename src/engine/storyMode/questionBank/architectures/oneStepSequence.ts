@@ -6,19 +6,12 @@
 // graded `correctOrder` (plus the identical `answer`) is the [undo move, solution] pair. The
 // matching `checkSequenceStep` accepts the exact ordered tile ids.
 
-import { pick, randInt } from '../architectureTypes'
+import { nonzeroInt, pick, randInt } from '../architectureTypes'
 import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
 import type { LessonStep } from '../../../../domain'
 import type { Rng } from '../../randomizeQuestionNumbers'
 
 type SequenceStep = Extract<LessonStep, { type: 'sequence' }>
-
-// Inclusive integer in [min, max] excluding 0 (assumes min < 0 < max), drawing the rng once.
-const nonzeroInt = (rng: Rng, min: number, max: number): number => {
-  const negatives = -min
-  const index = randInt(rng, 0, negatives + max - 1)
-  return index < negatives ? min + index : index - negatives + 1
-}
 
 export const oneStepSequenceArchitecture: QuestionArchitecture = {
   id: 'one-step-sequence',

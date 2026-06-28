@@ -4,22 +4,12 @@
 // value `y = m·x0 + b` is computed here in code and is the answer key. The matching
 // `checkInputStep` accepts the bare number; `y =` styles are added for learner convenience.
 
-import { randInt } from '../architectureTypes'
+import { nonzeroInt, numericAccept, randInt } from '../architectureTypes'
 import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
 import type { LessonStep } from '../../../../domain'
 import type { Rng } from '../../randomizeQuestionNumbers'
 
 type InputStep = Extract<LessonStep, { type: 'input' }>
-
-// Inclusive integer in [min, max] excluding 0 (assumes min < 0 < max), drawing the rng once.
-const nonzeroInt = (rng: Rng, min: number, max: number): number => {
-  const negatives = -min
-  const index = randInt(rng, 0, negatives + max - 1)
-  return index < negatives ? min + index : index - negatives + 1
-}
-
-const numericAccept = (value: number): string[] =>
-  Array.from(new Set([String(value), `y=${value}`, `y = ${value}`]))
 
 // Renders `y = mx + b` in the same plain notation the bundled graphing lesson uses (coefficients
 // of +/-1 collapse to `x`/`-x`, and a zero intercept is dropped).
@@ -54,7 +44,7 @@ export const lineValueArchitecture: QuestionArchitecture = {
       type: 'input',
       prompt: `For the line ${line}, what is y when x = ${x0}?`,
       equation: line,
-      accept: numericAccept(y),
+      accept: numericAccept(y, 'y'),
       feedback: {
         correct: `Correct. When x = ${x0}, y = ${y}.`,
         incorrect: 'Substitute the x-value into y = mx + b and simplify.',

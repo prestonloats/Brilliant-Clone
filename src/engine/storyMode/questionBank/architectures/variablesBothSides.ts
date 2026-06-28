@@ -6,15 +6,12 @@
 // so the dependent range `rx ∈ [2, lx - 2]` is always non-empty and the coefficient gap stays >= 2.
 // The matching `checkInputStep` accepts the bare number.
 
-import { randInt } from '../architectureTypes'
+import { numericAccept, randInt } from '../architectureTypes'
 import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
 import type { LessonStep } from '../../../../domain'
 import type { Rng } from '../../randomizeQuestionNumbers'
 
 type InputStep = Extract<LessonStep, { type: 'input' }>
-
-const numericAccept = (value: number): string[] =>
-  Array.from(new Set([String(value), `x=${value}`, `x = ${value}`]))
 
 export const variablesBothSidesArchitecture: QuestionArchitecture = {
   id: 'variables-both-sides',

@@ -65,7 +65,7 @@ export type QuestionArchitecture = {
 
 // --- Pure rng helpers for architecture authors ----------------------------------------------
 //
-// `Rng` is a 0..1 source (see `mulberry32`); both helpers draw EXACTLY ONCE, so an author can
+// `Rng` is a 0..1 source (see `mulberry32`); these helpers draw EXACTLY ONCE, so an author can
 // reason precisely about seed consumption. `randInt` mirrors the private one in
 // `randomizeQuestionNumbers.ts`, extended with an optional `step` grid.
 
@@ -85,4 +85,19 @@ export function randInt(rng: Rng, min: number, max: number, step?: number): numb
 // Uniformly pick one element of `items`, drawing once. Callers pass a non-empty list.
 export function pick<T>(rng: Rng, items: readonly T[]): T {
   return items[Math.floor(rng() * items.length)]
+}
+
+// Inclusive integer in [min, max] EXCLUDING 0 (assumes min < 0 < max), drawing the rng once so
+// seed consumption stays predictable for resume. Shared by the linear / line-value architectures.
+export function nonzeroInt(rng: Rng, min: number, max: number): number {
+  const negatives = -min
+  const index = randInt(rng, 0, negatives + max - 1)
+  return index < negatives ? min + index : index - negatives + 1
+}
+
+// Typed forms a learner might enter for a numeric answer: the bare number (the guaranteed match)
+// plus the `<var> =` styles the bundled lessons author. `checkInputStep` only strips a leading
+// `<var>=` prefix, so the bare value is the canonical key.
+export function numericAccept(value: number, variable = 'x'): string[] {
+  return Array.from(new Set([String(value), `${variable}=${value}`, `${variable} = ${value}`]))
 }

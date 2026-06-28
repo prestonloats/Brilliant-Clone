@@ -6,25 +6,12 @@
 // `randomizeQuestionNumbers`. The matching `checkInputStep` accepts the bare number (it strips an
 // `x=` prefix and compares numerically with a small tolerance), so the bare value is the key.
 
-import { pick, randInt } from '../architectureTypes'
+import { nonzeroInt, numericAccept, pick, randInt } from '../architectureTypes'
 import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
 import type { LessonStep } from '../../../../domain'
 import type { Rng } from '../../randomizeQuestionNumbers'
 
 type InputStep = Extract<LessonStep, { type: 'input' }>
-
-// Inclusive integer in [min, max] excluding 0 (assumes min < 0 < max), drawing the rng once so
-// seed consumption stays predictable for resume.
-const nonzeroInt = (rng: Rng, min: number, max: number): number => {
-  const negatives = -min
-  const index = randInt(rng, 0, negatives + max - 1)
-  return index < negatives ? min + index : index - negatives + 1
-}
-
-// Typed forms a learner might enter: the bare number (the guaranteed match) plus the `x =`
-// styles the bundled lessons author. `checkInputStep` only strips a leading `x=` prefix.
-const numericAccept = (value: number): string[] =>
-  Array.from(new Set([String(value), `x=${value}`, `x = ${value}`]))
 
 // Builds the displayed equation and its code-computed solution for the chosen operation. For
 // division the drawn `s` is the displayed quotient and the solution is `a · s`, which keeps the

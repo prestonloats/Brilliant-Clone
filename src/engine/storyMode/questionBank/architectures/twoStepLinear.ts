@@ -5,15 +5,12 @@
 // computed here in code. The matching `checkInputStep` accepts the bare number (`x=`-prefixed
 // forms normalize to it).
 
-import { pick, randInt } from '../architectureTypes'
+import { numericAccept, pick, randInt } from '../architectureTypes'
 import type { GeneratedQuestion, QuestionArchitecture } from '../architectureTypes'
 import type { LessonStep } from '../../../../domain'
 import type { Rng } from '../../randomizeQuestionNumbers'
 
 type InputStep = Extract<LessonStep, { type: 'input' }>
-
-const numericAccept = (value: number): string[] =>
-  Array.from(new Set([String(value), `x=${value}`, `x = ${value}`]))
 
 export const twoStepLinearArchitecture: QuestionArchitecture = {
   id: 'two-step-linear',
