@@ -27,13 +27,31 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          // Split the rarely-changing third-party runtime (React, etc.) into its own
-          // chunk so returning visitors can reuse it from cache across app deploys
-          // instead of re-downloading the whole bundle on every release.
+          // PERF: split third-party code by package instead of lumping every node_modules
+          // module into one eager `vendor` chunk. The old single-chunk strategy forced the
+          // heavy AI/Firebase SDKs — which are reached ONLY through dynamic import() (firebase
+          // via app/startup.ts, openai via story/openAiDeveloperStoryAi.ts, @google/genai via
+          // story/geminiDeveloperStoryAi.ts) — to share a chunk with the eagerly-loaded React +
+          // KaTeX runtime, so the browser downloaded ~400 kB gzip of SDK code it may never use
+          // on first paint. Giving each SDK its own chunk lets the bundler keep those chunks out
+          // of the entry's modulepreload graph until their dynamic import actually fires, while
+          // React and KaTeX stay eager but in their own cache-stable chunks. Everything else
+          // returns undefined so the bundler can co-locate it with whoever imports it (which
+          // keeps lazy SDK transitive deps lazy instead of pinning them eager).
           manualChunks(id) {
-            if (id.includes('node_modules')) {
-              return 'vendor'
+            if (!id.includes('node_modules')) return
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/scheduler/')
+            ) {
+              return 'react'
             }
+            if (id.includes('/katex/')) return 'katex'
+            if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase'
+            if (id.includes('/openai/')) return 'openai'
+            if (id.includes('/@google/genai/')) return 'genai'
+            return undefined
           },
         },
       },
