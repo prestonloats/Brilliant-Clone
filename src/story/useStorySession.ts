@@ -72,6 +72,7 @@ import {
   chapterBeatFor,
   clearCurrentQuestion,
   compactNarrative,
+  captureChapterPerformance,
   createInitialSession,
   createStorySessionId,
   displayedChapter,
@@ -84,6 +85,7 @@ import {
   jumpToLiveEdge,
   latestChapter,
   recentNarrative,
+  recordChapterAttempt,
   recordChapterBeat,
   recordChapterOutcome,
   recordSolved,
@@ -274,6 +276,10 @@ export function useStorySession({
       const signature = `${current.id}:${questionKey(question)}:${current.questionsSolvedTotal}`
       if (lastRecordedQuestionRef.current === signature) return
       lastRecordedQuestionRef.current = signature
+      // Tally this FIRST-TRY result into the current chapter's performance band (drives the next
+      // chapter's narrative consequence). Commit in-memory so the checkpoint in submitQuestionResult
+      // reads it; it rides along to the next solve's persist (surviving normal play and resume).
+      commitSession(recordChapterAttempt(current, correct))
       const clock = typeof performance !== 'undefined' ? performance.now() : Date.now()
       const msToAnswer = questionShownAtRef.current > 0 ? Math.max(0, Math.round(clock - questionShownAtRef.current)) : 0
       void (async () => {
@@ -290,7 +296,7 @@ export function useStorySession({
         }
       })()
     },
-    [user, backend],
+    [user, backend, commitSession],
   )
 
   // Update the transient chapter-text review flag in both the ref (for callbacks) and state (render).
@@ -805,7 +811,11 @@ export function useStorySession({
       let next = recordSolved(current, key)
 
       if (isCheckpointDue(next)) {
+        // Snapshot how THIS chapter went BEFORE resetCheckpoint clears the tally, so the bridge beat
+        // (the chapter's consequence + the next chapter's opening) reflects it.
+        next = captureChapterPerformance(next)
         next = resetCheckpoint(clearCurrentQuestion(next))
+        const performance = next.lastChapterPerformance
         const ai = await ensureAi()
         let written: string | null = null
         if (ai) {
@@ -817,13 +827,15 @@ export function useStorySession({
               // Thread the hidden plan in (when present) so the bridge beat advances the planned arc
               // and ends on a real, course-changing choice; omitted keeps today's behavior.
               ...(next.storyBible ? { storyBible: next.storyBible } : {}),
+              // The chapter's performance band shapes the consequence (encouraging stakes).
+              ...(performance ? { performance } : {}),
             })
           } catch {
             // writeSegment now throws on failure; fall back to a distinct, theme-aware bridge beat.
             written = null
           }
         }
-        const { text: beat, isFallback } = resolveBeatText(next, written, 'bridge')
+        const { text: beat, isFallback } = resolveBeatText(next, written, 'bridge', performance?.band)
         const beatScene = await sceneForBeat(ai, next.theme, isFallback, previousSceneId(next))
         next = appendSegment(next, { text: beat, sceneId: beatScene })
         // Snapshot the bridge as this new chapter's reviewable text (survives segment compaction).
@@ -884,6 +896,9 @@ export function useStorySession({
         // the full state (with the appended outcome) is the one persisted further below.
         let next = setLatestSegmentChoice(current, moderated.sanitized)
         commitSession(next)
+        // The just-completed chapter's performance (captured at the checkpoint that led here, and
+        // persisted) shapes the outcome of this choice, the plan revision, and the offline fallback.
+        const performance = next.lastChapterPerformance
         const ai = await ensureAi()
         let written: string | null = null
         // The revised hidden plan, written below. The plan is updated at EVERY checkpoint so it
@@ -903,6 +918,8 @@ export function useStorySession({
               recentNarrative: narrative,
               userChoice: moderated.sanitized,
               ...(next.storyBible ? { storyBible: next.storyBible } : {}),
+              // The just-completed chapter's performance colors the outcome of the choice.
+              ...(performance ? { performance } : {}),
             })
             .catch(() => null)
           const biblePromise = ai.writeStoryBible
@@ -913,6 +930,7 @@ export function useStorySession({
                   recentNarrative: narrative,
                   userChoice: moderated.sanitized,
                   questionsSolved: next.questionsSolvedTotal,
+                  ...(performance ? { performance } : {}),
                 })
                 .catch(() => '')
             : Promise.resolve('')
@@ -920,7 +938,7 @@ export function useStorySession({
           written = outcomeResult
           revisedBible = bibleResult
         }
-        const { text: continuation, isFallback } = resolveBeatText(next, written, 'outcome')
+        const { text: continuation, isFallback } = resolveBeatText(next, written, 'outcome', performance?.band)
         const outcomeScene = await sceneForBeat(ai, next.theme, isFallback, previousSceneId(next))
         next = appendSegment(next, { text: continuation, sceneId: outcomeScene })
         // Fold the learner's choice + this outcome into the chapter beat so the recap shows the full
