@@ -1,6 +1,6 @@
 // Browser-storage backend implementing the Backend contract over localStorage/sessionStorage.
 
-import type { LessonId, SkillId, SkillMastery, UserProfile } from '../domain'
+import type { LessonId, SkillId, UserProfile } from '../domain'
 import type {
   Backend,
   LocalAttemptRepository,
@@ -12,6 +12,7 @@ import type {
   LocalStoryRepository,
   LocalUser,
 } from './types'
+import { applyMasteryOutcome, emptySkillMastery } from '../engine/practice/applyMasteryOutcome'
 import { applyPracticeOutcome } from '../engine/practice/applyOutcome'
 import { createInitialPracticeState } from '../engine/practice/mastery'
 import { emptyDatabase, normalizeDatabase, validateDisplayNameInput, validateSignUpInput } from './validation'
@@ -188,26 +189,9 @@ export class LocalBackend implements Backend {
         this.requireActiveUser(userId)
         const db = this.read()
         const key = this.masteryKey(userId, skillId)
-        const existing =
-          db.mastery[key] ??
-          ({
-            userId,
-            skillId,
-            score: 0,
-            attempts: 0,
-            correct: 0,
-            lastPracticedAt: new Date().toISOString(),
-          } satisfies SkillMastery)
-
-        const attempts = existing.attempts + 1
-        const correctAttempts = existing.correct + (correct ? 1 : 0)
-        const updated: SkillMastery = {
-          ...existing,
-          score: Math.round((correctAttempts / attempts) * 100) / 100,
-          attempts,
-          correct: correctAttempts,
-          lastPracticedAt: new Date().toISOString(),
-        }
+        const now = new Date().toISOString()
+        const existing = db.mastery[key] ?? emptySkillMastery(userId, skillId, now)
+        const updated = applyMasteryOutcome(existing, correct, now)
 
         db.mastery[key] = updated
         this.write(db)

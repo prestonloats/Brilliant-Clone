@@ -43,6 +43,7 @@ import type {
   StorySession,
   UserProfile,
 } from './domain'
+import { applyMasteryOutcome, emptySkillMastery } from './engine/practice/applyMasteryOutcome'
 import { applyPracticeOutcome } from './engine/practice/applyOutcome'
 import { createInitialPracticeState } from './engine/practice/mastery'
 import {
@@ -227,29 +228,12 @@ export class FirebaseBackend implements Backend {
       return runTransaction(this.firestore, async (transaction) => {
         const snapshot = await transaction.get(masteryRef)
         const current = snapshot.exists() ? snapshot.data() : null
+        const now = new Date().toISOString()
         const existing =
           isSkillMastery(current) && current.userId === uid && current.skillId === skillId
             ? current
-            : ({
-                userId: uid,
-                skillId,
-                score: 0,
-                attempts: 0,
-                correct: 0,
-                lastPracticedAt: new Date().toISOString(),
-              } satisfies SkillMastery)
-
-        const attempts = existing.attempts + 1
-        const correctAttempts = existing.correct + (correct ? 1 : 0)
-        const updated: SkillMastery = {
-          ...existing,
-          userId: uid,
-          skillId,
-          score: Math.round((correctAttempts / attempts) * 100) / 100,
-          attempts,
-          correct: correctAttempts,
-          lastPracticedAt: new Date().toISOString(),
-        }
+            : emptySkillMastery(uid, skillId, now)
+        const updated = applyMasteryOutcome(existing, correct, now)
 
         transaction.set(masteryRef, toFirestoreSkillMastery(uid, updated))
         return updated
