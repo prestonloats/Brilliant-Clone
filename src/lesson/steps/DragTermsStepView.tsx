@@ -3,10 +3,11 @@ import { MathText } from '../../MathText'
 import { checkDragTermsStep } from '../../engine'
 import type { DragTermsStep, StepResult } from '../../domain'
 import { DragPreview } from '../../components/DragPreview'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
 import type { CompleteOptions } from '../types'
 import { BOUNCE_RESET_MS } from './constants'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
+import { usePointerDrag } from './usePointerDrag'
 
 // A reserved zone id for the tile tray, so the same drop detection that places a tile in a bin
 // can also send it back to the tray (bins use their authored, non-underscored ids).
@@ -56,13 +57,10 @@ export function DragTermsStepView({
     priorResult?.correct ? makeSolvedPlacements() : {},
   )
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState(priorResult?.feedback ?? '')
-  const [correct, setCorrect] = useState(priorResult?.correct ?? false)
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
-  const [dragging, setDragging] = useState<TermDrag | null>(null)
-  const [hoverZone, setHoverZone] = useState<string | null>(null)
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult,
+    onComplete,
+  })
   const [lastDropZone, setLastDropZone] = useState<string | null>(null)
   // The browser fires a click after a pointer interaction; this lets the keyboard-only onClick
   // path ignore that synthetic click so a pointer tap is not handled twice.
@@ -76,13 +74,6 @@ export function DragTermsStepView({
     const timeoutId = window.setTimeout(() => setLastDropZone(null), BOUNCE_RESET_MS)
     return () => window.clearTimeout(timeoutId)
   }, [lastDropZone])
-
-  const clearStatus = useCallback(() => {
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
-  }, [])
 
   const assignTile = useCallback(
     (tileId: string, zone: string) => {
@@ -120,44 +111,28 @@ export function DragTermsStepView({
     [correct, placements, assignTile, clearStatus],
   )
 
-  useEffect(() => {
-    if (!dragging) return
-
-    const handleMove = (event: PointerEvent) => {
-      setDragging((current) => {
-        if (!current) return current
-        const moved =
-          current.moved ||
-          Math.abs(event.clientX - current.startX) > 6 ||
-          Math.abs(event.clientY - current.startY) > 6
-        return { ...current, x: event.clientX, y: event.clientY, moved }
-      })
-      setHoverZone(getTermZoneAtPoint(event.clientX, event.clientY))
-    }
-    const handleUp = (event: PointerEvent) => {
+  const { dragging, setDragging, hover: hoverZone, setHover: setHoverZone } = usePointerDrag<TermDrag, string>({
+    getZoneAtPoint: getTermZoneAtPoint,
+    updateOnMove: (event, current) => {
+      const moved =
+        current.moved ||
+        Math.abs(event.clientX - current.startX) > 6 ||
+        Math.abs(event.clientY - current.startY) > 6
+      return { ...current, x: event.clientX, y: event.clientY, moved }
+    },
+    onDrop: ({ zone, dragging }) => {
       if (dragging.moved) {
-        const zone = getTermZoneAtPoint(event.clientX, event.clientY)
         if (zone) assignTile(dragging.tileId, zone)
       } else {
         // No real movement: treat the press as a tap (select, or return a placed tile).
         handleTileTap(dragging.tileId)
       }
-      setDragging(null)
-      setHoverZone(null)
       window.setTimeout(() => {
         pointerActiveRef.current = false
       }, 0)
-    }
-
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-    window.addEventListener('pointercancel', handleUp)
-    return () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-      window.removeEventListener('pointercancel', handleUp)
-    }
-  }, [dragging, assignTile, handleTileTap])
+    },
+    dropOnCancel: true,
+  })
 
   const startDrag = (event: React.PointerEvent<HTMLButtonElement>, tile: DragTermsStep['tiles'][number]) => {
     if (correct) return
@@ -201,14 +176,7 @@ export function DragTermsStepView({
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkDragTermsStep(step, placements, nextAttempt)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkDragTermsStep(step, placements, attempts + 1))
   }
 
   return (
@@ -315,19 +283,17 @@ export function DragTermsStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check
       </button>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct && (
-        <RetryPrompt
-          message={retryGuidance || 'Move the tiles into the right bins, or reset and try again.'}
-          actionLabel="Reset"
-          onAction={reset}
-        />
-      )}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage="Move the tiles into the right bins, or reset and try again."
+        retryActionLabel="Reset"
+        onRetryAction={reset}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

@@ -8,8 +8,6 @@ import {
 } from '../../engine'
 import type { BalanceItem, BalanceOperation, BalanceSide, BalanceState, BalanceStep, StepResult } from '../../domain'
 import { DragPreview } from '../../components/DragPreview'
-import { FeedbackPanel } from '../../components/FeedbackPanel'
-import { RetryPrompt } from '../../components/RetryPrompt'
 import type { CompleteOptions } from '../types'
 import {
   applyOperationFromStart,
@@ -24,6 +22,9 @@ import {
 } from '../balanceHelpers'
 import { BOUNCE_RESET_MS } from './constants'
 import { Pan, PhysicalScaleStage } from './BalancePans'
+import { StepFeedback } from './StepFeedback'
+import { useCheckableStep } from './useCheckableStep'
+import { usePointerDrag } from './usePointerDrag'
 
 // The beam tilts up to MAX_TILT_DEG in either direction, gaining TILT_DEG_PER_UNIT degrees for
 // each unit of imbalance between the pans until it saturates at the cap.
@@ -62,15 +63,15 @@ export function BalanceStepView({
       : { state: cloneBalanceState(step.state), correct: false, feedback: '' }
   })
   const [state, setState] = useState<BalanceState>(resume.state)
-  const [dragging, setDragging] = useState<DraggingTile | null>(null)
-  const [hoverTarget, setHoverTarget] = useState<DropTarget | null>(null)
+  // Seed the shared feedback states from `resume` (a previously-solved scale resumes as
+  // "Correct", everything else starts blank) rather than directly from priorResult, preserving
+  // this view's reconstruct-or-reset behavior.
+  const { feedback, correct, attempts, reveal, retryGuidance, submit, clearStatus } = useCheckableStep({
+    priorResult: { correct: resume.correct, feedback: resume.feedback, attempts: priorResult?.attempts ?? 0 },
+    onComplete,
+  })
   const [lastDropSide, setLastDropSide] = useState<BalanceSide | null>(null)
-  const [feedback, setFeedback] = useState(resume.feedback)
-  const [correct, setCorrect] = useState(resume.correct)
   const [meta, setMeta] = useState<BalanceCheckMeta>({})
-  const [attempts, setAttempts] = useState(priorResult?.attempts ?? 0)
-  const [reveal, setReveal] = useState('')
-  const [retryGuidance, setRetryGuidance] = useState('')
   const [lastChange, setLastChange] = useState('')
 
   const leftTotal = sideTotal(state.left)
@@ -91,8 +92,6 @@ export function BalanceStepView({
     const timeoutId = window.setTimeout(() => setLastDropSide(null), BOUNCE_RESET_MS)
     return () => window.clearTimeout(timeoutId)
   }, [lastDropSide])
-
-  const activeDragItem = dragging?.item
 
   // Moves a weight to any drop target: a pan or back to the tray. The item is first
   // removed from wherever it currently sits, so a block dropped on the wrong side can
@@ -122,48 +121,17 @@ export function BalanceStepView({
         window.requestAnimationFrame(() => setLastDropSide(target))
       }
       setLastChange(describeMove(item, target, state, nextState, isPhysicalDrag))
-      setFeedback('')
-      setCorrect(false)
-      setReveal('')
-      setRetryGuidance('')
+      clearStatus()
     },
-    [isPhysicalDrag, state],
+    [isPhysicalDrag, state, clearStatus],
   )
 
-  useEffect(() => {
-    if (!activeDragItem) return
-
-    const activeItem = activeDragItem
-
-    const handlePointerMove = (event: PointerEvent) => {
-      setDragging((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current))
-      setHoverTarget(getDropTargetAtPoint(event.clientX, event.clientY))
-    }
-
-    const handlePointerUp = (event: PointerEvent) => {
-      const target = getDropTargetAtPoint(event.clientX, event.clientY)
-      if (target) {
-        moveItem(activeItem, target)
-      }
-      setDragging(null)
-      setHoverTarget(null)
-    }
-
-    const handlePointerCancel = () => {
-      setDragging(null)
-      setHoverTarget(null)
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    window.addEventListener('pointercancel', handlePointerCancel)
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-      window.removeEventListener('pointercancel', handlePointerCancel)
-    }
-  }, [activeDragItem, moveItem])
+  const { dragging, setDragging, hover: hoverTarget, setHover: setHoverTarget } = usePointerDrag<DraggingTile, DropTarget>({
+    getZoneAtPoint: getDropTargetAtPoint,
+    onDrop: ({ zone, dragging: tile }) => {
+      if (zone) moveItem(tile.item, zone)
+    },
+  })
 
   const startDrag = (event: React.PointerEvent<HTMLButtonElement>, item: BalanceItem) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -190,11 +158,8 @@ export function BalanceStepView({
     setHoverTarget(null)
     setLastDropSide(null)
     setLastChange('Scale reset to the starting equation.')
-    setFeedback('')
-    setCorrect(false)
     setMeta({})
-    setReveal('')
-    setRetryGuidance('')
+    clearStatus()
   }
 
   const applyOperation = (operation: BalanceOperation) => {
@@ -205,21 +170,11 @@ export function BalanceStepView({
     setState(nextState)
     setMeta({ movedOneSideOnly: operation.sides !== 'both' })
     setLastChange(describeBalanceChange(baseState, nextState, `Applied ${operation.label}.`))
-    setFeedback('')
-    setCorrect(false)
-    setReveal('')
-    setRetryGuidance('')
+    clearStatus()
   }
 
   const check = () => {
-    const nextAttempt = attempts + 1
-    const result = checkBalanceStep(step, state, meta, nextAttempt)
-    setAttempts(nextAttempt)
-    setFeedback(result.feedback)
-    setCorrect(result.correct)
-    setReveal(result.reveal ?? '')
-    setRetryGuidance(result.retryGuidance ?? '')
-    onComplete(result.correct, result.feedback, { advance: false })
+    submit(checkBalanceStep(step, state, meta, attempts + 1))
   }
 
   return (
@@ -372,26 +327,21 @@ export function BalanceStepView({
       <button className="primary-action" type="button" disabled={correct} onClick={check}>
         Check scale
       </button>
-      {feedback && <FeedbackPanel key={attempts} correct={correct} message={feedback} reveal={!correct ? reveal : undefined} />}
-      {feedback && !correct &&
-        (usesOperations ? (
-          <RetryPrompt
-            message={retryGuidance || 'Reset the scale if your move used up a tile, then try again.'}
-            actionLabel="Reset scale"
-            onAction={resetAttempt}
-          />
-        ) : (
-          <RetryPrompt
-            message={
-              retryGuidance || 'Drag the block to the other pan, or back to the tray, then check the scale again.'
-            }
-          />
-        ))}
-      {correct && (
-        <button className="primary-action continue-step" type="button" onClick={() => onAdvance(feedback)}>
-          Continue
-        </button>
-      )}
+      <StepFeedback
+        feedback={feedback}
+        correct={correct}
+        attempts={attempts}
+        reveal={reveal}
+        retryGuidance={retryGuidance}
+        defaultRetryMessage={
+          usesOperations
+            ? 'Reset the scale if your move used up a tile, then try again.'
+            : 'Drag the block to the other pan, or back to the tray, then check the scale again.'
+        }
+        retryActionLabel={usesOperations ? 'Reset scale' : undefined}
+        onRetryAction={usesOperations ? resetAttempt : undefined}
+        onContinue={() => onAdvance(feedback)}
+      />
     </article>
   )
 }

@@ -7,6 +7,7 @@ import { BOUNCE_RESET_MS } from './constants'
 import { describeManipulativeGoal } from './manipulativeHelpers'
 import { StepFeedback } from './StepFeedback'
 import { useCheckableStep } from './useCheckableStep'
+import { usePointerDrag } from './usePointerDrag'
 
 type ManipulativeDrag = {
   x: number
@@ -51,8 +52,6 @@ export function ManipulativeStepView({
     onComplete,
   })
   const [groups, setGroups] = useState<number[]>(priorResult?.correct ? makeSolvedGroups() : makeEmptyGroups())
-  const [dragging, setDragging] = useState<ManipulativeDrag | null>(null)
-  const [hoverZone, setHoverZone] = useState<number | null>(null)
   const [lastDropZone, setLastDropZone] = useState<number | null>(null)
 
   const placed = groups.reduce((total, count) => total + count, 0)
@@ -82,6 +81,14 @@ export function ManipulativeStepView({
     [step.total, clearStatus],
   )
 
+  const { dragging, setDragging, hover: hoverZone, setHover: setHoverZone } = usePointerDrag<ManipulativeDrag, number>({
+    getZoneAtPoint: getManipulativeZoneAtPoint,
+    onDrop: ({ zone }) => {
+      if (zone !== null) addToZone(zone)
+    },
+    dropOnCancel: true,
+  })
+
   const removeFromZone = (zoneIndex: number) => {
     setGroups((current) => {
       if (current[zoneIndex] <= 0) return current
@@ -99,31 +106,6 @@ export function ManipulativeStepView({
     setLastDropZone(null)
     clearStatus()
   }
-
-  useEffect(() => {
-    if (!dragging) return
-
-    const handleMove = (event: PointerEvent) => {
-      setDragging((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current))
-      setHoverZone(getManipulativeZoneAtPoint(event.clientX, event.clientY))
-    }
-    const handleUp = (event: PointerEvent) => {
-      const zoneIndex = getManipulativeZoneAtPoint(event.clientX, event.clientY)
-      if (zoneIndex !== null) addToZone(zoneIndex)
-      setDragging(null)
-      setHoverZone(null)
-    }
-
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-    window.addEventListener('pointercancel', handleUp)
-
-    return () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-      window.removeEventListener('pointercancel', handleUp)
-    }
-  }, [dragging, addToZone])
 
   const startDrag = (event: React.PointerEvent<HTMLSpanElement>) => {
     if (correct || remaining <= 0) return
