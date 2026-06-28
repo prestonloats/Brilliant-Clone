@@ -56,7 +56,7 @@ const allowedModels = (env) => {
 // Mirrors isReasoningModel in src/story/openAiProxyProtocol.ts. GPT-5/o-series reasoning models bill
 // hidden reasoning tokens against max_completion_tokens, so at the default effort a beat can spend
 // the whole budget thinking and return EMPTY text — the intermittent "default text" bug. We pin a
-// MINIMAL reasoning effort for them (and gate it so a non-reasoning override isn't sent the field).
+// LOW reasoning effort for them (and gate it so a non-reasoning override isn't sent the field).
 const isReasoningModel = (model) => /^(gpt-5|o\d)/i.test(model)
 
 const clampMaxOutputTokens = (value) => {

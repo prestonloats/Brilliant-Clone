@@ -55,7 +55,7 @@ export const isReasoningModel = (model: string): boolean => /^(gpt-5|o\d)/i.test
 // Minimal Chat Completions body. Note: `max_completion_tokens` (not the deprecated `max_tokens`) is
 // used so the request works on GPT-5.x as well as 4.x models. Temperature is intentionally omitted:
 // some reasoning-class models reject a non-default temperature, so we leave it at the model default
-// for maximum cross-model compatibility. `reasoning_effort` is pinned to 'minimal' for reasoning
+// for maximum cross-model compatibility. `reasoning_effort` is pinned to 'low' for reasoning
 // models (see isReasoningModel) so reasoning tokens can't starve the visible answer.
 export type ChatCompletionsBody = {
   model: string
@@ -115,7 +115,7 @@ export const extractModerationFlag = (data: unknown): boolean => {
 // JS proxies (worker.js / functions/index.js keep inline copies because they can't import this TS).
 
 export const PROXY_LIMITS = {
-  // Largest legit Story Mode budget is 2000 (start/prose); 8000 leaves generous headroom for a
+  // Largest legit Story Mode budget is 4000 (start/prose/bible); 8000 leaves generous headroom for a
   // reasoning model (hidden reasoning tokens + the visible answer) while still capping
   // denial-of-wallet abuse. The per-IP rate limit + origin allow-list bound total spend.
   maxOutputTokens: 8000,

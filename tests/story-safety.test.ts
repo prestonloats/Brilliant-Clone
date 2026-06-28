@@ -61,7 +61,6 @@ const theme: StoryTheme = {
 
 test('sanitizeUserInput caps length to ~200 chars', () => {
   const out = sanitizeUserInput('a'.repeat(500))
-  assert.ok(out.length <= MAX_USER_INPUT_LENGTH)
   assert.equal(out.length, MAX_USER_INPUT_LENGTH)
 })
 

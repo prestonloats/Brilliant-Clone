@@ -23,8 +23,8 @@ export type AuthFormValues = {
 
 type AuthFormContext = {
   mode: AuthMode
-  // Firebase authenticates with a password. Local demo mode is intentionally passwordless,
-  // so password rules are skipped to avoid implying a credential that is never stored.
+  // Both providers now require a password (Firebase Authentication; local mode via an on-device
+  // salted hash). This flag stays so the validator can be exercised without password rules (tests).
   requiresPassword: boolean
 }
 
