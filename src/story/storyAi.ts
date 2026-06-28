@@ -6,7 +6,7 @@
 // are the only places that touch an SDK, so UI/controller code never imports an
 // LLM SDK directly. See plan section 5.2.
 
-import type { SceneId, StoryTheme } from '../content/storyTypes'
+import type { ChapterPerformance, SceneId, StoryTheme } from '../content/storyTypes'
 
 export type RethemeRequest = {
   theme: StoryTheme
@@ -33,6 +33,9 @@ export type StoryBibleRequest = {
   userChoice?: string
   // Lifetime questions solved, a coarse "how far in" signal for pacing the planned beats.
   questionsSolved?: number
+  // OPTIONAL: how the learner did on the chapter just completed, so the plan can branch its tone
+  // (plan a triumph after strong play, a rescue/setback to overcome after a struggle).
+  performance?: ChapterPerformance
 }
 
 export type RethemeResult = {
@@ -64,6 +67,9 @@ export type StoryAI = {
     // beat prompt as PRIVATE author's notes so the bridge beat follows the long-term plan; absent
     // (no provider / generation failed / legacy) keeps today's behavior exactly.
     storyBible?: string
+    // OPTIONAL: how the learner did on the chapter just completed, so this chapter-opening "bridge"
+    // beat reflects it (reward strong play, raise the stakes after a struggle). Absent = neutral.
+    performance?: ChapterPerformance
   }): Promise<string>
   continueStory(input: {
     theme: StoryTheme
@@ -72,6 +78,9 @@ export type StoryAI = {
     // OPTIONAL/back-compatible: the hidden story bible (plan), threaded into the outcome prompt as
     // private author's notes so the consequence of the choice advances the planned story.
     storyBible?: string
+    // OPTIONAL: how the learner did on the chapter just completed, so the outcome of their choice
+    // reflects it (a cleaner success after strong play, more complications after a struggle).
+    performance?: ChapterPerformance
   }): Promise<string>
   // Writes/revises the HIDDEN story bible (plan): the
   // private, author-only planning document that gives the endless adventure long-term direction so

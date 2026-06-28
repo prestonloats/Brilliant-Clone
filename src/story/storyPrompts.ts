@@ -6,7 +6,7 @@
 // parser/validator, a timeout race, quota detection, and an exponential-backoff +
 // graceful-fallback wrapper.
 
-import type { SceneId, StoryInterestId, StoryTheme } from '../content/storyTypes'
+import type { ChapterPerformance, PerformanceBand, SceneId, StoryInterestId, StoryTheme } from '../content/storyTypes'
 import { getBackstoryLabel, getPersonalityLabel } from './characterPresets'
 import { isGroundedInterestSet } from './interests'
 import { NO_SCENE, SCENERY_CATALOG, coerceSceneId } from './scenery'
@@ -115,14 +115,92 @@ const FALLBACK_BEATS: Record<StoryBeatKind, (who: string, interests: string) => 
   ],
 }
 
+// Band-specific OFFLINE consequence beats, so the deterministic fallback still reflects how the
+// chapter went when the AI is unavailable. Only the POST-chapter kinds vary by band: `bridge` (the
+// next chapter's opening) and `outcome` (the result of the checkpoint choice); `opening` has no prior
+// performance. Same contract as FALLBACK_BEATS (theme-aware via the hero name, ~2 paragraphs, >=2
+// variants so consecutive same-band fallbacks can differ). Encouraging stakes: weaker bands raise the
+// stakes / add a setback to overcome, never hopeless; stronger bands earn a clear reward.
+const PERFORMANCE_FALLBACK_BEATS: Record<PerformanceBand, Partial<Record<StoryBeatKind, (who: string) => string[]>>> = {
+  flawless: {
+    bridge: (who) => [
+      `Everything ${who} tried this time worked, and it shows. The way ahead opens up smoother than expected, and a small bit of good luck lands right when it is needed. Confidence is high.\n\nBut adventures never sit still for long. Something new glimmers up ahead, and soon it will call for a choice. One path looks bold, the other careful.`,
+      `${capitalizeFirst(who)} is on a roll. The last stretch went perfectly, and that momentum carries straight into a lucky turn — a stuck door swings open, a friendly face appears. Things are looking up.\n\nThe good fortune will not hold on its own. A fresh challenge is taking shape down the road, and it will ask for a decision soon. Bold or careful, the next move is yours.`,
+    ],
+    outcome: (who) => [
+      `It works perfectly. ${capitalizeFirst(who)} pulls the plan off without a single hitch, and the reward is immediate — real progress, and the goal feels closer than ever. Skill made the difference.\n\nThe moment glows for a beat. There is plenty of story still ahead, but right now ${who} has earned a clear, satisfying win.`,
+      `The choice lands exactly right. ${capitalizeFirst(who)} sees it through flawlessly, and good things follow — a path clears, an ally cheers, the way forward brightens. Nothing went wrong.\n\nFor now the win is real and earned. The adventure rolls on, and ${who} stands noticeably closer to the goal.`,
+    ],
+  },
+  strong: {
+    bridge: (who) => [
+      `The last round went well for ${who}, and that steady success keeps the journey moving. The path ahead is mostly clear, with just a small snag to keep things interesting. Spirits are good.\n\nUp ahead, something stirs that will soon need a decision. ${capitalizeFirst(who)} can press on quickly or take a careful moment first. The next step is yours.`,
+      `${capitalizeFirst(who)} did solid work, and it pays off as the adventure continues. Things are going right, even if one little thing did not. There is real momentum here.\n\nA new turn is taking shape further down the trail, and a choice is coming. One way looks quick, the other looks safe — pick the move that fits.`,
+    ],
+    outcome: (who) => [
+      `It mostly goes to plan. ${capitalizeFirst(who)} succeeds, with only a minor hiccup along the way, and the story moves forward in a good direction. The effort clearly paid off.\n\nThe moment settles on a hopeful note. More of the adventure waits ahead, and ${who} has made solid progress toward the goal.`,
+      `The choice works out. ${capitalizeFirst(who)} carries it through with a small bump or two, but the result is a real step forward. Things are looking up more than down.\n\nA good beat to catch a breath. The goal is still out there, and ${who} is closer than before.`,
+    ],
+  },
+  mixed: {
+    bridge: (who) => [
+      `The last stretch was a mixed bag for ${who} — some wins, some stumbles — and the road ahead reflects it. Progress is real, but a new wrinkle has appeared that makes things trickier. The mood is cautious.\n\nSomething uncertain waits just ahead, and it will call for a choice soon. One path looks safer, the other riskier. ${capitalizeFirst(who)} will have to weigh it.`,
+      `${capitalizeFirst(who)} got through it, though not without trouble. The journey continues on a bumpier note, with a fresh complication to handle even as the goal stays in sight. Tense, but not lost.\n\nUp ahead, a decision is forming. The way forward splits, and neither path is simple. The next move belongs to you.`,
+    ],
+    outcome: (who) => [
+      `It half works. ${capitalizeFirst(who)} makes progress, but it comes with a cost — a small setback, or a new problem stirred up by the action. The story moves on, a little harder than before.\n\nThe moment is tense but not hopeless. There is more adventure ahead, and ${who} still has a path toward the goal.`,
+      `The choice plays out unevenly. ${capitalizeFirst(who)} gains something and loses something, and the road gets a touch steeper from here. Nothing was wasted, but nothing came free either.\n\nThings settle on an uncertain note. The goal remains, and ${who} presses on, wiser for the wrinkle.`,
+    ],
+  },
+  struggled: {
+    bridge: (who) => [
+      `The last round was rough on ${who}, and the trouble has not passed. A setback waits up ahead — a plan gone sideways, a path suddenly blocked — and pushing through it will take real grit. But the goal is still reachable.\n\nA hard choice is coming into view, the kind that matters. One way is risky, the other slow and careful. ${capitalizeFirst(who)} will need to choose well.`,
+      `${capitalizeFirst(who)} had a tough time of it, and the adventure answers with rising stakes. Something has gone wrong that now needs sorting, and the danger feels a little closer than before. Still, all is far from lost.\n\nUp ahead a decision looms, and it counts. The trail forks toward risk or caution. The next move is yours — make it carefully.`,
+    ],
+    outcome: (who) => [
+      `It does not go smoothly. ${capitalizeFirst(who)} runs into a real setback — the plan slips, and a new problem rises in its place. The way forward just got harder, but it is not closed.\n\nThe moment is suspenseful, yet there is still hope. The goal waits beyond the trouble, and ${who} is not the kind to give up.`,
+      `The choice hits a snag, and things turn for the worse before they get better. ${capitalizeFirst(who)} is left with a fresh challenge to overcome and a tougher road ahead. The stakes are higher now.\n\nIt is a tense beat, but not a hopeless one. ${capitalizeFirst(who)} steadies up, because the adventure — and the goal — are still very much alive.`,
+    ],
+  },
+}
+
 // Build a theme-aware fallback beat for `kind`, selecting among its variants by `variant` (any
-// integer; wrapped into range). The opening variant is also the controller's reachable start-failure
-// fallback when a provider is configured but start generation fails.
-export function storyFallbackBeat(kind: StoryBeatKind, theme: StoryTheme, variant = 0): string {
-  const variants = FALLBACK_BEATS[kind](heroName(theme), describeInterests(theme))
+// integer; wrapped into range). When a performance `band` is supplied for a post-chapter kind
+// (bridge/outcome) it picks the matching band-specific variants so the offline consequence still
+// reflects how the chapter went; otherwise it uses the neutral FALLBACK_BEATS. The opening variant is
+// also the controller's reachable start-failure fallback when start generation fails.
+export function storyFallbackBeat(kind: StoryBeatKind, theme: StoryTheme, variant = 0, band?: PerformanceBand): string {
+  const who = heroName(theme)
+  const banded = band ? PERFORMANCE_FALLBACK_BEATS[band][kind]?.(who) : undefined
+  const variants = banded ?? FALLBACK_BEATS[kind](who, describeInterests(theme))
   const index = ((Math.trunc(variant) % variants.length) + variants.length) % variants.length
   return variants[index]
 }
+
+// Encouraging-stakes consequence direction: translate HOW the learner did on the chapter's math into
+// PRIVATE authorial guidance for the consequence beat/plan. Framing (hard): this reflects the
+// reader's EFFORT, never judges the reader; weaker play raises the stakes or adds a setback the hero
+// can still overcome (never hopeless, never a dead end, never "because you're bad at math"); stronger
+// play earns a clear reward. Absent -> no direction (prior behavior).
+const PERFORMANCE_DIRECTION: Record<PerformanceBand, string> = {
+  flawless:
+    "The hero handled this chapter's challenges FLAWLESSLY. Let something clearly GOOD happen as a direct result: a decisive win, a lucky break, a helpful ally or tool, real progress toward the goal. Mood: triumphant and earned.",
+  strong:
+    "The hero did WELL on this chapter's challenges. Let things go mostly RIGHT: a solid success and forward progress, perhaps with one small complication to keep it lively. Mood: upbeat.",
+  mixed:
+    "The hero got through this chapter's challenges but with some stumbles. Make it a MIXED result: partial success with a real cost or a new wrinkle — progress, but the road gets a little harder. Mood: tense but hopeful.",
+  struggled:
+    "The hero STRUGGLED through this chapter's challenges. Raise the stakes with a SETBACK or growing danger the hero must now face (a plan goes sideways, an obstacle appears, an ally needs help). Keep it HOPEFUL and recoverable — never hopeless, never a dead end, and never frame it as the hero being bad. Mood: suspenseful.",
+}
+
+// The performance direction as a prompt block (empty when no performance is supplied). Marked as
+// private author guidance that must NOT be surfaced to the reader as a comment on their math.
+const performanceDirection = (performance?: ChapterPerformance): string[] =>
+  performance
+    ? [
+        `CONSEQUENCE OF THE READER'S EFFORT THIS CHAPTER (private author guidance — shape what happens accordingly; do NOT mention math, scores, or "right/wrong answers" to the reader): ${PERFORMANCE_DIRECTION[performance.band]}`,
+      ]
+    : []
 
 // True only when the learner chose to STAR AS THEMSELVES ("Use my name" -> 'displayName'). In
 // that case the narration must address the protagonist directly in the SECOND PERSON ("you") via
@@ -383,6 +461,7 @@ export function buildSegmentPrompt(input: {
   recentNarrative: string
   questionsSolved: number
   storyBible?: string
+  performance?: ChapterPerformance
 }): string {
   return [
     `THEME: ${input.theme.premise} Protagonist: ${input.theme.protagonist}. Interests: ${describeInterests(input.theme)}.`,
@@ -393,6 +472,7 @@ export function buildSegmentPrompt(input: {
     ...biblePlanBlock(input.storyBible),
     `STORY SO FAR: ${input.recentNarrative || '(the adventure is just beginning)'}`,
     `The hero just overcame another set of challenges (the learner solved ${input.questionsSolved} problems).`,
+    ...performanceDirection(input.performance),
     'Write the NEXT story beat that moves the adventure forward. Continue naturally and logically from the STORY SO FAR, staying consistent with what the hero just did and the choice the reader just made and where it left them — do not reset, contradict, or forget those recent events.',
     COMMITTED_PATH_RULE,
     STORY_CRAFT_RULE,
@@ -422,6 +502,7 @@ export function buildContinuePrompt(input: {
   recentNarrative: string
   userChoice: string
   storyBible?: string
+  performance?: ChapterPerformance
 }): string {
   return [
     `THEME: ${input.theme.premise} Protagonist: ${input.theme.protagonist}. Interests: ${describeInterests(input.theme)}.`,
@@ -435,6 +516,7 @@ export function buildContinuePrompt(input: {
     'This is a choose-your-own-adventure: the reader\'s choice MUST genuinely drive what happens next.',
     'If that choice is reasonable and safe, ENACT IT — make the hero ACTUALLY DO that exact action as the very next thing that happens, and treat it as the direct CAUSE of the events that follow. Show the clear, specific CONSEQUENCES of that choice (what changes, what the hero finds, how others react) so it is obvious the reader\'s decision truly mattered and shaped the story. Do NOT ignore it, do NOT only vaguely acknowledge it, and do NOT swap it for a different or generic action.',
     'Make the choice genuinely CONSEQUENTIAL: let it move the planned story forward and have real, lasting effects (on the goal, the stakes, a relationship, or the world) that later beats will have to live with — this decision should visibly bend the course of the adventure, not reset back to where things were.',
+    ...performanceDirection(input.performance),
     COMMITTED_PATH_RULE,
     STORY_CRAFT_RULE,
     NARRATION_LENGTH_RULE,
@@ -573,6 +655,7 @@ export function buildStoryBiblePrompt(req: StoryBibleRequest): string {
     current,
     `RECENT EVENTS (what has happened since the plan was last updated): ${narrative || '(nothing new yet)'}`,
     ...(choice ? [`The reader just chose to: "${choice}"`] : []),
+    ...performanceDirection(req.performance),
     'Update the plan so it stays the story\'s living guide:',
     '- Stay TRUE to what has already happened — do not contradict established facts, characters, or events the reader has already seen revealed.',
     '- BRANCH to the reader\'s latest choice and its consequences: fold in what changed, rework or drop parts that no longer fit the path taken, and let the choice have real, lasting impact on where the story goes.',

@@ -6,7 +6,7 @@
 // reducer's pure transitions and are unit-testable under `node --test` (the repo has no DOM/React
 // test harness). `useStorySession` imports them back and remains the thin React seam.
 
-import type { LessonStep, SceneId, StorySession, StoryTheme } from '../domain'
+import type { LessonStep, PerformanceBand, SceneId, StorySession, StoryTheme } from '../domain'
 import type { RethemeRequest, SceneMatchRequest, StoryAI } from './storyAi'
 import type { StoryAiEnv } from './selectStoryProvider'
 import { isOutputSafe } from './safety'
@@ -37,17 +37,19 @@ export const resolveBeatText = (
   session: StorySession,
   generated: string | null,
   kind: StoryBeatKind,
+  band?: PerformanceBand,
 ): { text: string; isFallback: boolean } => {
   const previous = session.segments[session.segments.length - 1]?.text.trim() ?? ''
   const clean = (generated ?? '').trim()
   if (clean && isOutputSafe(clean) && clean !== previous) return { text: clean, isFallback: false }
-  // Fallback: rotate variants so a duplicate (or a run of fallbacks) never repeats the prior beat.
+  // Fallback: rotate variants so a duplicate (or a run of fallbacks) never repeats the prior beat;
+  // when a performance `band` is supplied the offline beat still reflects how the chapter went.
   const base = session.segments.length
   for (let offset = 0; offset < 4; offset += 1) {
-    const candidate = storyFallbackBeat(kind, session.theme, base + offset).trim()
+    const candidate = storyFallbackBeat(kind, session.theme, base + offset, band).trim()
     if (candidate && candidate !== previous) return { text: candidate, isFallback: true }
   }
-  return { text: storyFallbackBeat(kind, session.theme, base), isFallback: true }
+  return { text: storyFallbackBeat(kind, session.theme, base, band), isFallback: true }
 }
 
 export const messageFrom = (error: unknown, fallback: string): string =>
