@@ -3,7 +3,6 @@ import { createAttemptEvent, type Backend } from '../backend'
 import {
   applyStepResult,
   getRecommendedNextLesson,
-  hasCompletedLesson,
   isLessonUnlocked,
   restartLessonProgress,
   type ProgressByLesson,
@@ -30,6 +29,7 @@ import type { CompleteOptions } from '../lesson/types'
 import { CompleteScreen } from '../screens/CompleteScreen'
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { useStorySession } from '../story/useStorySession'
+import { isStoryUnlocked } from './storyUnlock'
 import { InterestSelectionScreen } from '../story/InterestSelectionScreen'
 import { StoryQuestionScreen } from '../story/StoryQuestionScreen'
 import { StoryCheckpointScreen } from '../story/StoryCheckpointScreen'
@@ -72,9 +72,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
   // never writes LessonProgress or lesson mastery), but it now records a DEDICATED practice store
   // (spaced-repetition + mastery estimate) and `source:'story'` attempts. `onLearnerDataChanged`
   // refreshes the attempt/practice data that drives the next question's selection.
-  const storyUnlocked =
-    hasCompletedLesson(progressByLesson['balancing-equations']) &&
-    hasCompletedLesson(progressByLesson['one-step-equations'])
+  const storyUnlocked = isStoryUnlocked(progressByLesson)
   const story = useStorySession({
     backend,
     user,

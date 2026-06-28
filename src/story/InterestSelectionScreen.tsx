@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { CustomCharacter, MainCharacterSource, StoryInterestId, StoryTheme } from '../domain'
-import { containsProfanity, containsUnsafeContent, sanitizeUserInput } from './safety'
 import { INTEREST_CATALOG } from './interests'
 import {
   CHARACTER_BACKSTORIES,
@@ -10,16 +9,17 @@ import {
   MAX_CHARACTER_NAME_LEN,
   MAX_CUSTOM_CHARACTERS,
 } from './characterPresets'
+import {
+  foldCustomInterests,
+  MAX_CUSTOM_INTEREST_LENGTH,
+  validateCharacterName,
+  validateCustomInterest,
+} from './interestSelectionValidation'
 
 const MAX_INTERESTS = 3
-// Cap for the single freeformInterest string the persistence layer enforces (validation.ts).
-// The added custom-interest boxes are comma-joined into this one field on submit, so the
-// combined join must stay within this bound.
-const MAX_FREEFORM_LENGTH = 80
-// How many custom-interest boxes the learner can add, and the per-box input cap. Small caps keep
-// the comma-joined freeformInterest within MAX_FREEFORM_LENGTH and the UI tidy.
+// How many custom-interest boxes the learner can add. The per-box + combined freeform caps and the
+// validators live in interestSelectionValidation.ts (the single source of truth for the input rules).
 const MAX_CUSTOM_INTERESTS = 3
-const MAX_CUSTOM_INTEREST_LENGTH = 40
 
 // The main-character chooser. 'random' (let the LLM invent a hero) preserves the legacy default,
 // so it is the initial selection; the controller resolves 'displayName' from the signed-in user.
@@ -92,24 +92,12 @@ export function InterestSelectionScreen({
   // string) in handleBegin, so the StoryTheme shape/validation/prompts are untouched.
   const addCustomInterest = () => {
     if (busy || atInterestLimit) return
-    const value = sanitizeUserInput(interestDraft, MAX_CUSTOM_INTEREST_LENGTH)
-    if (!value) {
-      setInterestError('Enter an interest using letters or numbers.')
+    const result = validateCustomInterest(interestDraft, customInterests)
+    if ('error' in result) {
+      setInterestError(result.error)
       return
     }
-    if (containsProfanity(value) || containsUnsafeContent(value)) {
-      setInterestError('That interest isn’t allowed here — please choose another.')
-      return
-    }
-    if (customInterests.some((existing) => existing.toLowerCase() === value.toLowerCase())) {
-      setInterestError('You’ve already added that interest.')
-      return
-    }
-    if ([...customInterests, value].join(', ').length > MAX_FREEFORM_LENGTH) {
-      setInterestError('That’s too long to add — remove one or shorten it.')
-      return
-    }
-    setCustomInterests((current) => [...current, value])
+    setCustomInterests((current) => [...current, result.value])
     setInterestDraft('')
     setInterestError('')
   }
@@ -118,21 +106,9 @@ export function InterestSelectionScreen({
     setCustomInterests((current) => current.filter((interest) => interest !== value))
   }
 
-  // Teen-safety gate shared by character names and the custom main-character name: sanitize +
-  // cap to MAX_CHARACTER_NAME_LEN, then reject empty/profane/unsafe text. The persistence layer
-  // re-sanitizes, but enforcing it here gives the learner immediate, inline feedback.
-  const checkName = (raw: string): { name: string } | { error: string } => {
-    const name = sanitizeUserInput(raw, MAX_CHARACTER_NAME_LEN)
-    if (!name) return { error: 'Enter a name using letters or numbers.' }
-    if (containsProfanity(name) || containsUnsafeContent(name)) {
-      return { error: 'That name isn’t allowed here — please choose another.' }
-    }
-    return { name }
-  }
-
   const addCharacter = () => {
     if (busy || atCharacterLimit) return
-    const result = checkName(draftName)
+    const result = validateCharacterName(draftName)
     if ('error' in result) {
       setCharacterError(result.error)
       return
@@ -160,7 +136,7 @@ export function InterestSelectionScreen({
     // A custom protagonist name goes through the same safety gate before we start.
     let resolvedMainName: string | undefined
     if (mainCharacterSource === 'custom') {
-      const result = checkName(mainCharacterName)
+      const result = validateCharacterName(mainCharacterName)
       if ('error' in result) {
         setMainNameError(result.error)
         return
@@ -170,7 +146,7 @@ export function InterestSelectionScreen({
 
     // Fold the added custom-interest boxes into the single freeformInterest string (UI-only):
     // comma-join the already-sanitized entries and re-sanitize within the shared cap.
-    const freeform = sanitizeUserInput(customInterests.join(', '), MAX_FREEFORM_LENGTH)
+    const freeform = foldCustomInterests(customInterests)
     onBegin({
       interestIds: selected,
       ...(freeform ? { freeformInterest: freeform } : {}),

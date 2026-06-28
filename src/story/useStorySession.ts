@@ -22,7 +22,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChapterBeat,
   LessonStep,
-  SceneId,
   StorySession,
   StoryTheme,
   ThemedQuestion,
@@ -45,9 +44,22 @@ import { createStoryAI, type StoryAiEnv } from './createStoryAI'
 import { resolveProtagonist } from './resolveMainCharacter'
 import { themeWithSceneSetting } from './scenePremise'
 import { selectSceneForBeat } from './selectSceneForBeat'
-import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
-import { RETHEME_FALLBACK, fallbackProtagonist, storyFallbackBeat, type StoryBeatKind } from './storyPrompts'
+import type { RethemeResult, StoryAI } from './storyAi'
+import { RETHEME_FALLBACK, fallbackProtagonist } from './storyPrompts'
 import { isOutputSafe, moderateUserInput } from './safety'
+import {
+  buildCompactionNarrative,
+  buildRethemeRequest,
+  choiceRejectionMessage,
+  isProviderConfigured,
+  matcherFor,
+  messageFrom,
+  newestRecapChapter,
+  previousSceneId,
+  resolveBeatText,
+  sceneForBeat,
+  themedStepText,
+} from './storyBeats'
 import { sortStorySessionsByRecent } from './storyLibrary'
 import {
   CHECKPOINT_INTERVAL,
@@ -188,151 +200,6 @@ const COMPACT_THRESHOLD = 6
 const DEFAULT_PREMISE = 'A bright new adventure stretches out ahead, full of puzzles to solve.'
 
 const nowIso = (): string => new Date().toISOString()
-
-// The newest chapter whose RECAP can be looked back on from the checkpoint/outcome screens. On the
-// OUTCOME screen the current chapter's recap already holds its outcome (and the setup that prompted
-// it), so it is reviewable; on the CHECKPOINT screen it does not yet, so the newest reviewable recap
-// is the previous chapter. Returns 0 when nothing is reviewable (e.g. the very first checkpoint).
-const newestRecapChapter = (session: StorySession): number => {
-  const currentChapter = Math.floor(session.questionsSolvedTotal / CHECKPOINT_INTERVAL) + 1
-  const currentHasOutcome = Boolean(chapterBeatFor(session, currentChapter)?.outcomeText)
-  const newest = currentHasOutcome ? currentChapter : currentChapter - 1
-  return newest >= 1 && chapterBeatFor(session, newest) ? newest : 0
-}
-
-// Resolve the text to COMMIT for a narrated beat, given what the AI returned (or null on failure).
-// Guarantees two things the old single-canned-string path did not:
-//   1. DISTINCTNESS — the committed text never equals the immediately previous beat's text, so a
-//      learner's choice can never "reprint the same paragraph" (a failed continuation rotates through
-//      theme-aware fallback variants until it differs).
-//   2. THEME-AWARE FALLBACK — a failed/blocked/empty generation falls back to a per-beat, on-theme
-//      beat (storyFallbackBeat) instead of one generic canned bridge shared by every beat type.
-// Returns whether the committed text is a fallback so the caller can supply a default scene image.
-const resolveBeatText = (
-  session: StorySession,
-  generated: string | null,
-  kind: StoryBeatKind,
-): { text: string; isFallback: boolean } => {
-  const previous = session.segments[session.segments.length - 1]?.text.trim() ?? ''
-  const clean = (generated ?? '').trim()
-  if (clean && isOutputSafe(clean) && clean !== previous) return { text: clean, isFallback: false }
-  // Fallback: rotate variants so a duplicate (or a run of fallbacks) never repeats the prior beat.
-  const base = session.segments.length
-  for (let offset = 0; offset < 4; offset += 1) {
-    const candidate = storyFallbackBeat(kind, session.theme, base + offset).trim()
-    if (candidate && candidate !== previous) return { text: candidate, isFallback: true }
-  }
-  return { text: storyFallbackBeat(kind, session.theme, base), isFallback: true }
-}
-
-const messageFrom = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message ? error.message : fallback
-
-const choiceRejectionMessage = (reason?: string): string => {
-  if (reason === 'empty') return 'Type what you want to do next to continue the adventure.'
-  if (reason === 'profanity' || reason === 'unsafe') {
-    return "Let's keep the story friendly for everyone — try describing a different action."
-  }
-  return 'Try describing your next move a little differently.'
-}
-
-// A provider is "configured" purely from env, WITHOUT loading any SDK (the dynamic import only
-// happens lazily in `ensureAi`, so opening CourseMap never pulls in @google/genai).
-const isProviderConfigured = (env: StoryAiEnv): boolean => {
-  // The proxy provider keeps the key server-side; it's configured once the proxy URL is set
-  // (createProxyProvider requires VITE_STORY_AI_PROXY_URL).
-  if (env.VITE_STORY_AI_PROVIDER === 'proxy') return Boolean(env.VITE_STORY_AI_PROXY_URL)
-  if (env.VITE_STORY_AI_PROVIDER === 'firebase') return true
-  // Direct OpenAI developer key (the user's OPENAI_API_KEY, or a VITE_OPENAI_API_KEY fallback) —
-  // mirrors the selection in createStoryAI so the entry gate matches the live provider.
-  if ((env.OPENAI_API_KEY ?? env.VITE_OPENAI_API_KEY ?? '').trim()) return true
-  return Boolean(env.VITE_GEMINI_API_KEY)
-}
-
-// The image shown on the immediately-previous beat (if any), so a new beat can avoid repeating the
-// same background back-to-back — the visual analogue of resolveBeatText's previous-text de-dupe.
-const previousSceneId = (session: StorySession): SceneId | undefined =>
-  session.segments[session.segments.length - 1]?.sceneId
-
-// Build the interest->scene matcher (rules 5 & 6) from the adapter, or undefined when there is no
-// adapter / the adapter has no matcher. It is INJECTED into `selectSceneForBeat`, the only impure
-// part of the otherwise-pure dispatcher; the non-null assertion is guarded by the preceding check.
-const matcherFor = (
-  ai: StoryAI | null,
-): ((req: SceneMatchRequest) => Promise<SceneId | null>) | undefined =>
-  ai?.matchSceneToInterests ? (req) => ai.matchSceneToInterests!(req) : undefined
-
-// Resolve a scene image for a beat through the scene-selection DISPATCHER (`selectSceneForBeat`),
-// which routes the theme's interest-selection mode to the matching categorized rule (1-6) and folds
-// in the scene anti-repeat via `avoidSceneId`. A FALLBACK beat skips the (usually degraded) AI
-// matcher entirely — as before — so it resolves instantly to an offline, on-theme scene; a real beat
-// may consult the matcher for the custom modes (5 & 6). The dispatcher's `settingTieIn` flag matters
-// only at START (it seeds the premise), so a per-beat call reads just the chosen id and maps a null
-// pick (the degenerate empty-pool case) to "no image".
-const sceneForBeat = async (
-  ai: StoryAI | null,
-  theme: StoryTheme,
-  isFallback: boolean,
-  avoidSceneId: SceneId | undefined,
-): Promise<SceneId | undefined> => {
-  const matcher = isFallback ? undefined : matcherFor(ai)
-  const selection = await selectSceneForBeat(theme, { matcher, avoidSceneId })
-  return selection.sceneId ?? undefined
-}
-
-// Build the re-theme request from a bundled step: display text + option/tile labels only, never
-// the answer key (accept/correctId/correctOrder stay in the original object).
-const buildRethemeRequest = (theme: StoryTheme, narrative: string, step: LessonStep): RethemeRequest => {
-  if (step.type === 'mcq') {
-    return {
-      theme,
-      recentNarrative: narrative,
-      stepType: 'mcq',
-      prompt: step.prompt,
-      options: step.options.map((option) => ({ id: option.id, label: option.label })),
-    }
-  }
-  if (step.type === 'operation-choice') {
-    return {
-      theme,
-      recentNarrative: narrative,
-      stepType: 'operation-choice',
-      prompt: step.prompt,
-      ...(step.equation ? { equation: step.equation } : {}),
-      options: step.choices.map((choice) => ({ id: choice.id, label: choice.label })),
-    }
-  }
-  if (step.type === 'sequence') {
-    return {
-      theme,
-      recentNarrative: narrative,
-      stepType: 'sequence',
-      prompt: step.prompt,
-      ...(step.equation ? { equation: step.equation } : {}),
-      tiles: step.tiles.map((tile) => ({ id: tile.id, label: tile.label })),
-    }
-  }
-  // input (the only remaining rethemable type)
-  const equation = step.type === 'input' ? step.equation : undefined
-  const prompt = 'prompt' in step ? step.prompt : ''
-  return {
-    theme,
-    recentNarrative: narrative,
-    stepType: 'input',
-    prompt,
-    ...(equation ? { equation } : {}),
-  }
-}
-
-// All display text of a (themed) step, for the output-moderation pass before we show it.
-const themedStepText = (step: LessonStep): string => {
-  const parts: string[] = []
-  if ('prompt' in step && step.prompt) parts.push(step.prompt)
-  if (step.type === 'mcq') parts.push(...step.options.map((option) => option.label))
-  else if (step.type === 'operation-choice') parts.push(...step.choices.map((choice) => choice.label))
-  else if (step.type === 'sequence') parts.push(...step.tiles.map((tile) => tile.label))
-  return parts.join(' ')
-}
 
 export function useStorySession({
   backend,
@@ -640,10 +507,7 @@ export function useStorySession({
       if (current.segments.length <= COMPACT_THRESHOLD) return current
       const ai = await ensureAi()
       if (!ai) return current
-      const older = current.segments.slice(0, current.segments.length - KEEP_VERBATIM_SEGMENTS)
-      const narrative = [current.narrativeSummary, ...older.map((segment) => segment.text)]
-        .filter(Boolean)
-        .join('\n\n')
+      const narrative = buildCompactionNarrative(current)
       try {
         const summary = await ai.summarize({ narrative })
         const safeSummary = isOutputSafe(summary) && summary.trim() ? summary.trim() : current.narrativeSummary
