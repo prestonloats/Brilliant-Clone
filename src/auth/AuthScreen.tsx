@@ -9,9 +9,8 @@ type AuthScreenProps = {
 }
 
 export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
-  // Both providers now require a password: Firebase via Firebase Authentication, and local
-  // mode via an on-device salted-hash credential (no plaintext password is ever stored).
-  const requiresPassword = true
+  // Both providers require a password: Firebase via Firebase Authentication, and local mode via an
+  // on-device salted-hash credential (no plaintext password is ever stored).
   const [mode, setMode] = useState<AuthMode>('login')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -37,7 +36,7 @@ export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
 
     const validationError = validateAuthForm(
       { displayName, email, password, confirmPassword },
-      { mode, requiresPassword },
+      { mode, requiresPassword: true },
     )
     if (validationError) {
       setError(validationError)
@@ -48,12 +47,8 @@ export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
     setBusy(true)
     try {
       const signedIn = isSignup
-        ? await backend.auth.signUp({
-            displayName,
-            email,
-            ...(requiresPassword ? { password } : {}),
-          })
-        : await backend.auth.signIn(email, requiresPassword ? password : undefined)
+        ? await backend.auth.signUp({ displayName, email, password })
+        : await backend.auth.signIn(email, password)
       await onSignedIn(signedIn)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
@@ -124,18 +119,16 @@ export function AuthScreen({ backend, onSignedIn }: AuthScreenProps) {
             onChange={(event) => setEmail(event.target.value)}
           />
         </label>
-        {requiresPassword && (
-          <label>
-            Password
-            <input
-              autoComplete={isSignup ? 'new-password' : 'current-password'}
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-        )}
-        {requiresPassword && isSignup && (
+        <label>
+          Password
+          <input
+            autoComplete={isSignup ? 'new-password' : 'current-password'}
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        {isSignup && (
           <label>
             Confirm password
             <input
