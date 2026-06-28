@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { StorySession } from '../domain'
 import { MAX_USER_INPUT_LENGTH } from './safety'
+import { performanceCopy } from './performanceCopy'
 import { capitalizeFirst } from './storyLibrary'
 import { StorySceneImage } from './StorySceneImage'
 import { StoryScreenNav } from './StoryScreenNav'
@@ -42,6 +43,9 @@ export function StoryCheckpointScreen({
   // Monotonic chapter number driven by lifetime solves (the opening is Chapter 1, then one per
   // 5-question checkpoint) rather than raw segment count, which grows two-per-cycle.
   const chapterNumber = Math.floor(session.questionsSolvedTotal / CHECKPOINT_INTERVAL) + 1
+  // How the just-completed chapter's math went — shown so the learner sees their solving shaped what
+  // happens next in the story (the consequence beat above is generated from this same band).
+  const performance = session.lastChapterPerformance ? performanceCopy(session.lastChapterPerformance) : null
 
   const handleContinue = () => {
     if (!hasChoice || busy) return
@@ -62,6 +66,14 @@ export function StoryCheckpointScreen({
           <p className="eyebrow">{capitalizeFirst(session.theme.protagonist)}</p>
           <h1 className="story-chapter-title">Chapter {chapterNumber}</h1>
         </header>
+
+        {performance && (
+          <div className={`story-performance story-performance-${performance.band}`} role="status">
+            <span className="story-performance-tally">{performance.tally}</span>
+            <span className="story-performance-headline">{performance.headline}</span>
+            <span className="story-performance-note">{performance.note}</span>
+          </div>
+        )}
 
         <StorySceneImage sceneId={latestSegment?.sceneId} />
 

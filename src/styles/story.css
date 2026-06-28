@@ -1667,3 +1667,53 @@
     transition: none;
   }
 }
+
+/* Chapter performance banner: makes the math -> story link explicit on the checkpoint/outcome
+   screens. Color-coded by band, but kept warm/encouraging (no alarming red, even for a struggle). */
+.story-performance {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--story-performance-border, rgba(148, 163, 184, 0.4));
+  background: var(--story-performance-bg, rgba(148, 163, 184, 0.12));
+}
+
+.story-performance-tally {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.story-performance-headline {
+  font-weight: 700;
+}
+
+.story-performance-note {
+  font-size: 0.92rem;
+  opacity: 0.92;
+}
+
+.story-performance-flawless {
+  --story-performance-border: rgba(34, 197, 94, 0.5);
+  --story-performance-bg: rgba(34, 197, 94, 0.12);
+}
+
+.story-performance-strong {
+  --story-performance-border: rgba(59, 130, 246, 0.5);
+  --story-performance-bg: rgba(59, 130, 246, 0.12);
+}
+
+.story-performance-mixed {
+  --story-performance-border: rgba(245, 158, 11, 0.5);
+  --story-performance-bg: rgba(245, 158, 11, 0.12);
+}
+
+.story-performance-struggled {
+  --story-performance-border: rgba(249, 115, 22, 0.5);
+  --story-performance-bg: rgba(249, 115, 22, 0.12);
+}

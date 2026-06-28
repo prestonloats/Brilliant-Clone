@@ -1,4 +1,5 @@
 import type { StorySession } from '../domain'
+import { performanceCopy } from './performanceCopy'
 import { capitalizeFirst } from './storyLibrary'
 import { StorySceneImage } from './StorySceneImage'
 import { StoryScreenNav } from './StoryScreenNav'
@@ -44,6 +45,9 @@ export function StoryOutcomeScreen({
   // Same monotonic chapter number as the checkpoint that prompted this action — the outcome is
   // part of the same chapter, so the heading stays consistent across the two pages.
   const chapterNumber = Math.floor(session.questionsSolvedTotal / CHECKPOINT_INTERVAL) + 1
+  // The same chapter performance shown on the checkpoint, repeated here so the outcome of the choice
+  // is clearly tied to how the learner did (the outcome beat is generated from this same band).
+  const performance = session.lastChapterPerformance ? performanceCopy(session.lastChapterPerformance) : null
 
   return (
     <section className="screen-stack story-checkpoint-shell">
@@ -59,6 +63,14 @@ export function StoryOutcomeScreen({
           <h1 className="story-chapter-title">Chapter {chapterNumber}</h1>
           <p className="story-outcome-kicker">What happens next…</p>
         </header>
+
+        {performance && (
+          <div className={`story-performance story-performance-${performance.band}`} role="status">
+            <span className="story-performance-tally">{performance.tally}</span>
+            <span className="story-performance-headline">{performance.headline}</span>
+            <span className="story-performance-note">{performance.note}</span>
+          </div>
+        )}
 
         {chosenAction && (
           <div className="story-choice-made">
