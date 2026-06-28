@@ -47,9 +47,6 @@ export {
   getRecommendedPathLessonId,
 } from './engine/graph'
 
-export { selectNextQuestion, storyCandidateKey } from './engine/storyMode/selectNextQuestion'
-export type { SelectNextInput, StoryCandidate } from './engine/storyMode/selectNextQuestion'
-
 export {
   createVariantSeed,
   mulberry32,
