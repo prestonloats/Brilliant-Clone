@@ -22,7 +22,6 @@ import {
 } from '../src/story/safety'
 import {
   CALL_TO_ACTION_RULE,
-  CANNED_BRIDGE_SEGMENT,
   COMMITTED_PATH_RULE,
   GROUNDED_WORLD_RULE,
   HOOK_RULE,
@@ -42,7 +41,6 @@ import {
   buildStartStoryPrompt,
   buildSummarizePrompt,
   callWithBackoff,
-  callWithFallback,
   isQuotaError,
   parseRethemeResult,
   withTimeout,
@@ -329,29 +327,6 @@ test('callWithBackoff does not retry non-quota errors', async () => {
   )
   assert.equal(calls, 1)
   assert.equal(delays.length, 0)
-})
-
-// --- callWithFallback --------------------------------------------------------
-
-test('callWithFallback returns the value on success', async () => {
-  const out = await callWithFallback(async () => 'value', 'fallback')
-  assert.equal(out, 'value')
-})
-
-test('callWithFallback returns the fallback after persistent quota failure', async () => {
-  const { sleep } = makeSleepSpy()
-  const out = await callWithFallback(async () => {
-    throw { status: 429 }
-  }, 'safe-fallback', { retries: 2, sleep, rng: () => 0 })
-  assert.equal(out, 'safe-fallback')
-})
-
-test('callWithFallback returns the fallback when the call times out', async () => {
-  const out = await callWithFallback(() => new Promise<string>(() => {}), 'timed-fallback', {
-    timeoutMs: 10,
-    retries: 0,
-  })
-  assert.equal(out, 'timed-fallback')
 })
 
 // --- prompt builders ---------------------------------------------------------
@@ -1146,15 +1121,6 @@ test('the question re-theme is NOT given the ~2-paragraph rule, only a tight sce
   // ...but it still gets a brief floor so the scene isn't a single bare sentence (and isn't padded).
   assert.match(retheme, /1 to 2 short sentences/i)
   assert.match(retheme, /do not pad it into a long passage/i)
-})
-
-test('the canned fallback beat is itself about two short paragraphs (not a one-line stub)', () => {
-  // The safe fallback shown when generation fails/blocks should read like a real beat: two
-  // paragraphs separated by a blank line, several sentences total.
-  const paragraphs = CANNED_BRIDGE_SEGMENT.split(/\n{2,}/).filter((p) => p.trim().length > 0)
-  assert.equal(paragraphs.length, 2)
-  const sentences = CANNED_BRIDGE_SEGMENT.split(/[.!?]+/).filter((s) => s.trim().length > 0)
-  assert.ok(sentences.length >= 4, `expected >= 4 sentences, got ${sentences.length}`)
 })
 
 // --- theme fidelity: stay strictly within the chosen interest(s), no genre-mixing -----------

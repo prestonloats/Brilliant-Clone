@@ -32,12 +32,6 @@ export const STORY_TIMEOUTS = {
   scene: 8000,
 } as const
 
-// Shown when a checkpoint segment cannot be generated (failure/timeout/quota/safety block). Kept to
-// about two short paragraphs so this safe fallback reads like a real beat, not a one-line stub, on
-// the rare turns it is used (it never weakens the safety gating that may select it).
-export const CANNED_BRIDGE_SEGMENT =
-  'You press on, deeper into the adventure. The path ahead is calm for now, giving you a quiet moment to catch your breath and take in everything around you.\n\nThere is still a long way to go, and new challenges are waiting somewhere up ahead. For now, it is a good moment to steady yourself and sharpen your skills before the next one arrives.'
-
 // Returned by an adapter when a re-theme call fails; the empty prompt makes `applyRetheme`
 // fall back to the original (un-themed) question.
 export const RETHEME_FALLBACK: RethemeResult = { themedPrompt: '' }
@@ -95,7 +89,7 @@ const capitalizeFirst = (value: string): string =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : value
 
 // Theme-aware OFFLINE fallbacks for the three NARRATED beat types, used when the AI provider is
-// unavailable or a generation fails/blocks. The old single CANNED_BRIDGE_SEGMENT made a failed
+// unavailable or a generation fails/blocks. The old single canned bridge segment made a failed
 // continuation reprint the opening VERBATIM (so a learner's choice looked like it "did nothing");
 // these are DISTINCT per beat type and per `variant`, and they fold in the chosen interests +
 // protagonist so a fallback chapter still reads on-theme. `opening`/`bridge` lead toward an in-story
@@ -821,23 +815,5 @@ export async function callWithBackoff<T>(fn: () => Promise<T>, options: BackoffO
       await sleep(Math.round(cap * rng())) // full jitter in [0, cap]
       attempt += 1
     }
-  }
-}
-
-// Wrap a call in (optional timeout +) backoff and, on any final failure, resolve to a
-// graceful fallback value instead of throwing — so the learner is never hard-blocked.
-export async function callWithFallback<T>(
-  fn: () => Promise<T>,
-  fallback: T,
-  options: BackoffOptions & { timeoutMs?: number; label?: string } = {},
-): Promise<T> {
-  const { timeoutMs, label, ...backoff } = options
-  try {
-    return await callWithBackoff(
-      () => (timeoutMs ? withTimeout(fn(), timeoutMs, label) : fn()),
-      backoff,
-    )
-  } catch {
-    return fallback
   }
 }
