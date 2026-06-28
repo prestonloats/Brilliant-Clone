@@ -34,6 +34,8 @@ export type {
   StoryTheme,
   StorySegment,
   ChapterBeat,
+  PerformanceBand,
+  ChapterPerformance,
   ThemedQuestion,
   StorySessionStatus,
   StorySession,

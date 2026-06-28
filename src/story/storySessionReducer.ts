@@ -7,7 +7,7 @@
 // `node --test` (the repo has no DOM/React test harness). `useStorySession` is the thin React
 // wrapper that wires these transitions to the backend, the selector, and the StoryAI adapter.
 
-import type { ChapterBeat, SceneId, StorySession, StoryTheme, ThemedQuestion } from '../domain'
+import type { ChapterBeat, ChapterPerformance, PerformanceBand, SceneId, StorySession, StoryTheme, ThemedQuestion } from '../domain'
 
 // A checkpoint fires after this many solved questions (every 5).
 export const CHECKPOINT_INTERVAL = 5
@@ -87,9 +87,52 @@ export function isCheckpointDue(session: StorySession): boolean {
   return session.questionsSinceCheckpoint >= CHECKPOINT_INTERVAL
 }
 
-// Start the next chapter's countdown (the lifetime total is intentionally untouched).
+// Start the next chapter's countdown (the lifetime total is intentionally untouched). Also clears
+// the per-chapter first-try tally — capture it with `captureChapterPerformance` BEFORE calling this.
 export function resetCheckpoint(session: StorySession, now: string = nowIso()): StorySession {
-  return { ...session, questionsSinceCheckpoint: 0, updatedAt: now }
+  const next = { ...session, questionsSinceCheckpoint: 0, updatedAt: now }
+  delete next.chapterScore
+  return next
+}
+
+// Record one FIRST-TRY result into the current chapter's running tally. The caller
+// (recordPracticeAttempt) dedupes per question and only records at the live edge, so each chapter
+// question counts exactly once. Pure.
+export function recordChapterAttempt(session: StorySession, firstTryCorrect: boolean, now: string = nowIso()): StorySession {
+  const prev = session.chapterScore ?? { firstTryCorrect: 0, answered: 0 }
+  return {
+    ...session,
+    chapterScore: {
+      firstTryCorrect: prev.firstTryCorrect + (firstTryCorrect ? 1 : 0),
+      answered: prev.answered + 1,
+    },
+    updatedAt: now,
+  }
+}
+
+// Classify a chapter's first-try tally into a narrative band. Ratio-based (not a fixed count) so it
+// degrades gracefully when a chapter ends with fewer than CHECKPOINT_INTERVAL answered. With the
+// default 5-question chapter this yields: 5 -> flawless, 4 -> strong, 2-3 -> mixed, 0-1 -> struggled.
+export function chapterPerformanceBand(firstTryCorrect: number, answered: number): PerformanceBand {
+  if (answered <= 0) return 'mixed'
+  if (firstTryCorrect >= answered) return 'flawless'
+  const ratio = firstTryCorrect / answered
+  if (ratio >= 0.8) return 'strong'
+  if (ratio >= 0.4) return 'mixed'
+  return 'struggled'
+}
+
+// Snapshot the just-completed chapter's performance into `lastChapterPerformance`, derived from the
+// running tally. Call at the checkpoint BEFORE `resetCheckpoint` clears the tally. With no recorded
+// attempts (legacy/empty) it yields a neutral 'mixed' band.
+export function captureChapterPerformance(session: StorySession, now: string = nowIso()): StorySession {
+  const score = session.chapterScore ?? { firstTryCorrect: 0, answered: 0 }
+  const performance: ChapterPerformance = {
+    band: chapterPerformanceBand(score.firstTryCorrect, score.answered),
+    firstTryCorrect: score.firstTryCorrect,
+    answered: score.answered,
+  }
+  return { ...session, lastChapterPerformance: performance, updatedAt: now }
 }
 
 // Append a narrative beat, numbering it after the existing segments. An optional `sceneId` (a

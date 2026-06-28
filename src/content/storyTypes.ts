@@ -531,6 +531,19 @@ export type ChapterBeat = {
   outcomeSceneId?: SceneId // the outcome beat's matched background image (omitted when absent)
 }
 
+// How the learner did, by FIRST-TRY correctness, on the questions of ONE chapter (the run of
+// CHECKPOINT_INTERVAL questions between checkpoints). Because questions are re-served until solved,
+// this measures fluency/effort, not pass/fail. It drives the narrative consequence the NEXT chapter
+// opens with (see useStorySession + storyPrompts). `answered` is the denominator so the band stays
+// meaningful if a chapter ends early (e.g. the question catalog is exhausted).
+export type PerformanceBand = 'flawless' | 'strong' | 'mixed' | 'struggled'
+
+export type ChapterPerformance = {
+  band: PerformanceBand
+  firstTryCorrect: number
+  answered: number
+}
+
 // The result of re-theming one bundled LessonStep. We persist the *source identity* plus the
 // rethemed *display text*, never a second copy of the answer key.
 export type ThemedQuestion = {
@@ -575,6 +588,16 @@ export type StorySession = {
   // Progress toward the next checkpoint and lifetime totals.
   questionsSolvedTotal: number
   questionsSinceCheckpoint: number // resets to 0 at each checkpoint (fires at CHECKPOINT_INTERVAL)
+
+  // OPTIONAL/back-compatible: FIRST-TRY correctness tally for the CURRENT (in-progress) chapter,
+  // cleared at each checkpoint. Accumulated as questions are answered and read at the checkpoint to
+  // derive the chapter's performance band. Absent on legacy sessions / before the first answer.
+  chapterScore?: { firstTryCorrect: number; answered: number }
+  // OPTIONAL/back-compatible: the captured performance of the most-recently-COMPLETED chapter, set
+  // at the checkpoint BEFORE `chapterScore` resets. Threaded into the bridge/outcome/plan generation
+  // so the consequence reflects it, and shown on the checkpoint/outcome screens; persisted so a
+  // resume re-shows it. Overwritten at each checkpoint.
+  lastChapterPerformance?: ChapterPerformance
 
   // The LIVE question at the front edge of the story — the one whose correct answer advances
   // the loop. Persisted so a refresh/resume returns to the same themed question.
