@@ -12,9 +12,8 @@
 import type { StoryAI } from './storyAi'
 import { openAiKey, selectStoryProvider, type StoryAiEnv } from './selectStoryProvider'
 
-// Re-export the pure selection surface so existing importers keep using `./createStoryAI` unchanged.
-export { openAiKey, selectStoryProvider } from './selectStoryProvider'
-export type { StoryAiEnv, StoryProviderKind } from './selectStoryProvider'
+// Re-export the env type so existing importers can keep using `./createStoryAI` unchanged.
+export type { StoryAiEnv } from './selectStoryProvider'
 
 const modelOptions = (env: StoryAiEnv) =>
   env.VITE_STORY_AI_MODEL ? { primaryModel: env.VITE_STORY_AI_MODEL } : {}

@@ -674,11 +674,3 @@ const isOffInterestScene = (entry: SceneEntry): boolean => {
 export const OFF_INTEREST_SCENES: readonly SceneId[] = SCENERY_CATALOG.filter(isOffInterestScene).map(
   (entry) => entry.id,
 )
-
-// Pick ONE scene at random from the off-interest pool (rng injectable for deterministic tests).
-// Falls back to the neutral always-valid default if the pool is somehow empty.
-export const pickRandomOffInterestScene = (rng: () => number = Math.random): SceneId => {
-  if (OFF_INTEREST_SCENES.length === 0) return 'rolling-hills'
-  const index = Math.min(OFF_INTEREST_SCENES.length - 1, Math.floor(rng() * OFF_INTEREST_SCENES.length))
-  return OFF_INTEREST_SCENES[index]
-}

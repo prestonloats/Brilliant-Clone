@@ -27,7 +27,7 @@ const BY_ID = new Map<StoryInterestId, StoryInterest>(INTEREST_CATALOG.map((inte
 // story prompts read this to decide whether to invent a fantastical world or keep a believable
 // real-world setting (so e.g. a "sports"-only story never becomes the made-up kingdom "Sportania").
 // Additive only — it does not change INTEREST_CATALOG entries or the StoryInterest type.
-export const IMAGINATIVE_INTEREST_IDS: ReadonlySet<StoryInterestId> = new Set<StoryInterestId>(['space', 'fantasy'])
+const IMAGINATIVE_INTEREST_IDS: ReadonlySet<StoryInterestId> = new Set<StoryInterestId>(['space', 'fantasy'])
 
 // Whether a single interest's world is inherently imaginative (fantasy/sci-fi) vs grounded.
 export const isImaginativeInterest = (id: StoryInterestId): boolean => IMAGINATIVE_INTEREST_IDS.has(id)
