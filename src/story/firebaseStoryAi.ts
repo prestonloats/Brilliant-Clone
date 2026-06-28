@@ -6,31 +6,13 @@
 // off the client (protected by App Check at deploy). Same safety settings, models, and
 // StoryAI surface as the local adapter, so swapping local -> deployed is a factory change,
 // not an app-code change. The SDK is dynamic-imported for the same bundle reason, and all
-// testable logic lives in the shared `storyPrompts`/`safety`/`applyRetheme` helpers.
+// testable logic lives in the shared `storyPrompts`/`safety`/`applyRetheme` helpers + the
+// `buildStoryAI` factory; here we only wire the SDK transport (pre-built models per call kind).
 
+import { buildStoryAI, type StoryTransportPurpose } from './buildStoryAI'
 import type { FirebaseServices } from '../firebaseServices'
-import { isOutputSafe, moderateUserInput } from './safety'
-import { buildSceneMatchPrompt } from './sceneMatchPrompt'
-import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
-import {
-  RETHEME_FALLBACK,
-  STORY_MODELS,
-  STORY_RETRY,
-  STORY_TIMEOUTS,
-  SYSTEM_PREAMBLE,
-  buildContinuePrompt,
-  buildRethemePrompt,
-  buildScenePrompt,
-  buildSegmentPrompt,
-  buildStartStoryPrompt,
-  buildStoryBiblePrompt,
-  buildSummarizePrompt,
-  callWithBackoff,
-  isStringRecord,
-  parseRethemeResult,
-  parseSceneId,
-  withTimeout,
-} from './storyPrompts'
+import type { StoryAI } from './storyAi'
+import { STORY_MODELS, STORY_RETRY, STORY_TIMEOUTS, SYSTEM_PREAMBLE, callWithBackoff, withTimeout } from './storyPrompts'
 
 export type FirebaseStoryAiOptions = {
   primaryModel?: string
@@ -122,88 +104,23 @@ export async function createFirebaseStoryAI(
     return null
   }
 
-  // Prose beats THROW on failure/timeout/safety-block so the controller picks the right theme-aware,
-  // per-beat fallback (never reprinting the opening as an "outcome"). Transient failures were already
-  // retried inside `run`.
-  const runProse = async (prompt: string, timeoutMs: number): Promise<string> => {
-    const text = (await run(proseModels, prompt, timeoutMs))?.trim() ?? ''
-    if (!text || !isOutputSafe(text)) {
-      throw new Error('story-ai: prose generation failed or was blocked')
-    }
-    return text
+  // Per-purpose model list + deadline. This is the ONLY Firebase-specific knowledge the shared
+  // factory needs; the per-call generation config is baked into the pre-built models above, and the
+  // model fallback, retry, and timeout live in `run`. (pickScene + matchSceneToInterests share the
+  // deterministic sceneModels, exactly as before.)
+  const modelsFor: Record<StoryTransportPurpose, { models: Model[]; timeoutMs: number }> = {
+    start: { models: startModels, timeoutMs: STORY_TIMEOUTS.start },
+    retheme: { models: rethemeModels, timeoutMs: STORY_TIMEOUTS.retheme },
+    prose: { models: proseModels, timeoutMs: STORY_TIMEOUTS.prose },
+    bible: { models: bibleModels, timeoutMs: STORY_TIMEOUTS.bible },
+    scene: { models: sceneModels, timeoutMs: STORY_TIMEOUTS.scene },
+    summarize: { models: summarizeModels, timeoutMs: STORY_TIMEOUTS.summarize },
   }
 
-  return {
-    async startStory(theme) {
-      // Start THROWS on failure so the controller's catch uses its theme-aware opening fallback +
-      // interest-aware protagonist (instead of a canned opening + "the Explorer").
-      const raw = await run(startModels, buildStartStoryPrompt(theme), STORY_TIMEOUTS.start)
-      if (!raw) throw new Error('story-ai: start generation failed')
-      try {
-        const data: unknown = JSON.parse(raw)
-        if (
-          isStringRecord(data) &&
-          typeof data.premise === 'string' &&
-          typeof data.protagonist === 'string' &&
-          typeof data.opening === 'string' &&
-          isOutputSafe(`${data.premise} ${data.protagonist} ${data.opening}`)
-        ) {
-          return { premise: data.premise, protagonist: data.protagonist, opening: data.opening }
-        }
-      } catch {
-        /* fall through to throw */
-      }
-      throw new Error('story-ai: start response invalid or blocked')
+  return buildStoryAI({
+    generate: (prompt, purpose) => {
+      const { models, timeoutMs } = modelsFor[purpose]
+      return run(models, prompt, timeoutMs)
     },
-
-    async rethemeQuestion(req: RethemeRequest): Promise<RethemeResult> {
-      const raw = await run(rethemeModels, buildRethemePrompt(req), STORY_TIMEOUTS.retheme)
-      if (!raw) return RETHEME_FALLBACK
-      const parsed = parseRethemeResult(raw)
-      if (!parsed) return RETHEME_FALLBACK
-      const texts = [
-        parsed.themedPrompt,
-        ...(parsed.themedOptions ?? []).map((o) => o.label),
-        ...(parsed.themedTiles ?? []).map((t) => t.label),
-      ]
-      if (!texts.every((t) => isOutputSafe(t))) return RETHEME_FALLBACK
-      return parsed
-    },
-
-    async writeSegment(input) {
-      return runProse(buildSegmentPrompt(input), STORY_TIMEOUTS.prose)
-    },
-
-    async writeStoryBible(req) {
-      // The hidden plan: longer structured output, returned as-is. On any failure/empty/unsafe
-      // output we return '' so the controller keeps the existing plan (never throws), like summarize.
-      const text = (await run(bibleModels, buildStoryBiblePrompt(req), STORY_TIMEOUTS.bible))?.trim() ?? ''
-      return text && isOutputSafe(text) ? text : ''
-    },
-
-    async continueStory(input) {
-      const moderation = moderateUserInput(input.userChoice)
-      const safeChoice = moderation.ok ? moderation.sanitized : ''
-      return runProse(buildContinuePrompt({ ...input, userChoice: safeChoice }), STORY_TIMEOUTS.prose)
-    },
-
-    async pickScene(input) {
-      // One catalog id (or "none"); a failure/timeout or unknown id parses to null -> no image.
-      const raw = await run(sceneModels, buildScenePrompt(input), STORY_TIMEOUTS.scene)
-      return parseSceneId(raw)
-    },
-
-    async matchSceneToInterests(req: SceneMatchRequest) {
-      // Closest-match picker (rules 5 & 6): same tiny single-id classification as pickScene, matched
-      // against the candidate shortlist + interests. A failure/timeout, the NO_SCENE sentinel, or an
-      // unknown id all parse to null -> no image when nothing is close enough.
-      const raw = await run(sceneModels, buildSceneMatchPrompt(req), STORY_TIMEOUTS.scene)
-      return parseSceneId(raw)
-    },
-
-    async summarize(input) {
-      const text = (await run(summarizeModels, buildSummarizePrompt(input), STORY_TIMEOUTS.summarize))?.trim() ?? ''
-      return text && isOutputSafe(text) ? text : ''
-    },
-  }
+  })
 }

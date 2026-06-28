@@ -4,32 +4,21 @@
 // gitignored `VITE_GEMINI_API_KEY`. The SDK is dynamic-imported so it is only fetched when
 // Story Mode is entered (keeps the first-load bundle unaffected). This adapter stays THIN:
 // every prompt, JSON validation, timeout, retry/backoff, and fallback decision lives in the
-// shared, unit-tested helpers (`storyPrompts.ts`) and `applyRetheme`/`safety`; here we only
-// wire the SDK and apply output moderation.
+// shared, unit-tested helpers (`storyPrompts.ts` + the `buildStoryAI` factory) and
+// `applyRetheme`/`safety`; here we only wire the SDK transport (request shape, schemas, model
+// selection, generation config) and hand it to the factory.
 //
 // SECURITY: a client-embedded key is acceptable for LOCAL DEV ONLY. Do not ship this path
 // to a public bundle — use `firebaseStoryAi.ts` (App Check) or a proxy at deploy.
 
-import { isOutputSafe, moderateUserInput } from './safety'
-import { buildSceneMatchPrompt } from './sceneMatchPrompt'
-import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
+import { buildStoryAI, type StoryTransportPurpose } from './buildStoryAI'
+import type { StoryAI } from './storyAi'
 import {
-  RETHEME_FALLBACK,
   STORY_MODELS,
   STORY_RETRY,
   STORY_TIMEOUTS,
   SYSTEM_PREAMBLE,
-  buildContinuePrompt,
-  buildRethemePrompt,
-  buildScenePrompt,
-  buildSegmentPrompt,
-  buildStartStoryPrompt,
-  buildStoryBiblePrompt,
-  buildSummarizePrompt,
   callWithBackoff,
-  isStringRecord,
-  parseRethemeResult,
-  parseSceneId,
   withTimeout,
 } from './storyPrompts'
 
@@ -114,119 +103,29 @@ export async function createGeminiDeveloperStoryAI(
     }
   }
 
-  // Prose beats THROW on failure/timeout/safety-block instead of returning a canned string, so the
-  // controller can pick the right theme-aware, per-beat fallback (and can never reprint the opening
-  // verbatim as an "outcome"). Transient failures were already retried inside `generate`.
-  const generateProse = async (contents: string, timeoutMs: number): Promise<string> => {
-    const raw = await generate(contents, { temperature: 0.9, maxOutputTokens: 600 }, timeoutMs)
-    const text = (raw ?? '').trim()
-    // Output filtering (plan 5.6 layer 4): empty or unsafe output is a failure the caller handles.
-    if (!text || !isOutputSafe(text)) {
-      throw new Error('story-ai: prose generation failed or was blocked')
-    }
-    return text
+  // Per-purpose Gemini generation config (temperature, JSON schema, token budget) + deadline. This
+  // is the ONLY Gemini-specific knowledge the shared factory needs; the request shape, model
+  // fallback, retry, and timeout all live in `generate` above. (Unchanged from the previous inline
+  // calls: start caps at 600 tokens, re-theme/start emit structured JSON, scene is deterministic.)
+  const configFor: Record<StoryTransportPurpose, { config: Record<string, unknown>; timeoutMs: number }> = {
+    start: {
+      config: { temperature: 0.9, responseMimeType: 'application/json', responseSchema: startSchema, maxOutputTokens: 600 },
+      timeoutMs: STORY_TIMEOUTS.start,
+    },
+    retheme: {
+      config: { temperature: 0.7, responseMimeType: 'application/json', responseSchema: rethemeSchema },
+      timeoutMs: STORY_TIMEOUTS.retheme,
+    },
+    prose: { config: { temperature: 0.9, maxOutputTokens: 600 }, timeoutMs: STORY_TIMEOUTS.prose },
+    bible: { config: { temperature: 0.7, maxOutputTokens: 1200 }, timeoutMs: STORY_TIMEOUTS.bible },
+    scene: { config: { temperature: 0, maxOutputTokens: 32 }, timeoutMs: STORY_TIMEOUTS.scene },
+    summarize: { config: { temperature: 0.3, maxOutputTokens: 256 }, timeoutMs: STORY_TIMEOUTS.summarize },
   }
 
-  return {
-    async startStory(theme) {
-      // Start THROWS on failure (instead of returning a canned opening + "the Explorer"), so the
-      // controller's catch uses its theme-aware opening fallback + interest-aware protagonist.
-      const raw = await generate(
-        buildStartStoryPrompt(theme),
-        { temperature: 0.9, responseMimeType: 'application/json', responseSchema: startSchema, maxOutputTokens: 600 },
-        STORY_TIMEOUTS.start,
-      )
-      if (!raw) throw new Error('story-ai: start generation failed')
-      try {
-        const data: unknown = JSON.parse(raw)
-        if (
-          isStringRecord(data) &&
-          typeof data.premise === 'string' &&
-          typeof data.protagonist === 'string' &&
-          typeof data.opening === 'string' &&
-          isOutputSafe(`${data.premise} ${data.protagonist} ${data.opening}`)
-        ) {
-          return { premise: data.premise, protagonist: data.protagonist, opening: data.opening }
-        }
-      } catch {
-        /* fall through to throw */
-      }
-      throw new Error('story-ai: start response invalid or blocked')
+  return buildStoryAI({
+    generate: (prompt, purpose) => {
+      const { config, timeoutMs } = configFor[purpose]
+      return generate(prompt, config, timeoutMs)
     },
-
-    async rethemeQuestion(req: RethemeRequest): Promise<RethemeResult> {
-      const raw = await generate(
-        buildRethemePrompt(req),
-        { temperature: 0.7, responseMimeType: 'application/json', responseSchema: rethemeSchema },
-        STORY_TIMEOUTS.retheme,
-      )
-      if (!raw) return RETHEME_FALLBACK
-      const parsed = parseRethemeResult(raw)
-      if (!parsed) return RETHEME_FALLBACK
-      // Output moderation on every themed string; a hit forces the original question.
-      const texts = [
-        parsed.themedPrompt,
-        ...(parsed.themedOptions ?? []).map((o) => o.label),
-        ...(parsed.themedTiles ?? []).map((t) => t.label),
-      ]
-      if (!texts.every((t) => isOutputSafe(t))) return RETHEME_FALLBACK
-      return parsed
-    },
-
-    async writeSegment(input) {
-      return generateProse(buildSegmentPrompt(input), STORY_TIMEOUTS.prose)
-    },
-
-    async writeStoryBible(req) {
-      // The hidden plan: a longer, structured generation. A bigger token budget than a single beat
-      // so the ~250-450-word outline is not truncated. On any failure/empty/unsafe output we return
-      // '' so the controller keeps the existing plan (never throws into the play loop), like summarize.
-      const raw = await generate(
-        buildStoryBiblePrompt(req),
-        { temperature: 0.7, maxOutputTokens: 1200 },
-        STORY_TIMEOUTS.bible,
-      )
-      const text = (raw ?? '').trim()
-      return text && isOutputSafe(text) ? text : ''
-    },
-
-    async continueStory(input) {
-      // Input sanitization + moderation BEFORE the model (plan 5.6 layer 3). An unsafe or
-      // empty choice becomes blank so the prompt's "steer back safely" instruction applies.
-      const moderation = moderateUserInput(input.userChoice)
-      const safeChoice = moderation.ok ? moderation.sanitized : ''
-      return generateProse(buildContinuePrompt({ ...input, userChoice: safeChoice }), STORY_TIMEOUTS.prose)
-    },
-
-    async pickScene(input) {
-      // Deterministic, tiny output: ask for one catalog id (or "none"). Any failure/timeout or
-      // an unknown id parses to null, so the caller just shows no image.
-      const raw = await generate(
-        buildScenePrompt(input),
-        { temperature: 0, maxOutputTokens: 32 },
-        STORY_TIMEOUTS.scene,
-      )
-      return parseSceneId(raw)
-    },
-
-    async matchSceneToInterests(req: SceneMatchRequest) {
-      // Closest-match picker (rules 5 & 6): same tiny single-id classification as pickScene, but
-      // matched against the candidate shortlist + interests. A failure/timeout, the NO_SCENE
-      // sentinel, or an unknown id all parse to null -> the caller shows no image when nothing is
-      // close enough.
-      const raw = await generate(
-        buildSceneMatchPrompt(req),
-        { temperature: 0, maxOutputTokens: 32 },
-        STORY_TIMEOUTS.scene,
-      )
-      return parseSceneId(raw)
-    },
-
-    async summarize(input) {
-      const raw = await generate(buildSummarizePrompt(input), { temperature: 0.3, maxOutputTokens: 256 }, STORY_TIMEOUTS.summarize)
-      const text = (raw ?? '').trim()
-      // If summarization fails/blocks, keep the existing narrative untouched (empty signal).
-      return text && isOutputSafe(text) ? text : ''
-    },
-  }
+  })
 }

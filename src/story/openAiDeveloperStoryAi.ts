@@ -7,35 +7,25 @@
 // dynamic-imported so it only loads when Story Mode is actually entered (keeps the first-load bundle
 // unaffected, and keeps the node:test transpile from needing the dependency). Like the Gemini
 // adapter this stays THIN: every prompt, JSON validation, timeout, retry/backoff, and fallback
-// decision lives in the shared, unit-tested helpers (storyPrompts.ts) and safety.ts; here we only
-// wire the SDK transport and apply output moderation.
+// decision lives in the shared, unit-tested helpers (storyPrompts.ts + the `buildStoryAI` factory)
+// and safety.ts; here we only wire the SDK transport and the output moderation pass.
 //
 // SECURITY: a client-embedded key is acceptable for LOCAL DEV ONLY — it is inlined into the public
 // client build and visible to anyone who loads the app, and an OpenAI key is billable. Do NOT ship
 // this path to a public bundle: use the same-origin proxy provider (openAiStoryAi.ts + devProxy/) or
 // Firebase AI Logic (firebaseStoryAi.ts) at deploy so the key stays server-side. Because OpenAI text
 // generation has no inline safety filter (unlike Gemini's safetySettings), the untrusted user choice
-// also gets a free OpenAI Moderations pass in addition to the local safety helpers.
+// also gets a free OpenAI Moderations pass (handed to the factory as `moderateRawChoice`).
 
+import { buildStoryAI, type StoryTransportPurpose } from './buildStoryAI'
 import { OPENAI_MODERATION_MODEL, extractCompletionText, extractModerationFlag, isReasoningModel } from './openAiProxyProtocol'
-import { isOutputSafe, moderateUserInput } from './safety'
-import { buildSceneMatchPrompt } from './sceneMatchPrompt'
-import type { RethemeRequest, RethemeResult, SceneMatchRequest, StoryAI } from './storyAi'
+import type { StoryAI } from './storyAi'
 import {
-  RETHEME_FALLBACK,
+  STORY_RETRY,
   STORY_TIMEOUTS,
   SYSTEM_PREAMBLE,
-  buildContinuePrompt,
-  buildRethemePrompt,
-  buildScenePrompt,
-  buildSegmentPrompt,
-  buildStartStoryPrompt,
-  buildStoryBiblePrompt,
-  buildSummarizePrompt,
   callWithBackoff,
   isTransientError,
-  parseRethemeResult,
-  parseSceneId,
   withTimeout,
 } from './storyPrompts'
 
@@ -58,10 +48,11 @@ class EmptyCompletionError extends Error {
 }
 
 // Bounded retries on TRANSIENT failures (429/5xx/timeout/network) PLUS an empty completion, mirroring
-// the proxy adapter so a reasoning model that returns no visible text is retried instead of dropping
-// straight to bare fallbacks. Non-transient errors (bad request / auth / safety) still fail fast.
-const STORY_RETRY = {
-  retries: 2,
+// the proxy adapter (same name + shape, derived from the shared STORY_RETRY budget) so a reasoning
+// model that returns no visible text is retried instead of dropping straight to bare fallbacks.
+// Non-transient errors (bad request / auth / safety) still fail fast.
+const EMPTY_AWARE_RETRY = {
+  retries: STORY_RETRY.retries,
   isRetryable: (error: unknown) => error instanceof EmptyCompletionError || isTransientError(error),
 } as const
 
@@ -80,9 +71,6 @@ const MAX_TOKENS = {
   // part of this budget on hidden reasoning, so keep it generous so the outline is not starved.
   bible: 4000,
 } as const
-
-const isStringRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object'
 
 export async function createOpenAiDeveloperStoryAI(
   apiKey: string,
@@ -127,7 +115,7 @@ export async function createOpenAiDeveloperStoryAI(
         // Treat an empty completion as retryable (see EmptyCompletionError) instead of returning null.
         if (text === null || text.trim() === '') throw new EmptyCompletionError()
         return text
-      }, STORY_RETRY)
+      }, EMPTY_AWARE_RETRY)
     } catch {
       return null
     }
@@ -149,108 +137,23 @@ export async function createOpenAiDeveloperStoryAI(
     }
   }
 
-  // Prose beats THROW on failure/timeout/safety-block so the controller picks the right theme-aware,
-  // per-beat fallback (never reprinting the opening as an "outcome"). Transient failures were already
-  // retried inside `generate`.
-  const generateProse = async (prompt: string, timeoutMs: number): Promise<string> => {
-    const text = (await generate(prompt, { maxOutputTokens: MAX_TOKENS.prose }, timeoutMs))?.trim() ?? ''
-    if (!text || !isOutputSafe(text)) {
-      throw new Error('story-ai: prose generation failed or was blocked')
-    }
-    return text
+  // Per-purpose Chat Completions config (JSON mode + token budget) + deadline. This is the ONLY
+  // OpenAI-specific knowledge the shared factory needs; the request shape, reasoning effort, retry,
+  // empty handling, and timeout all live in `generate`. (Unchanged from the previous inline calls.)
+  const optsFor: Record<StoryTransportPurpose, { json?: boolean; maxOutputTokens: number; timeoutMs: number }> = {
+    start: { json: true, maxOutputTokens: MAX_TOKENS.start, timeoutMs: STORY_TIMEOUTS.start },
+    retheme: { json: true, maxOutputTokens: MAX_TOKENS.retheme, timeoutMs: STORY_TIMEOUTS.retheme },
+    prose: { maxOutputTokens: MAX_TOKENS.prose, timeoutMs: STORY_TIMEOUTS.prose },
+    bible: { maxOutputTokens: MAX_TOKENS.bible, timeoutMs: STORY_TIMEOUTS.bible },
+    scene: { maxOutputTokens: MAX_TOKENS.scene, timeoutMs: STORY_TIMEOUTS.scene },
+    summarize: { maxOutputTokens: MAX_TOKENS.summarize, timeoutMs: STORY_TIMEOUTS.summarize },
   }
 
-  return {
-    async startStory(theme) {
-      // Start THROWS on failure so the controller's catch uses its theme-aware DEFAULT_OPENING +
-      // interest-aware protagonist (instead of a canned opening + "the Explorer").
-      const raw = await generate(
-        buildStartStoryPrompt(theme),
-        { json: true, maxOutputTokens: MAX_TOKENS.start },
-        STORY_TIMEOUTS.start,
-      )
-      if (!raw) throw new Error('story-ai: start generation failed')
-      try {
-        const data: unknown = JSON.parse(raw)
-        if (
-          isStringRecord(data) &&
-          typeof data.premise === 'string' &&
-          typeof data.protagonist === 'string' &&
-          typeof data.opening === 'string' &&
-          isOutputSafe(`${data.premise} ${data.protagonist} ${data.opening}`)
-        ) {
-          return { premise: data.premise, protagonist: data.protagonist, opening: data.opening }
-        }
-      } catch {
-        /* fall through to throw */
-      }
-      throw new Error('story-ai: start response invalid or blocked')
+  return buildStoryAI({
+    generate: (prompt, purpose) => {
+      const { json, maxOutputTokens, timeoutMs } = optsFor[purpose]
+      return generate(prompt, { json, maxOutputTokens }, timeoutMs)
     },
-
-    async rethemeQuestion(req: RethemeRequest): Promise<RethemeResult> {
-      const raw = await generate(
-        buildRethemePrompt(req),
-        { json: true, maxOutputTokens: MAX_TOKENS.retheme },
-        STORY_TIMEOUTS.retheme,
-      )
-      if (!raw) return RETHEME_FALLBACK
-      const parsed = parseRethemeResult(raw)
-      if (!parsed) return RETHEME_FALLBACK
-      // Output moderation on every themed string; a hit forces the original (un-themed) question.
-      const texts = [
-        parsed.themedPrompt,
-        ...(parsed.themedOptions ?? []).map((o) => o.label),
-        ...(parsed.themedTiles ?? []).map((t) => t.label),
-      ]
-      if (!texts.every((t) => isOutputSafe(t))) return RETHEME_FALLBACK
-      return parsed
-    },
-
-    async writeSegment(input) {
-      return generateProse(buildSegmentPrompt(input), STORY_TIMEOUTS.prose)
-    },
-
-    async writeStoryBible(req) {
-      // The hidden plan: longer structured output. On any failure/empty/unsafe output we return ''
-      // so the controller keeps the existing plan (never throws into the play loop), like summarize.
-      const raw = await generate(buildStoryBiblePrompt(req), { maxOutputTokens: MAX_TOKENS.bible }, STORY_TIMEOUTS.bible)
-      const text = (raw ?? '').trim()
-      return text && isOutputSafe(text) ? text : ''
-    },
-
-    async continueStory(input) {
-      // Input sanitization + local moderation BEFORE the model, then a free OpenAI Moderations pass
-      // on the raw choice as the model-side safety net. Any block blanks the choice so the prompt's
-      // "steer back safely" instruction applies instead.
-      const moderation = moderateUserInput(input.userChoice)
-      let safeChoice = moderation.ok ? moderation.sanitized : ''
-      if (safeChoice && (await isModerationFlagged(input.userChoice))) safeChoice = ''
-      return generateProse(buildContinuePrompt({ ...input, userChoice: safeChoice }), STORY_TIMEOUTS.prose)
-    },
-
-    async pickScene(input) {
-      // One catalog id (or "none"); a failure/timeout or unknown id parses to null -> no image.
-      const raw = await generate(buildScenePrompt(input), { maxOutputTokens: MAX_TOKENS.scene }, STORY_TIMEOUTS.scene)
-      return parseSceneId(raw)
-    },
-
-    async matchSceneToInterests(req: SceneMatchRequest) {
-      // Closest-match picker (rules 5 & 6): same tiny single-id classification as pickScene, matched
-      // against the candidate shortlist + interests. A failure/timeout, the NO_SCENE sentinel, or an
-      // unknown id all parse to null -> no image when nothing is close enough.
-      const raw = await generate(buildSceneMatchPrompt(req), { maxOutputTokens: MAX_TOKENS.scene }, STORY_TIMEOUTS.scene)
-      return parseSceneId(raw)
-    },
-
-    async summarize(input) {
-      const raw = await generate(
-        buildSummarizePrompt(input),
-        { maxOutputTokens: MAX_TOKENS.summarize },
-        STORY_TIMEOUTS.summarize,
-      )
-      const text = (raw ?? '').trim()
-      // If summarization fails/blocks, keep the existing narrative untouched (empty signal).
-      return text && isOutputSafe(text) ? text : ''
-    },
-  }
+    moderateRawChoice: isModerationFlagged,
+  })
 }
