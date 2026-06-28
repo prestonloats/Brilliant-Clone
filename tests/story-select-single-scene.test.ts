@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { SceneId, StoryInterestId } from '../src/domain'
+import type { SceneId } from '../src/domain'
 import { mulberry32 } from '../src/engine'
-import { singlesFor } from '../src/story/sceneCategories'
+import { SUGGESTED_INTEREST_IDS, singlesFor } from '../src/story/sceneCategories'
 import { selectSingleScene } from '../src/story/selectSingleScene'
 
-// The 8 suggested interests (mirrors StoryInterestId / INTEREST_CATALOG).
-const INTERESTS: StoryInterestId[] = ['space', 'fantasy', 'mystery', 'sports', 'animals', 'pirates', 'cooking', 'fashion']
+const INTERESTS = SUGGESTED_INTEREST_IDS
 
 // --- Rule 1: the pick always lands in the interest's pure single-topic pool --------------------
 

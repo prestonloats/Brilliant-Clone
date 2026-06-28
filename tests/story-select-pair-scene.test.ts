@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import type { SceneId, StoryInterestId } from '../src/domain'
 import { mulberry32 } from '../src/engine'
-import { interestsForScene, pairScenes, singlesFor } from '../src/story/sceneCategories'
+import { SUGGESTED_INTEREST_IDS, interestsForScene, pairScenes, singlesFor } from '../src/story/sceneCategories'
 import { isSceneId } from '../src/story/scenery'
 import {
   memberSingles,
@@ -12,8 +12,7 @@ import {
   selectPairScene,
 } from '../src/story/selectPairScene'
 
-// The 8 suggested interests (mirrors StoryInterestId / INTEREST_CATALOG).
-const INTERESTS: StoryInterestId[] = ['space', 'fantasy', 'mystery', 'sports', 'animals', 'pirates', 'cooking', 'fashion']
+const INTERESTS = SUGGESTED_INTEREST_IDS
 
 // Every unordered interest pair (C(8,2) = 28).
 const ALL_PAIRS: Array<[StoryInterestId, StoryInterestId]> = []

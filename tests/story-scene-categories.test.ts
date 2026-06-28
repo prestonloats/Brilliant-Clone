@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { StoryInterestId } from '../src/domain'
 import { SCENE_IDS } from '../src/story/scenery'
 import {
   SCENE_PRIMARY_INTERESTS,
+  SUGGESTED_INTEREST_IDS,
   interestsForScene,
   pairScenes,
   scenesForExactInterests,
@@ -13,8 +13,7 @@ import {
   uncommonScenes,
 } from '../src/story/sceneCategories'
 
-// The 8 suggested interests (mirrors StoryInterestId / INTEREST_CATALOG).
-const INTERESTS: StoryInterestId[] = ['space', 'fantasy', 'mystery', 'sports', 'animals', 'pirates', 'cooking', 'fashion']
+const INTERESTS = SUGGESTED_INTEREST_IDS
 const INTEREST_SET = new Set<string>(INTERESTS)
 
 // Order-insensitive set equality on interest id lists.

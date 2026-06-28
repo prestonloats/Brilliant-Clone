@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import type { SceneId, StoryInterestId } from '../src/domain'
 import { mulberry32 } from '../src/engine/storyMode/randomizeQuestionNumbers'
-import { pairScenes, singlesFor, tripleScenes } from '../src/story/sceneCategories'
+import { SUGGESTED_INTEREST_IDS, pairScenes, singlesFor, tripleScenes } from '../src/story/sceneCategories'
 import { SCENE_IDS, defaultSceneForInterests, isSceneId } from '../src/story/scenery'
 import { selectTripleScene } from '../src/story/selectTripleScene'
 
@@ -13,7 +13,7 @@ import { selectTripleScene } from '../src/story/selectTripleScene'
 // several after the ">=2 images per triple" coverage top-up), so the only way to exercise a fallback
 // is to feed an interest id that is NOT in the catalog (cast a plain string).
 
-const INTERESTS: StoryInterestId[] = ['space', 'fantasy', 'mystery', 'sports', 'animals', 'pirates', 'cooking', 'fashion']
+const INTERESTS = SUGGESTED_INTEREST_IDS
 
 // A NON-catalog interest id (forces the categorization lookups to return an empty pool, so a
 // fallback branch is taken). Widening `string` -> the union is a safe cast (no overlap warning).

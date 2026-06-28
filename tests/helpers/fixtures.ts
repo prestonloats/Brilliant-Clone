@@ -1,6 +1,6 @@
 import type { LessonProgress } from '../../src/domain'
 
-export const makeLessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
+export const lessonProgress = (userId: string, currentStepIndex = 2): LessonProgress => ({
   userId,
   lessonId: 'balancing-equations',
   status: 'inProgress',
@@ -15,5 +15,3 @@ export const makeLessonProgress = (userId: string, currentStepIndex = 2): Lesson
   startedAt: '2026-06-23T00:00:00.000Z',
   updatedAt: '2026-06-23T00:01:00.000Z',
 })
-
-export const lessonProgress = makeLessonProgress
