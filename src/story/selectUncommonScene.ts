@@ -11,12 +11,7 @@
 
 import type { SceneId } from '../content/storyTypes'
 import { uncommonScenes } from './sceneCategories'
-
-// The shared setting-selection return contract. Declared locally on purpose: the setting-selection
-// rules (R1–R4) ship as independent modules, so each keeps its own copy rather than editing a shared
-// file. `sceneId` is null only in the degenerate empty-pool case; `settingTieIn` flags that the
-// premise is built FROM the scene image rather than from chosen interests.
-export type SceneSelection = { sceneId: SceneId | null; settingTieIn?: boolean }
+import { pickFromPool } from './sceneSelection'
 
 // Pick one of the 67 zero-interest "uncommon" scenes uniformly at random. `avoidSceneId` is excluded
 // only while at least one other candidate remains (so consecutive beats don't repeat the same
@@ -25,15 +20,8 @@ export function selectUncommonScene(
   opts?: { rng?: () => number; avoidSceneId?: SceneId },
 ): { sceneId: SceneId | null; settingTieIn: true } {
   const rng = opts?.rng ?? Math.random
-  const avoid = opts?.avoidSceneId
-  const pool = uncommonScenes()
-
-  // Drop the avoided scene only when doing so leaves an alternative — never empty the pool.
-  const candidates = avoid !== undefined && pool.length > 1 ? pool.filter((id) => id !== avoid) : pool
-  if (candidates.length === 0) return { sceneId: null, settingTieIn: true }
-
-  // Clamp the index so an rng() returning exactly 1 (Math.random never does, but an injected rng
-  // could) can't index past the end of the array.
-  const index = Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))
-  return { sceneId: candidates[index], settingTieIn: true }
+  // The chosen image's setting becomes the premise, so always flag settingTieIn. pickFromPool drops
+  // the avoided scene only while an alternative remains, clamps the draw, and returns null only when
+  // the pool is empty.
+  return { sceneId: pickFromPool(uncommonScenes(), rng, opts?.avoidSceneId), settingTieIn: true }
 }

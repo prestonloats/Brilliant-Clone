@@ -21,12 +21,8 @@
 import type { SceneId, StoryTheme } from '../content/storyTypes'
 import { uncommonScenes } from './sceneCategories'
 import { SCENE_IDS } from './scenery'
+import { pickFromPool, type SceneSelection } from './sceneSelection'
 import type { SceneMatchRequest } from './storyAi'
-
-// The shared return contract for the rule-4/5/6 scene selectors: the chosen image (or null when no
-// image should be shown) plus an OPTIONAL flag telling the integrator to ground the story in the
-// chosen image's SETTING. Defined locally so this module stays independent of the sibling rules.
-export type SceneSelection = { sceneId: SceneId | null; settingTieIn?: boolean }
 
 export type SelectCustomOnlyOptions = {
   // Closest-match scene picker (the StoryAI seam). Omitted in offline / AI-unavailable paths.
@@ -35,17 +31,6 @@ export type SelectCustomOnlyOptions = {
   rng?: () => number
   // The immediately-previous beat's image, avoided when picking the uncommon fallback (if possible).
   avoidSceneId?: SceneId
-}
-
-// Pick ONE uncommon scene at random, excluding `avoidSceneId` when doing so still leaves a choice.
-// Mirrors `pickRandomOffInterestScene`'s clamped draw so the index can never fall out of range.
-function pickUncommonScene(rng: () => number, avoidSceneId?: SceneId): SceneId | null {
-  const pool = uncommonScenes()
-  if (pool.length === 0) return null
-  const filtered = avoidSceneId ? pool.filter((id) => id !== avoidSceneId) : pool
-  const candidates = filtered.length > 0 ? filtered : pool
-  const index = Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))
-  return candidates[index]
 }
 
 export async function selectCustomOnlyScene(
@@ -66,5 +51,5 @@ export async function selectCustomOnlyScene(
 
   // 3. No close match: ground the story in a random uncommon image's SETTING.
   const rng = opts.rng ?? Math.random
-  return { sceneId: pickUncommonScene(rng, opts.avoidSceneId), settingTieIn: true }
+  return { sceneId: pickFromPool(uncommonScenes(), rng, opts.avoidSceneId), settingTieIn: true }
 }

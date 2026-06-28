@@ -12,16 +12,12 @@
 import type { SceneId, StoryInterestId } from '../content/storyTypes'
 import { singlesFor } from './sceneCategories'
 import { defaultSceneForInterests } from './scenery'
-
-// A 0..1 random source, injectable so the pick is deterministic/seedable in tests (mirrors the
-// engine's `Rng`). Defined locally so this rule shares the structural selection contract
-// (`{ sceneId: SceneId | null; settingTieIn?: boolean }`) without importing it.
-type Rng = () => number
+import { pickFromPool, type Rng, type SceneSelection } from './sceneSelection'
 
 export function selectSingleScene(
   interest: StoryInterestId,
   opts?: { rng?: Rng; avoidSceneId?: SceneId },
-): { sceneId: SceneId | null } {
+): SceneSelection {
   const rng = opts?.rng ?? Math.random
 
   const pool = singlesFor(interest)
@@ -30,14 +26,7 @@ export function selectSingleScene(
     return { sceneId: defaultSceneForInterests({ interestIds: [interest] }, rng) }
   }
 
-  // Scene anti-repeat: drop the just-shown scene, but only when an alternative remains (a 1-scene
-  // pool keeps its only scene). Harmless no-op when `avoidSceneId` is absent or not in the pool.
-  const candidates =
-    opts?.avoidSceneId !== undefined && pool.length > 1
-      ? pool.filter((id) => id !== opts.avoidSceneId)
-      : pool
-
-  // Uniform pick; the clamp guards the `rng() === 1` edge so the index stays in range.
-  const index = Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))
-  return { sceneId: candidates[index] }
+  // Uniform pick with a one-step anti-repeat (drops the just-shown scene only when an alternative
+  // remains, clamping the draw). pickFromPool returns null only for an empty pool (ruled out above).
+  return { sceneId: pickFromPool(pool, rng, opts?.avoidSceneId) }
 }

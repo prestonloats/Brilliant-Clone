@@ -23,17 +23,11 @@
 import type { SceneId, StoryInterestId } from '../content/storyTypes'
 import { pairScenes, singlesFor } from './sceneCategories'
 import { defaultSceneForInterests } from './scenery'
+import { dedupe, pickFromPool, type Rng, type SceneSelection } from './sceneSelection'
 
-// SHARED RETURN CONTRACT (kept identical across every selection rule so the caller can combine them):
-// the chosen scene (or null when a rule cannot resolve one) plus an optional flag a rule may set when
-// the scene is a looser "setting tie-in" rather than an exact match. Rule 2 only ever sets `sceneId`.
-export type SceneSelection = { sceneId: SceneId | null; settingTieIn?: boolean }
-
-type Rng = () => number
-
-// Order-preserving de-duplication (Set keeps first-seen insertion order), so the fallback pool lists
-// `a`'s singles before `b`'s and the pick stays deterministic under a fixed rng.
-const dedupe = (ids: readonly SceneId[]): SceneId[] => [...new Set(ids)]
+// Re-exported so existing importers (and the pair-scene tests) keep getting these from this module.
+export { pickFromPool }
+export type { SceneSelection }
 
 // The MISSING-COMBO fallback pool: the union of each member interest's pure single-topic scenes,
 // deduped. Exported so the (defensive) fallback path is unit-testable without forcing an empty pair.
@@ -48,18 +42,6 @@ export function pairSceneCandidates(a: StoryInterestId, b: StoryInterestId): Sce
   const primary = pairScenes(a, b)
   if (primary.length > 0) return primary
   return memberSingles(a, b)
-}
-
-// Pick ONE scene from an ordered pool, excluding `avoid` ONLY when an alternative remains (so a
-// one-scene pool never yields nothing just because the last scene matched). The rng draw is clamped
-// (`Math.min(len-1, ...)`) exactly like the rest of the scenery layer so an rng of 1.0 stays in
-// bounds. Returns null for an empty pool. Pure: depends only on (pool, rng draw, avoid).
-export function pickFromPool(pool: readonly SceneId[], rng: Rng, avoid?: SceneId): SceneId | null {
-  if (pool.length === 0) return null
-  const filtered = avoid ? pool.filter((id) => id !== avoid) : pool
-  const finalPool = filtered.length > 0 ? filtered : pool
-  const index = Math.min(finalPool.length - 1, Math.floor(rng() * finalPool.length))
-  return finalPool[index]
 }
 
 // Rule 2: select a background scene for the interest PAIR {a, b}. See the cascade documented above.

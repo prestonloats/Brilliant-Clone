@@ -18,14 +18,8 @@
 import type { SceneId, StoryInterestId, StoryTheme } from '../content/storyTypes'
 import { pairScenes, singlesFor, tripleScenes } from './sceneCategories'
 import { defaultSceneForInterests, scenesForInterests } from './scenery'
+import { dedupe, pickFromPool, type Rng } from './sceneSelection'
 import type { SceneMatchRequest } from './storyAi'
-
-// The shared return contract every scene-selection rule resolves to (defined locally so the rules
-// stay independent of one another). `settingTieIn` is unused by rule 5 but kept for cross-rule
-// shape parity so a future aggregator can treat every rule's result uniformly.
-export type SceneSelection = { sceneId: SceneId | null; settingTieIn?: boolean }
-
-type Rng = () => number
 
 type SelectOptions = {
   // Injected closest-match scene picker (a real SDK adapter in the app, a fake in tests). Optional
@@ -38,8 +32,6 @@ type SelectOptions = {
   avoidSceneId?: SceneId
 }
 
-const dedupe = (ids: readonly SceneId[]): SceneId[] => [...new Set(ids)]
-
 // Run the injected matcher, converting ANY rejection/throw into the "not matched" signal (null) so
 // the caller can degrade to the offline fallback. The non-empty catch keeps this lint-clean.
 const runMatcher = async (
@@ -51,17 +43,6 @@ const runMatcher = async (
   } catch {
     return null
   }
-}
-
-// One random draw from a pool, clamped like the foundation pickers so an rng() of exactly 1 still
-// lands in range. Excludes `avoid` ONLY when at least one other option remains. Returns null for an
-// empty pool so the caller can fall through to the next-broader pool / the offline default.
-const pickFromPool = (pool: readonly SceneId[], rng: Rng, avoid?: SceneId): SceneId | null => {
-  if (pool.length === 0) return null
-  const filtered = avoid == null ? pool : pool.filter((id) => id !== avoid)
-  const usable = filtered.length > 0 ? filtered : pool
-  const index = Math.min(usable.length - 1, Math.floor(rng() * usable.length))
-  return usable[index]
 }
 
 // The suggested-only candidate pool for the chosen interest count, mirroring rules 1-3:
