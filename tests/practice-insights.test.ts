@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { AttemptEvent, LessonId, SkillId, SkillPracticeState } from '../src/domain'
-import { computeRetention, skillForStepId, summarizePractice } from '../src/engine'
+import { computeRetention, PRACTICE_MASTERY_STREAK, skillForStepId, summarizePractice } from '../src/engine'
 
 const NOW = '2026-02-01T00:00:00.000Z'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -49,7 +49,7 @@ const storyAttempt = (archId: string, correct: boolean, at: string, ms = 1000): 
 test('summarizePractice rolls states into mastery levels and due counts', () => {
   const summary = summarizePractice(
     [
-      practiceState('one-step-equations', { proficiency: 0.95, streak: 4, dueAt: plusDays(2) }), // mastered, not due
+      practiceState('one-step-equations', { proficiency: 0.95, streak: PRACTICE_MASTERY_STREAK, dueAt: plusDays(2) }), // mastered, not due
       practiceState('two-step-equations', { proficiency: 0.6, streak: 1, dueAt: NOW }), // practiced, due
       practiceState('graphing-lines', { proficiency: 0.2, streak: 0, dueAt: plusDays(-1) }), // learning, due
     ],

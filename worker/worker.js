@@ -21,9 +21,15 @@
 const ALLOWED_ORIGINS = new Set([
   'https://starting-project-e6700.web.app',
   'https://starting-project-e6700.firebaseapp.com',
-  'http://localhost:5173', // vite dev
-  'http://localhost:4173', // vite preview
 ])
+
+// Allow the deploy domains above PLUS any localhost / 127.0.0.1 origin (ANY port) for local dev:
+// Vite picks a new port when one is busy (5173 -> 5174 -> ...), and pinning a single port made the
+// proxy 403 the dev server whenever it moved. Origin is NOT a real trust boundary anyway (a
+// non-browser client can spoof it), so the actual cost controls are the per-IP rate limit + model
+// allow-list + output/size caps + the OpenAI spend cap — none of which this loosens.
+const isAllowedOrigin = (origin) =>
+  ALLOWED_ORIGINS.has(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
 // Mirrors OPENAI_MODERATION_MODEL in src/story/openAiProxyProtocol.ts.
@@ -147,7 +153,7 @@ const callOpenAi = (path, apiKey, body) =>
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || ''
-    const allowed = ALLOWED_ORIGINS.has(origin)
+    const allowed = isAllowedOrigin(origin)
 
     // CORS preflight.
     if (request.method === 'OPTIONS') {

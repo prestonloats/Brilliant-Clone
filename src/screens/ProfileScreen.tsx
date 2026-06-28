@@ -1,21 +1,26 @@
 import { useState } from 'react'
-import { skills, type StorySession, type UserProfile } from '../domain'
+import { skills, type AttemptEvent, type SkillPracticeState, type StorySession, type UserProfile } from '../domain'
 import type { Backend } from '../backend'
+import { computeRetention, skillForStepId, summarizePractice } from '../engine'
 import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '../authValidation'
 import { computeStoryModeStats } from '../story/storyStats'
 import { capitalizeFirst } from '../story/storyLibrary'
+import { PracticeInsightsPanel } from '../story/PracticeInsightsPanel'
 
 export function ProfileScreen({
   user,
   mastery,
   attempts,
+  practice,
   storySessions,
   backendProvider,
   onSaveDisplayName,
 }: {
   user: UserProfile
   mastery: { skillId: string; score: number; attempts: number; correct: number }[]
-  attempts: { id: string }[]
+  attempts: AttemptEvent[]
+  // Per-skill Story Mode practice state (Phase 3 learning science) -> the Practice mastery panel.
+  practice: SkillPracticeState[]
   // Every saved Story Mode adventure for this user; aggregated into the highlights panel below.
   storySessions: StorySession[]
   backendProvider: Backend['provider']
@@ -24,6 +29,8 @@ export function ProfileScreen({
 }) {
   const providerLabel = backendProvider === 'firebase' ? 'Firebase user ID' : 'Local demo profile ID'
   const storyStats = computeStoryModeStats(storySessions)
+  const practiceSummary = summarizePractice(practice)
+  const retention = computeRetention(attempts, skillForStepId)
 
   const [name, setName] = useState(user.displayName)
   const [saving, setSaving] = useState(false)
@@ -141,9 +148,13 @@ export function ProfileScreen({
         })}
       </div>
 
-      <section className="story-stats card" aria-labelledby="story-stats-heading">
+      <section className="card story-mode-card" aria-label="Story Mode">
         <p className="eyebrow">Story Mode</p>
-        <h2 id="story-stats-heading">Your adventures</h2>
+
+        <PracticeInsightsPanel summary={practiceSummary} retention={retention} />
+
+        <section className="story-mode-section" aria-labelledby="story-stats-heading">
+          <h3 id="story-stats-heading">Your adventures</h3>
         {storyStats.hasPlayed ? (
           <>
             <p className="story-stats-sub">
@@ -206,6 +217,7 @@ export function ProfileScreen({
         ) : (
           <p className="story-empty">No adventures yet — head to Story Mode to start your first one.</p>
         )}
+        </section>
       </section>
 
       <p className="fine-print">Recorded {backendProvider} attempt events: {attempts.length}</p>

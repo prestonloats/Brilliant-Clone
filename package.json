@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test:ci": "npm run typecheck && npm test",
     "preview": "vite preview",
+    "demo:ls": "node tests/build-tests.mjs && node scripts/demo-learning-science.mjs",
     "optimize:images": "node scripts/optimize-scenery.mjs",
     "deploy": "npm run build && firebase deploy --only hosting --project starting-project-e6700"
   },

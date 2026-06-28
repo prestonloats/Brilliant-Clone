@@ -150,21 +150,29 @@ advancing, rather than moving on by time/coverage.
 
 **Implementation.**
 - A clear, recency-weighted mastery signal in `src/engine/practice/mastery.ts`:
-  `isSkillMastered = proficiency ≥ 0.85 AND streak ≥ 3`. Requiring both a high estimate **and** a
+  `isSkillMastered = proficiency ≥ 0.9 AND streak ≥ 5`. Requiring both a high estimate **and** a
   streak means one lucky answer can't flip mastery.
 - **Tier-unlock gating.** Harder architectures declare prerequisites that must be *practice-mastered*
   (on top of lesson completion):
 
   | Architecture | Skill | `masteryPrereqs` |
   |---|---|---|
+  | `balance-equality` | equality | — (entry tier) |
+  | `inverse-operation` | inverse-operations | — (entry tier) |
   | `one-step-linear`, `one-step-sequence` | one-step-equations | — (entry tier) |
   | `coordinate-walk` | coordinate-plane | — (entry tier) |
+  | `combine-like-terms` | like-terms | — (entry tier) |
   | `two-step-linear` | two-step-equations | `one-step-equations` |
   | `variables-both-sides` | variables-on-both-sides | `two-step-equations` |
   | `line-value` | graphing-lines | `coordinate-plane` |
 
   `selectNextArchitecture` filters out architectures whose prerequisites aren't mastered yet (with a
   defensive fallback so an entry tier is always available).
+
+**Full coverage.** The question bank exercises **all 8 skills** taught by the lessons — including
+`balancing-equations`' equality (`balance-equality`) and inverse-operations (`inverse-operation`), and
+the like-terms half of the Like Terms lesson (`combine-like-terms`) — so every subject learned in a
+lesson is practiced in Story Mode.
 
 **Learner effect.** A clear per-skill mastery state, and a real gate: you can't practice two-step
 equations in Story Mode until you've actually mastered one-step.
@@ -199,12 +207,14 @@ Every narrowing step self-relaxes rather than emptying the pool, so the endless 
 ## 6. Measuring the effect
 
 "Pick a few, do them well, and measure or show their effect." Measurement lives in
-`src/engine/practice/insights.ts` (pure) and surfaces in `src/story/PracticeInsightsPanel.tsx` at
-each checkpoint (a natural pause between chapters).
+`src/engine/practice/insights.ts` (pure) and surfaces in `src/story/PracticeInsightsPanel.tsx` as a
+"Learning analytics" section on the Profile page.
 
 - **Mastery meters** — `summarizePractice` rolls states into per-skill levels
-  (`learning` / `practiced` / `mastered`) with proficiency bars, plus headline `mastered` and
-  `due for review` counts. The gold "Mastered" badge is the clear mastery signal.
+  (`learning` / `practiced` / `mastered`) with **mastery-progress bars**, plus headline `mastered`
+  and `due` counts. Each bar uses `masteryProgress` (a 0..1 value that reaches 100% EXACTLY when the
+  skill is mastered — i.e. proficiency ≥ 0.9 AND a first-try streak ≥ 5), so a full bar can never
+  disagree with the gold "Mastered" badge.
 - **Retention lift — the headline "did it stick?" metric** — `computeRetention` compares **first-try
   accuracy and latency on the first exposure of a skill vs. its later, spaced re-exposures** (using
   only `source:'story'` attempts). Rising accuracy / falling latency across growing intervals is the
@@ -244,8 +254,8 @@ All constants are centralized in the pure modules so they're easy to tune.
 | Constant | Value | Meaning | File |
 |---|---|---|---|
 | `PROFICIENCY_ALPHA` | `0.4` | EWMA weight on the newest retrieval | `practice/mastery.ts` |
-| `PRACTICE_MASTERY_THRESHOLD` | `0.85` | proficiency needed for mastery | `practice/mastery.ts` |
-| `PRACTICE_MASTERY_STREAK` | `3` | consecutive first-try corrects for mastery | `practice/mastery.ts` |
+| `PRACTICE_MASTERY_THRESHOLD` | `0.9` | proficiency needed for mastery | `practice/mastery.ts` |
+| `PRACTICE_MASTERY_STREAK` | `5` | consecutive first-try corrects for mastery | `practice/mastery.ts` |
 | `PRACTICE_PRACTICED_THRESHOLD` | `0.5` | proficiency for the mid "practiced" level | `practice/mastery.ts` |
 | `INITIAL_EASE` | `2.5` | starting ease for a new skill | `practice/mastery.ts` |
 | `FIRST_INTERVAL_DAYS` / `SECOND_INTERVAL_DAYS` | `1` / `3` | first two interval rungs | `practice/scheduler.ts` |

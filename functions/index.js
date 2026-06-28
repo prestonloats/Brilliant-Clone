@@ -22,13 +22,16 @@ const OPENAI_BASE = 'https://api.openai.com/v1'
 // Mirrors OPENAI_MODERATION_MODEL in src/story/openAiProxyProtocol.ts.
 const OPENAI_MODERATION_MODEL = 'omni-moderation-latest'
 
-// Origins allowed to call this proxy (same-origin Hosting domains + local dev).
+// Origins allowed to call this proxy (same-origin Hosting domains + local dev). Localhost is matched
+// on ANY port (isAllowedOrigin) so a moved Vite dev port (5173 -> 5174 ...) isn't 403'd. Origin is
+// not a real trust boundary anyway; the cost controls are the model allow-list + caps + spend cap.
 const ALLOWED_ORIGINS = new Set([
   'https://starting-project-e6700.web.app',
   'https://starting-project-e6700.firebaseapp.com',
-  'http://localhost:5173',
-  'http://localhost:4173',
 ])
+
+const isAllowedOrigin = (origin) =>
+  ALLOWED_ORIGINS.has(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
 
 // Mirrors PROXY_LIMITS + defaultAllowedStoryModels in src/story/openAiProxyProtocol.ts.
 const DEFAULT_ALLOWED_MODELS = ['gpt-5.4-mini', 'gpt-5.4-nano']
@@ -139,7 +142,7 @@ export const storyProxy = onRequest(
   },
   async (req, res) => {
     const origin = req.headers.origin || ''
-    const allowed = ALLOWED_ORIGINS.has(origin)
+    const allowed = isAllowedOrigin(origin)
 
     if (req.method === 'OPTIONS') {
       if (allowed) {

@@ -28,6 +28,7 @@ import {
   MAX_CUSTOM_CHARACTERS,
 } from '../story/characterPresets'
 import { isSceneId } from '../story/scenery'
+import { STORY_BIBLE_MAX_LENGTH } from '../story/storySessionReducer'
 import type { LocalDatabase, LocalUser, SignUpInput } from './types'
 
 export const emptyDatabase = (): LocalDatabase => ({
@@ -513,6 +514,12 @@ export const normalizeStorySession = (value: unknown, fallbackId?: string): Stor
   const chapterBeats = Array.isArray(value.chapterBeats)
     ? value.chapterBeats.map(normalizeChapterBeat).filter((beat): beat is ChapterBeat => beat !== null)
     : []
+  // The HIDDEN story bible (plan) is OPTIONAL/additive: keep it only when it is a non-empty string,
+  // capped to STORY_BIBLE_MAX_LENGTH (the same bound the reducer enforces on write). Newlines are
+  // preserved (the plan is organized into labeled sections, like `narrativeSummary` it is model
+  // output, not a user free-text field, so no control-char collapsing). Omitted when absent/blank so
+  // legacy sessions (no plan) round-trip unchanged — Firestore rejects undefined.
+  const storyBible = isString(value.storyBible) ? value.storyBible.slice(0, STORY_BIBLE_MAX_LENGTH).trim() : ''
 
   // History seeds from `currentQuestion` for legacy/v1 sessions that never tracked it, so resume
   // still has a one-entry review history at the live edge. The index is clamped into range and
@@ -539,6 +546,7 @@ export const normalizeStorySession = (value: unknown, fallbackId?: string): Stor
       : [],
     segments,
     ...(chapterBeats.length > 0 ? { chapterBeats } : {}),
+    ...(storyBible ? { storyBible } : {}),
     narrativeSummary: isString(value.narrativeSummary) ? value.narrativeSummary : '',
     createdAt: isString(value.createdAt) ? value.createdAt : new Date().toISOString(),
     updatedAt: isString(value.updatedAt) ? value.updatedAt : new Date().toISOString(),

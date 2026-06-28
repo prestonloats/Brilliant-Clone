@@ -84,6 +84,7 @@ export {
   createInitialPracticeState,
   isSkillMastered,
   masteryLevel,
+  masteryProgress,
   nextProficiency,
 } from './engine/practice/mastery'
 export type { MasteryLevel } from './engine/practice/mastery'

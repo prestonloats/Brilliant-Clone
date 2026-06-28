@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 
 import { LocalBackend } from '../src/backend'
-import { isSkillMastered } from '../src/engine'
+import { isSkillMastered, PRACTICE_MASTERY_STREAK } from '../src/engine'
 import {
   installLocalStorage,
   MemoryStorage,
@@ -80,7 +80,9 @@ test('local practice survives a reload and reaches mastery across attempts', () 
   const backend = new LocalBackend()
   setActiveUser('user-1')
 
-  for (const at of ['2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z', '2026-01-05T00:00:00.000Z']) {
+  // A full first-try streak is required for mastery, so practice exactly that many correct recalls.
+  for (let day = 0; day < PRACTICE_MASTERY_STREAK; day += 1) {
+    const at = new Date(Date.parse('2026-01-01T00:00:00.000Z') + day * 86400000).toISOString()
     backend.practice.updatePractice('user-1', 'one-step-equations', { firstTryCorrect: true, at })
   }
 
@@ -88,7 +90,7 @@ test('local practice survives a reload and reaches mastery across attempts', () 
   const reloaded = new LocalBackend()
   const states = reloaded.practice.getUserPractice('user-1')
   assert.equal(states.length, 1)
-  assert.equal(states[0].streak, 3)
+  assert.equal(states[0].streak, PRACTICE_MASTERY_STREAK)
   assert.equal(isSkillMastered(states[0]), true)
 })
 

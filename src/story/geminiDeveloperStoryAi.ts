@@ -24,6 +24,7 @@ import {
   buildScenePrompt,
   buildSegmentPrompt,
   buildStartStoryPrompt,
+  buildStoryBiblePrompt,
   buildSummarizePrompt,
   callWithBackoff,
   isStringRecord,
@@ -174,6 +175,19 @@ export async function createGeminiDeveloperStoryAI(
 
     async writeSegment(input) {
       return generateProse(buildSegmentPrompt(input), STORY_TIMEOUTS.prose)
+    },
+
+    async writeStoryBible(req) {
+      // The hidden plan: a longer, structured generation. A bigger token budget than a single beat
+      // so the ~250-450-word outline is not truncated. On any failure/empty/unsafe output we return
+      // '' so the controller keeps the existing plan (never throws into the play loop), like summarize.
+      const raw = await generate(
+        buildStoryBiblePrompt(req),
+        { temperature: 0.7, maxOutputTokens: 1200 },
+        STORY_TIMEOUTS.bible,
+      )
+      const text = (raw ?? '').trim()
+      return text && isOutputSafe(text) ? text : ''
     },
 
     async continueStory(input) {

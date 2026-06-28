@@ -448,6 +448,7 @@ export function LearningApp({ backend }: { backend: Backend }) {
           user={user}
           mastery={mastery}
           attempts={attempts}
+          practice={practice}
           storySessions={story.library}
           backendProvider={backend.provider}
           onSaveDisplayName={handleSaveDisplayName}
@@ -518,8 +519,6 @@ export function LearningApp({ backend }: { backend: Backend }) {
             busy={story.storyBusy}
             error={story.storyError}
             canReview={story.canReview}
-            practiceSummary={story.practiceSummary}
-            retention={story.retention}
             onLookBack={() => story.openReview()}
             onContinue={(choice) => void story.submitCheckpointChoice(choice)}
             onOpenLibrary={() => void story.openLibrary()}

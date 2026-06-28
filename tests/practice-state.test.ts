@@ -18,6 +18,7 @@ import {
   isDue,
   isSkillMastered,
   masteryLevel,
+  masteryProgress,
   nextProficiency,
   nextSchedule,
   overdueScore,
@@ -76,17 +77,42 @@ test('proficiency is a recency-weighted EWMA after the first attempt', () => {
 // --- Mastery signal -------------------------------------------------------------------------
 
 test('mastery requires high proficiency AND a streak of first-try corrects', () => {
-  const states = [T0, plusDays(T0, 1), plusDays(T0, 4)].map((at) => correct(at))
+  // Replay exactly the required number of first-try-correct recalls (one a day apart), so the test
+  // tracks the mastery-streak constant rather than hard-coding it.
+  const states = Array.from({ length: PRACTICE_MASTERY_STREAK }, (_, i) => correct(plusDays(T0, i)))
   const mastered = replay(states)
   assert.equal(mastered.streak, PRACTICE_MASTERY_STREAK)
   assert.equal(mastered.proficiency, 1)
   assert.equal(isSkillMastered(mastered), true)
   assert.equal(masteryLevel(mastered), 'mastered')
 
+  // One short of the required streak is NOT yet mastered (proof the bar is demanding).
+  const almost = replay(states.slice(0, PRACTICE_MASTERY_STREAK - 1))
+  assert.equal(isSkillMastered(almost), false)
+
   // A single miss breaks the streak, so mastery is immediately lost even though proficiency stays high.
-  const lapsed = applyPracticeOutcome(mastered, miss(plusDays(T0, 5)))
+  const lapsed = applyPracticeOutcome(mastered, miss(plusDays(T0, PRACTICE_MASTERY_STREAK)))
   assert.equal(lapsed.streak, 0)
   assert.equal(isSkillMastered(lapsed), false)
+})
+
+test('masteryProgress reaches 100% only when BOTH proficiency and streak are met', () => {
+  const base = createInitialPracticeState('u', 'one-step-equations', T0)
+
+  // 100% recall but only a 1-long streak: progress is NOT full and the skill is NOT mastered.
+  // (This is exactly the "100% but not mastered" case — the bar now reflects it.)
+  const oneStreak = { ...base, proficiency: 1, streak: 1, totalAttempts: 1 }
+  assert.ok(masteryProgress(oneStreak) < 1)
+  assert.equal(isSkillMastered(oneStreak), false)
+
+  // Full proficiency + a full streak: exactly 1.0, and mastered.
+  const mastered = { ...base, proficiency: 1, streak: PRACTICE_MASTERY_STREAK, totalAttempts: 5 }
+  assert.equal(masteryProgress(mastered), 1)
+  assert.equal(isSkillMastered(mastered), true)
+
+  // Equivalence the UI relies on: progress is 1 EXACTLY when the skill is mastered.
+  const highProfLowStreak = { ...base, proficiency: 0.9, streak: 2, totalAttempts: 4 }
+  assert.equal(masteryProgress(highProfLowStreak) === 1, isSkillMastered(highProfLowStreak))
 })
 
 // --- Spaced repetition schedule -------------------------------------------------------------

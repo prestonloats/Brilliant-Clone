@@ -600,6 +600,19 @@ export type StorySession = {
   chapterBeats?: ChapterBeat[]
   // Rolling summary of older segments for context-window management (plan section 8).
   narrativeSummary: string
+  // OPTIONAL/back-compatible: the HIDDEN "story bible" — a private, author-only planning document
+  // the LLM writes at session start and REVISES at each checkpoint as the adventure unfolds. It is
+  // NEVER shown to the reader. It gives the endless story long-term direction so it reads like a
+  // real novel: the central dramatic question, themes, how the fictional world works (including
+  // SECRETS/twists the reader does not know yet), each character's intended arc/growth, a plot
+  // outline of planned beats (rising action, twists, happy + sad moments, a low point, a climax)
+  // tagged with emotional tone, foreshadowing + open threads to pay off, and the next big decision
+  // to put in front of the reader. It is fed into the narrative-beat prompts (as private context)
+  // so beats follow the plan, and survives `segments` compaction (it is a top-level field, not a
+  // beat), so the plan persists even after older prose folds into `narrativeSummary`. Omitted when
+  // absent (no provider configured / generation failed / legacy sessions) so those round-trip
+  // unchanged, exactly like `chapterBeats`. Length is capped on write + read.
+  storyBible?: string
 
   createdAt: string
   updatedAt: string

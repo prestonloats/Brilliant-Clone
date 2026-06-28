@@ -8,13 +8,15 @@
 // No I/O; deterministic given an injected `now`.
 
 import type { AttemptEvent, SkillId, SkillPracticeState } from '../../domain'
-import { isSkillMastered, masteryLevel, type MasteryLevel } from './mastery'
+import { isSkillMastered, masteryLevel, masteryProgress, type MasteryLevel } from './mastery'
 import { isDue } from './scheduler'
 
 export type SkillProgressView = {
   skillId: SkillId
   level: MasteryLevel
   proficiency: number
+  // 0..1 progress toward mastery (reaches 1 only when actually mastered). Drives the Profile bars.
+  masteryProgress: number
   streak: number
   mastered: boolean
   due: boolean
@@ -41,12 +43,13 @@ export function summarizePractice(
       skillId: state.skillId,
       level: masteryLevel(state),
       proficiency: state.proficiency,
+      masteryProgress: masteryProgress(state),
       streak: state.streak,
       mastered: isSkillMastered(state),
       due: isDue(state, now),
       totalAttempts: state.totalAttempts,
     }))
-    .sort((a, b) => b.proficiency - a.proficiency)
+    .sort((a, b) => b.masteryProgress - a.masteryProgress)
 
   const count = (level: MasteryLevel) => bySkill.filter((entry) => entry.level === level).length
   return {

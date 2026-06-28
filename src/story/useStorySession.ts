@@ -32,16 +32,13 @@ import type { AttemptEvent, SkillMastery, SkillPracticeState } from '../domain'
 import type { Backend } from '../backend'
 import { createAttemptEvent } from '../backend'
 import {
-  computeRetention,
   createVariantSeed,
   generateForArchitecture,
   isThemedStepCoherent,
   selectNextArchitecture,
   skillForArchitecture,
-  skillForStepId,
-  summarizePractice,
 } from '../engine'
-import type { PracticeSummary, ProgressByLesson, RetentionReport } from '../engine'
+import type { ProgressByLesson } from '../engine'
 import { applyRetheme } from './applyRetheme'
 import { questionKey, rehydrateQuestion, toThemedQuestion } from './rehydrateQuestion'
 import { createStoryAI, type StoryAiEnv } from './createStoryAI'
@@ -85,6 +82,7 @@ import {
   reviewStepForward,
   setCurrentQuestion,
   setLatestSegmentChoice,
+  setStoryBible,
   withHistoryIndex,
   type StoryReviewPos,
 } from './storySessionReducer'
@@ -121,10 +119,6 @@ export type UseStorySession = {
   savedCount: number
   currentStep: LessonStep | null
   currentThemed: boolean
-  // Phase 3 "show the effect": per-skill mastery meters + headline counts, and the retention
-  // ("did it stick?") report. Derived read-only from the practice store + story attempt log.
-  practiceSummary: PracticeSummary
-  retention: RetentionReport
   // True while the learner is reviewing a PAST (already-answered) question read-only.
   reviewing: boolean
   // True while Back has landed on a chapter's STORY TEXT (read-only narrative review).
@@ -895,6 +889,19 @@ export function useStorySession({
         next = appendSegment(next, { text: openingText, sceneId: forcedOpeningScene })
         // Snapshot the opening as Chapter 1's reviewable text (survives later segment compaction).
         next = recordChapterBeat(next, { text: openingText, sceneId: forcedOpeningScene })
+        // Write the HIDDEN story bible (plan) from the premise + opening so the endless adventure has
+        // long-term direction from beat one (arc, twists, character growth, emotional beats). Purely
+        // additive + best-effort: a failure/timeout/no-provider just leaves the plan empty, so the
+        // story still plays exactly as before. It is generated from `openingText` (the beat the reader
+        // actually sees) so the plan and the opening agree. The plan is NEVER shown to the reader.
+        if (ai?.writeStoryBible) {
+          try {
+            const bible = await ai.writeStoryBible({ theme: fullTheme, currentBible: '', recentNarrative: openingText })
+            if (bible.trim()) next = setStoryBible(next, bible)
+          } catch {
+            // Non-fatal: the adventure begins without a plan and behaves exactly as before.
+          }
+        }
         await persist(next)
         await backend.story.setActiveStorySessionId(user.id, id)
         commitSession(next)
@@ -943,6 +950,9 @@ export function useStorySession({
               theme: next.theme,
               recentNarrative: recentNarrative(next),
               questionsSolved: next.questionsSolvedTotal,
+              // Thread the hidden plan in (when present) so the bridge beat advances the planned arc
+              // and ends on a real, course-changing choice; omitted keeps today's behavior.
+              ...(next.storyBible ? { storyBible: next.storyBible } : {}),
             })
           } catch {
             // writeSegment now throws on failure; fall back to a distinct, theme-aware bridge beat.
@@ -1012,19 +1022,39 @@ export function useStorySession({
         commitSession(next)
         const ai = await ensureAi()
         let written: string | null = null
+        // The revised hidden plan, written below. The plan is updated at EVERY checkpoint so it
+        // BRANCHES to the path the reader actually took and keeps advancing the long-term arc.
+        let revisedBible = ''
         if (ai) {
-          try {
-            written = await ai.continueStory({
+          // Generate the OUTCOME beat and REVISE the plan CONCURRENTLY: both read the SAME
+          // pre-outcome narrative + the just-committed choice, so running them together adds no extra
+          // wait (the learner waits once, not twice). Both are best-effort — the outcome falls back to
+          // a distinct, theme-aware beat (never byte-identical to the opening/bridge, so a choice can
+          // never "reprint the same paragraph"), and a failed plan revision simply keeps the existing
+          // plan so the next beats still have direction.
+          const narrative = recentNarrative(next)
+          const outcomePromise = ai
+            .continueStory({
               theme: next.theme,
-              recentNarrative: recentNarrative(next),
+              recentNarrative: narrative,
               userChoice: moderated.sanitized,
+              ...(next.storyBible ? { storyBible: next.storyBible } : {}),
             })
-          } catch {
-            // continueStory now throws on failure; the OUTCOME falls back to a distinct, theme-aware
-            // beat that is NEVER byte-identical to the opening/bridge, so a learner's choice can never
-            // "reprint the same paragraph" and look like it did nothing.
-            written = null
-          }
+            .catch(() => null)
+          const biblePromise = ai.writeStoryBible
+            ? ai
+                .writeStoryBible({
+                  theme: next.theme,
+                  currentBible: next.storyBible ?? '',
+                  recentNarrative: narrative,
+                  userChoice: moderated.sanitized,
+                  questionsSolved: next.questionsSolvedTotal,
+                })
+                .catch(() => '')
+            : Promise.resolve('')
+          const [outcomeResult, bibleResult] = await Promise.all([outcomePromise, biblePromise])
+          written = outcomeResult
+          revisedBible = bibleResult
         }
         const { text: continuation, isFallback } = resolveBeatText(next, written, 'outcome')
         const outcomeScene = await sceneForBeat(ai, next.theme, isFallback, previousSceneId(next))
@@ -1036,6 +1066,9 @@ export function useStorySession({
           outcomeText: continuation,
           outcomeSceneId: outcomeScene,
         })
+        // Commit the revised plan (when the update succeeded) so every later beat follows the branched
+        // arc; on failure the existing plan is kept untouched.
+        if (revisedBible.trim()) next = setStoryBible(next, revisedBible)
         next = await maybeCompact(next)
         await persist(next)
         commitSession(next)
@@ -1156,11 +1189,6 @@ export function useStorySession({
     return question ? rehydrateQuestion(question) : null
   }, [session])
 
-  // Phase 3 insights, derived from the learner-data props (refreshed after each practice attempt):
-  // the mastery-meter summary and the retention ("did it stick?") report over story attempts.
-  const practiceSummary = useMemo(() => summarizePractice(practice, nowIso()), [practice])
-  const retention = useMemo(() => computeRetention(attempts, skillForStepId), [attempts])
-
   // The current interleaved review position (question pointer + transient chapter-text flag), and
   // the chapter beat to render while Back has surfaced a chapter's story text (else null).
   const reviewPos: StoryReviewPos = { index: session?.historyIndex ?? 0, chapterText: showingChapterText }
@@ -1179,8 +1207,6 @@ export function useStorySession({
     savedCount: library.length,
     currentStep: rehydrated?.step ?? null,
     currentThemed: rehydrated?.themed ?? false,
-    practiceSummary,
-    retention,
     reviewing,
     showingChapterText: chapterTextBeat !== null,
     chapterText: chapterTextBeat,

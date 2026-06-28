@@ -28,6 +28,9 @@ const EXPECTED_IDS = [
   'variables-both-sides',
   'coordinate-walk',
   'line-value',
+  'combine-like-terms',
+  'balance-equality',
+  'inverse-operation',
 ]
 
 test('every architecture id is unique', () => {
@@ -35,7 +38,7 @@ test('every architecture id is unique', () => {
   assert.equal(new Set(ids).size, ids.length)
 })
 
-test('catalog aggregates the six WAVE 2 architectures', () => {
+test('catalog aggregates every expected architecture', () => {
   const ids = new Set(ARCHITECTURE_CATALOG.map((architecture) => architecture.id))
   for (const id of EXPECTED_IDS) {
     assert.ok(ids.has(id), `catalog is missing architecture "${id}"`)

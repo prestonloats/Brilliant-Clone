@@ -18,7 +18,7 @@ import { test } from 'node:test'
 
 import { algebraCourse, lessons, skills } from '../src/domain'
 import type { LessonStep } from '../src/domain'
-import { checkInputStep, checkSequenceStep, mulberry32 } from '../src/engine'
+import { checkInputStep, checkOperationChoiceStep, checkSequenceStep, mulberry32 } from '../src/engine'
 import type { QuestionArchitecture } from '../src/engine/storyMode/questionBank/architectureTypes'
 import { oneStepLinearArchitecture } from '../src/engine/storyMode/questionBank/architectures/oneStepLinear'
 import { oneStepSequenceArchitecture } from '../src/engine/storyMode/questionBank/architectures/oneStepSequence'
@@ -26,6 +26,9 @@ import { twoStepLinearArchitecture } from '../src/engine/storyMode/questionBank/
 import { variablesBothSidesArchitecture } from '../src/engine/storyMode/questionBank/architectures/variablesBothSides'
 import { coordinateWalkArchitecture } from '../src/engine/storyMode/questionBank/architectures/coordinateWalk'
 import { lineValueArchitecture } from '../src/engine/storyMode/questionBank/architectures/lineValue'
+import { combineLikeTermsArchitecture } from '../src/engine/storyMode/questionBank/architectures/combineLikeTerms'
+import { balanceEqualityArchitecture } from '../src/engine/storyMode/questionBank/architectures/balanceEquality'
+import { inverseOperationArchitecture } from '../src/engine/storyMode/questionBank/architectures/inverseOperation'
 
 // Loop seeds 0..80 (the acceptance window) for every per-architecture proof.
 const SEEDS = 81
@@ -37,6 +40,9 @@ const allArchitectures: QuestionArchitecture[] = [
   variablesBothSidesArchitecture,
   coordinateWalkArchitecture,
   lineValueArchitecture,
+  combineLikeTermsArchitecture,
+  balanceEqualityArchitecture,
+  inverseOperationArchitecture,
 ]
 
 // --- shared narrowing/bounds helpers --------------------------------------------------------
@@ -49,6 +55,11 @@ const asInput = (step: LessonStep): Extract<LessonStep, { type: 'input' }> => {
 const asSequence = (step: LessonStep): Extract<LessonStep, { type: 'sequence' }> => {
   assert.equal(step.type, 'sequence')
   return step as Extract<LessonStep, { type: 'sequence' }>
+}
+
+const asOperationChoice = (step: LessonStep): Extract<LessonStep, { type: 'operation-choice' }> => {
+  assert.equal(step.type, 'operation-choice')
+  return step as Extract<LessonStep, { type: 'operation-choice' }>
 }
 
 const asString = (answer: string | string[]): string => {
@@ -409,6 +420,117 @@ test('architecture line-value: graded key, re-derivable, deterministic, varied, 
   }
 
   assert.ok(seen.size > 1, 'expected more than one distinct line-value instance across seeds')
+})
+
+// --- 7. combine-like-terms ------------------------------------------------------------------
+
+test('architecture combine-like-terms: graded key, re-derivable, deterministic, varied, in-bounds', () => {
+  const arch = combineLikeTermsArchitecture
+  assert.equal(arch.stepType, 'input')
+  const seen = new Set<string>()
+
+  for (let seed = 0; seed < SEEDS; seed += 1) {
+    const gen = arch.generate(mulberry32(seed))
+    assert.deepEqual(arch.generate(mulberry32(seed)), gen, `seed ${seed} must rebuild identically`)
+
+    const step = asInput(gen.step)
+    const answer = asString(gen.answer)
+    assert.ok(step.equation, 'combine-like-terms must display an expression')
+
+    // independently re-derive the combined coefficient from the displayed expression
+    const m = step.equation.match(/^(\d+)x\s*([+-])\s*(\d+)x$/)
+    assert.ok(m, `unparseable like-terms expression: ${step.equation}`)
+    const a = Number(m[1])
+    const b = Number(m[3])
+    const coefficient = m[2] === '+' ? a + b : a - b
+
+    assert.equal(Number(answer), coefficient, `displayed ${step.equation} disagrees with key ${answer}`)
+    assert.ok(coefficient >= 1, `coefficient must stay positive: ${step.equation}`)
+
+    assert.equal(checkInputStep(step, answer).correct, true)
+    assert.equal(checkInputStep(step, String(coefficient + 1)).correct, false)
+    assert.equal(checkInputStep(step, 'banana').correct, false)
+
+    inSlot(arch, 'a', a)
+    inSlot(arch, 'b', b)
+    seen.add(JSON.stringify(gen))
+  }
+
+  assert.ok(seen.size > 1, 'expected more than one distinct combine-like-terms instance across seeds')
+})
+
+// --- 8. balance-equality --------------------------------------------------------------------
+
+test('architecture balance-equality: graded key, re-derivable, deterministic, varied, in-bounds', () => {
+  const arch = balanceEqualityArchitecture
+  assert.equal(arch.stepType, 'input')
+  const seen = new Set<string>()
+
+  for (let seed = 0; seed < SEEDS; seed += 1) {
+    const gen = arch.generate(mulberry32(seed))
+    assert.deepEqual(arch.generate(mulberry32(seed)), gen, `seed ${seed} must rebuild identically`)
+
+    const step = asInput(gen.step)
+    const answer = asString(gen.answer)
+    assert.ok(step.equation, 'balance-equality must display an equation')
+
+    // independently re-derive the mystery weight from the displayed balance
+    const m = step.equation.match(/^(\d+)\s*=\s*(\d+)\s*\+\s*m$/)
+    assert.ok(m, `unparseable balance equation: ${step.equation}`)
+    const total = Number(m[1])
+    const known = Number(m[2])
+    const mystery = total - known
+
+    assert.equal(Number(answer), mystery, `displayed ${step.equation} disagrees with key ${answer}`)
+
+    assert.equal(checkInputStep(step, answer).correct, true)
+    assert.equal(checkInputStep(step, String(mystery + 1)).correct, false)
+    assert.equal(checkInputStep(step, 'banana').correct, false)
+
+    inSlot(arch, 'known', known)
+    inSlot(arch, 'mystery', mystery)
+    seen.add(JSON.stringify(gen))
+  }
+
+  assert.ok(seen.size > 1, 'expected more than one distinct balance-equality instance across seeds')
+})
+
+// --- 9. inverse-operation -------------------------------------------------------------------
+
+test('architecture inverse-operation: graded choice, re-derivable, deterministic, varied', () => {
+  const arch = inverseOperationArchitecture
+  assert.equal(arch.stepType, 'operation-choice')
+  const seen = new Set<string>()
+
+  for (let seed = 0; seed < SEEDS; seed += 1) {
+    const gen = arch.generate(mulberry32(seed))
+    assert.deepEqual(arch.generate(mulberry32(seed)), gen, `seed ${seed} must rebuild identically`)
+
+    const step = asOperationChoice(gen.step)
+    const answer = asString(gen.answer)
+    assert.ok(step.equation, 'inverse-operation must display an equation')
+
+    // independently derive the inverse move from the displayed equation form
+    let expected: string
+    if (/^x\s*\+\s*\d+\s*=/.test(step.equation)) expected = 'subtract'
+    else if (/^x\s*-\s*\d+\s*=/.test(step.equation)) expected = 'add'
+    else if (/^\d+x\s*=/.test(step.equation)) expected = 'divide'
+    else if (/^x\s*\/\s*\d+\s*=/.test(step.equation)) expected = 'multiply'
+    else throw new Error(`unparseable inverse-operation equation: ${step.equation}`)
+
+    assert.equal(step.correctId, expected, `displayed ${step.equation} disagrees with correctId ${step.correctId}`)
+    assert.equal(answer, expected)
+
+    // real grader: the inverse move is accepted, a wrong move is rejected
+    assert.equal(checkOperationChoiceStep(step, answer).correct, true)
+    const wrong = step.choices.find((choice) => choice.id !== step.correctId)
+    assert.ok(wrong, 'expected at least one distractor move')
+    assert.equal(checkOperationChoiceStep(step, wrong.id).correct, false)
+
+    seen.add(JSON.stringify(gen))
+  }
+
+  assert.ok(seen.size > 1, 'expected more than one distinct inverse-operation instance across seeds')
 })
 
 // --- cross-architecture invariants ----------------------------------------------------------

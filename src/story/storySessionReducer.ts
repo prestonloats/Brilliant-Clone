@@ -20,6 +20,13 @@ export const SERVED_STEP_IDS_CAP = 200
 // as the single source of truth for the session's narrative window.
 export const KEEP_VERBATIM_SEGMENTS = 2
 
+// Upper bound on the persisted hidden story bible (plan). It is re-fed into every narrative-beat
+// prompt, so it must stay bounded for both storage and prompt cost; the plan targets ~250-450 words
+// (a few thousand chars), and this leaves generous headroom while capping pathological growth. The
+// cap is enforced here (so the in-memory + persisted value is always bounded) AND again on untrusted
+// read in `normalizeStorySession`, which imports this same constant as the single source of truth.
+export const STORY_BIBLE_MAX_LENGTH = 6000
+
 const nowIso = (): string => new Date().toISOString()
 
 // A unique, URL/Firestore-safe session id. Mirrors backend `createId` but lives here so the
@@ -459,6 +466,23 @@ export function clearCurrentQuestion(session: StorySession, now: string = nowIso
 // Replace the rolling narrative summary.
 export function setNarrativeSummary(session: StorySession, narrativeSummary: string, now: string = nowIso()): StorySession {
   return { ...session, narrativeSummary, updatedAt: now }
+}
+
+// Set (or clear) the HIDDEN story bible (plan). The controller calls this with the freshly written
+// plan at session start and the revised plan after each checkpoint choice. The value is trimmed and
+// capped to STORY_BIBLE_MAX_LENGTH so the persisted + in-memory plan is always bounded. An empty
+// (or whitespace-only) plan CLEARS the field by deleting the key entirely — never assigning
+// `undefined` — so a session with no usable plan serializes exactly like a legacy one (Firestore
+// rejects undefined), mirroring `clearCurrentQuestion`.
+export function setStoryBible(session: StorySession, storyBible: string, now: string = nowIso()): StorySession {
+  const trimmed = (storyBible ?? '').trim().slice(0, STORY_BIBLE_MAX_LENGTH).trim()
+  if (!trimmed) {
+    if (session.storyBible === undefined) return session
+    const next = { ...session, updatedAt: now }
+    delete next.storyBible
+    return next
+  }
+  return { ...session, storyBible: trimmed, updatedAt: now }
 }
 
 // End the adventure: mark it ended and drop any on-screen question.

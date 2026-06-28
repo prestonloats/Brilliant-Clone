@@ -14,6 +14,9 @@ import { twoStepLinearArchitecture } from './architectures/twoStepLinear'
 import { variablesBothSidesArchitecture } from './architectures/variablesBothSides'
 import { coordinateWalkArchitecture } from './architectures/coordinateWalk'
 import { lineValueArchitecture } from './architectures/lineValue'
+import { combineLikeTermsArchitecture } from './architectures/combineLikeTerms'
+import { balanceEqualityArchitecture } from './architectures/balanceEquality'
+import { inverseOperationArchitecture } from './architectures/inverseOperation'
 
 // The bank, in a stable order. Every id is unique and every `generate(rng).step.type` equals the
 // declared `stepType` (asserted by tests). At least one architecture is unlocked by completing
@@ -25,6 +28,12 @@ export const ARCHITECTURE_CATALOG: QuestionArchitecture[] = [
   variablesBothSidesArchitecture,
   coordinateWalkArchitecture,
   lineValueArchitecture,
+  // Phase 3 coverage: the remaining skills taught by the lessons (balancing-equations' equality +
+  // inverse-operations, and the like-terms half of the Like Terms lesson), appended at the END so
+  // existing persisted architecture keys / deterministic ordering stay stable.
+  combineLikeTermsArchitecture,
+  balanceEqualityArchitecture,
+  inverseOperationArchitecture,
 ]
 
 // id -> architecture, derived from the catalog so it can never drift from it. Used by `rebuild.ts`

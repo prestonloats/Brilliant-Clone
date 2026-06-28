@@ -1470,121 +1470,196 @@
   }
 }
 
-/* --- Practice insights (Phase 3 learning-science panel) -------------------- */
-/* A compact mastery + retention summary shown at the checkpoint. Reuses the .card
-   primitive + shared design tokens; only the meters/badges are bespoke. */
-.practice-insights {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-inline: auto;
+/* --- Practice mastery (Phase 3 learning-science tracking on the Profile page) ------ */
+/* A glanceable mastery + retention read-out. Reuses the .card primitive + shared design
+   tokens; the stat tiles, meters, dots, and goal marker are bespoke + color-coded by level. */
+/* The combined "Story Mode" Profile card stacks two sections — Learning analytics + Your
+   adventures — under one eyebrow. It owns the .profile-card width/padding; the inner sections
+   are plain blocks separated by a divider. */
+.story-mode-card {
+  margin: 0 auto;
   max-width: 760px;
-  width: 100%;
+  padding: clamp(22px, 5vw, 44px);
 }
 
-.practice-insights-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+/* The second (and later) section gets a divider + breathing room above it. (.practice-panel also
+   carries .story-mode-section, so this matches the adventures section that follows it.) */
+.story-mode-card .story-mode-section + .story-mode-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
 }
 
-.practice-insights-title {
-  margin: 0;
+.story-mode-section h3 {
+  margin: 0 0 6px;
   font-size: 18px;
   letter-spacing: -0.01em;
   color: var(--text-h);
 }
 
-.practice-badges {
+.practice-panel {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.practice-badge {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--surface-strong);
-  color: var(--text-h);
+.practice-panel-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
 }
 
-.practice-badge.is-due {
-  background: #fef3c7;
-  color: #92400e;
-}
-
+/* Each skill is one compact row: status dot | skill | bar (with mastery-goal line) | value. */
 .practice-meter-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
 }
 
 .practice-meter-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(84px, 1.4fr) auto;
+  align-items: center;
+  gap: 10px;
 }
 
-.practice-meter-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 14px;
+.practice-meter-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--muted);
 }
 
 .practice-meter-skill {
-  color: var(--text-h);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
   font-weight: 600;
+  color: var(--text-h);
 }
 
-.practice-meter-level {
-  font-weight: 600;
+.practice-meter-due {
+  font-size: 12px;
 }
 
 .practice-meter-track {
-  height: 8px;
+  position: relative;
+  display: block;
+  height: 10px;
   border-radius: 999px;
   background: var(--surface-strong);
   overflow: hidden;
 }
 
 .practice-meter-fill {
-  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
   border-radius: 999px;
   background: var(--accent);
   transition: width 240ms ease;
 }
 
-.practice-meter-row[data-level='learning'] .practice-meter-level {
-  color: #b45309;
+.practice-meter-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
+
+.practice-meter-row[data-level='learning'] .practice-meter-dot,
 .practice-meter-row[data-level='learning'] .practice-meter-fill {
   background: #f59e0b;
 }
-.practice-meter-row[data-level='practiced'] .practice-meter-level {
-  color: var(--accent-strong);
+.practice-meter-row[data-level='learning'] .practice-meter-value {
+  color: #b45309;
 }
+.practice-meter-row[data-level='practiced'] .practice-meter-dot,
 .practice-meter-row[data-level='practiced'] .practice-meter-fill {
   background: var(--accent);
 }
-.practice-meter-row[data-level='mastered'] .practice-meter-level {
-  color: #15803d;
+.practice-meter-row[data-level='practiced'] .practice-meter-value {
+  color: var(--accent-strong);
 }
+.practice-meter-row[data-level='mastered'] .practice-meter-dot,
 .practice-meter-row[data-level='mastered'] .practice-meter-fill {
   background: #16a34a;
 }
+.practice-meter-row[data-level='mastered'] .practice-meter-value {
+  color: #15803d;
+}
 
+.practice-hint {
+  margin: -2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Compact "did it stick?" stat: first try -> after review, with a lift chip. */
 .practice-retention {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.practice-retention-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.practice-retention-compare {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.practice-retention-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.practice-retention-stat b {
+  font-size: 18px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.practice-retention-stat small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.practice-retention-arrow {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.practice-retention-delta {
+  font-size: 13px;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 @media (prefers-reduced-motion: reduce) {

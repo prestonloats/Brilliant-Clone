@@ -30,6 +30,7 @@ import {
   buildScenePrompt,
   buildSegmentPrompt,
   buildStartStoryPrompt,
+  buildStoryBiblePrompt,
   buildSummarizePrompt,
   callWithBackoff,
   isTransientError,
@@ -75,6 +76,9 @@ const MAX_TOKENS = {
   retheme: 2000,
   scene: 1000,
   summarize: 1500,
+  // The hidden story-bible (plan) is a longer, structured generation; reasoning models also spend
+  // part of this budget on hidden reasoning, so keep it generous so the outline is not starved.
+  bible: 4000,
 } as const
 
 const isStringRecord = (value: unknown): value is Record<string, unknown> =>
@@ -204,6 +208,14 @@ export async function createOpenAiDeveloperStoryAI(
 
     async writeSegment(input) {
       return generateProse(buildSegmentPrompt(input), STORY_TIMEOUTS.prose)
+    },
+
+    async writeStoryBible(req) {
+      // The hidden plan: longer structured output. On any failure/empty/unsafe output we return ''
+      // so the controller keeps the existing plan (never throws into the play loop), like summarize.
+      const raw = await generate(buildStoryBiblePrompt(req), { maxOutputTokens: MAX_TOKENS.bible }, STORY_TIMEOUTS.bible)
+      const text = (raw ?? '').trim()
+      return text && isOutputSafe(text) ? text : ''
     },
 
     async continueStory(input) {

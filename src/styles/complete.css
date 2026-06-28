@@ -156,7 +156,13 @@
 }
 
 .mastery-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Keep the lesson skill cards within the same 760px column as the .profile-card / .story-stats /
+     Learning-analytics cards, so they never run wider than the rest of the Profile. auto-fit keeps
+     them responsive (3-up at full width, then 2-up / 1-up as it narrows). */
+  margin: 0 auto;
+  max-width: 760px;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
 .mastery-card {

@@ -12,6 +12,7 @@ import { test } from 'node:test'
 import type { LessonId, LessonProgress, SkillId, SkillMastery, SkillPracticeState } from '../src/domain'
 import {
   ARCHITECTURE_CATALOG,
+  PRACTICE_MASTERY_STREAK,
   selectNextArchitecture,
   type ProgressByLesson,
   type QuestionArchitecture,
@@ -155,8 +156,8 @@ test('gates a harder architecture until its prerequisite skill is mastered', () 
   for (let i = 0; i < 30; i += 1) {
     assert.equal(select({ pool, progressByLesson, rng: () => i / 30 })?.id, 'one-step-linear')
   }
-  // Mastering one-step (proficiency high + streak >= 3) unlocks two-step-linear -> it becomes reachable.
-  const practice = [practiceState('one-step-equations', { proficiency: 1, streak: 3 })]
+  // Mastering one-step (high proficiency + a full first-try streak) unlocks two-step-linear.
+  const practice = [practiceState('one-step-equations', { proficiency: 1, streak: PRACTICE_MASTERY_STREAK })]
   const reachable = new Set<string>()
   for (let i = 0; i < 30; i += 1) {
     const result = select({ pool, progressByLesson, practice, rng: () => i / 30 })

@@ -18,6 +18,23 @@ export type RethemeRequest = {
   tiles?: { id: string; label: string }[] // sequence tile labels only
 }
 
+// The hidden story-bible / plan request (see StoryAI.writeStoryBible). The SAME shape covers BOTH
+// the initial CREATE (no `currentBible`, `recentNarrative` = the opening beat) and every later
+// UPDATE (the prior `currentBible` plus the recent events + the reader's latest `userChoice`); the
+// prompt builder picks create-vs-revise from whether `currentBible` is non-empty.
+export type StoryBibleRequest = {
+  theme: StoryTheme
+  // The plan to revise; empty/absent means "create a fresh plan from scratch".
+  currentBible?: string
+  // The story so far the plan must stay consistent with (the opening at create time; the
+  // rolling summary + recent beats + the committed choice at update time).
+  recentNarrative?: string
+  // The reader's just-committed checkpoint action (update time only), so the plan can BRANCH to it.
+  userChoice?: string
+  // Lifetime questions solved, a coarse "how far in" signal for pacing the planned beats.
+  questionsSolved?: number
+}
+
 export type RethemeResult = {
   themedPrompt: string
   themedOptions?: { id: string; label: string }[]
@@ -43,12 +60,29 @@ export type StoryAI = {
     theme: StoryTheme
     recentNarrative: string
     questionsSolved: number
+    // OPTIONAL/back-compatible: the hidden story bible (plan). When present it is threaded into the
+    // beat prompt as PRIVATE author's notes so the bridge beat follows the long-term plan; absent
+    // (no provider / generation failed / legacy) keeps today's behavior exactly.
+    storyBible?: string
   }): Promise<string>
   continueStory(input: {
     theme: StoryTheme
     recentNarrative: string
     userChoice: string
+    // OPTIONAL/back-compatible: the hidden story bible (plan), threaded into the outcome prompt as
+    // private author's notes so the consequence of the choice advances the planned story.
+    storyBible?: string
   }): Promise<string>
+  // Writes/revises the HIDDEN story bible (plan): the
+  // private, author-only planning document that gives the endless adventure long-term direction so
+  // it reads like a real novel (central question, themes, world rules + secrets, character arcs, a
+  // plot outline of planned beats with emotional tone, foreshadowing/open threads, and the next big
+  // decision). The SAME call covers create (no `currentBible`) and revise (with one). Returns the
+  // plan text, or '' when generation fails/blocks (the caller then keeps the existing plan) — like
+  // `summarize`, it never throws into the play loop. Kept OPTIONAL + additive so existing/mock
+  // implementers need not provide it; the four SDK adapters do. The plan is NEVER shown to the
+  // reader; it only steers the prompts.
+  writeStoryBible?(req: StoryBibleRequest): Promise<string>
   // Pick the pre-generated background image whose SETTING best fits a story beat, from the fixed
   // scenery catalog. Returns the chosen `SceneId`, or null when nothing fits / matching is
   // unavailable (so the caller simply shows no image). Pure classification — never authors text.

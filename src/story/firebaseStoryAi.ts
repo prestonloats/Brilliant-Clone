@@ -23,6 +23,7 @@ import {
   buildScenePrompt,
   buildSegmentPrompt,
   buildStartStoryPrompt,
+  buildStoryBiblePrompt,
   buildSummarizePrompt,
   callWithBackoff,
   isStringRecord,
@@ -80,6 +81,12 @@ export async function createFirebaseStoryAI(
   const proseModels = [
     makeModel(primary, { temperature: 0.9, maxOutputTokens: 600 }),
     makeModel(fallbackModel, { temperature: 0.9, maxOutputTokens: 600 }),
+  ]
+  // The hidden story-bible (plan) is a longer, structured generation, so it gets a bigger budget
+  // than a single beat so the ~250-450-word outline is not truncated.
+  const bibleModels = [
+    makeModel(primary, { temperature: 0.7, maxOutputTokens: 1200 }),
+    makeModel(fallbackModel, { temperature: 0.7, maxOutputTokens: 1200 }),
   ]
   const summarizeModels = [
     makeModel(primary, { temperature: 0.3, maxOutputTokens: 256 }),
@@ -165,6 +172,13 @@ export async function createFirebaseStoryAI(
 
     async writeSegment(input) {
       return runProse(buildSegmentPrompt(input), STORY_TIMEOUTS.prose)
+    },
+
+    async writeStoryBible(req) {
+      // The hidden plan: longer structured output, returned as-is. On any failure/empty/unsafe
+      // output we return '' so the controller keeps the existing plan (never throws), like summarize.
+      const text = (await run(bibleModels, buildStoryBiblePrompt(req), STORY_TIMEOUTS.bible))?.trim() ?? ''
+      return text && isOutputSafe(text) ? text : ''
     },
 
     async continueStory(input) {

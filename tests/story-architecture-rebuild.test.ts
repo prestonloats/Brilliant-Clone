@@ -17,6 +17,7 @@ import {
   ARCHITECTURE_CATALOG,
   architectureKey,
   checkInputStep,
+  checkOperationChoiceStep,
   checkSequenceStep,
   generateForArchitecture,
   type GeneratedQuestion,
@@ -33,8 +34,11 @@ const gradedCorrect = (question: GeneratedQuestion): boolean => {
   if (question.step.type === 'input') {
     return checkInputStep(question.step, question.answer as string).correct
   }
-  // The six WAVE 2 architectures only emit input/sequence; surface a regression loudly if that
-  // ever changes (mcq/operation-choice would need their own grading here).
+  if (question.step.type === 'operation-choice') {
+    return checkOperationChoiceStep(question.step, question.answer as string).correct
+  }
+  // Only input / sequence / operation-choice are emitted by the catalog; surface a regression
+  // loudly (an mcq architecture would need its own grading branch here).
   return false
 }
 
@@ -55,6 +59,10 @@ const rejectsNearMiss = (question: GeneratedQuestion): boolean => {
         ? `(${Number(coordinate[1]) + 1}, ${coordinate[2]})`
         : `${answer} x`
     return checkInputStep(question.step, miss).correct === false
+  }
+  if (question.step.type === 'operation-choice') {
+    const wrong = question.step.choices.find((choice) => choice.id !== (question.answer as string))
+    return wrong ? checkOperationChoiceStep(question.step, wrong.id).correct === false : false
   }
   return false
 }
