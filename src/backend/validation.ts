@@ -3,11 +3,13 @@
 import type {
   AttemptEvent,
   ChapterBeat,
+  ChapterPerformance,
   CustomCharacter,
   LessonId,
   LessonProgress,
   LessonScore,
   MainCharacterSource,
+  PerformanceBand,
   SkillMastery,
   SkillPracticeState,
   StepResult,
@@ -491,6 +493,29 @@ const generateStorySessionId = (): string => {
 // `fallbackId` supplies the session `id` when the stored value has none — used by the
 // legacy->library migration (the old single-session doc had no id) and by the Firestore reader
 // (the document id). With no stored id and no fallback, a fresh id is minted.
+// OPTIONAL/additive: the in-progress chapter's first-try tally. Counts coerce to non-negative ints
+// (firstTryCorrect clamped to <= answered); an empty (answered 0) tally is dropped so legacy sessions
+// and fresh chapters round-trip without the field (Firestore rejects undefined).
+const normalizeChapterScore = (value: unknown): { firstTryCorrect: number; answered: number } | null => {
+  if (!isRecord(value)) return null
+  const answered = normalizeStoryCount(value.answered)
+  if (answered === 0) return null
+  const firstTryCorrect = Math.min(answered, normalizeStoryCount(value.firstTryCorrect))
+  return { firstTryCorrect, answered }
+}
+
+const PERFORMANCE_BANDS: readonly PerformanceBand[] = ['flawless', 'strong', 'mixed', 'struggled']
+
+// OPTIONAL/additive: the captured performance of the most-recently-completed chapter. Kept only when
+// `band` is one of the known bands; counts coerce to non-negative ints (correct clamped to <= answered).
+const normalizeChapterPerformance = (value: unknown): ChapterPerformance | null => {
+  if (!isRecord(value)) return null
+  if (!isString(value.band) || !PERFORMANCE_BANDS.includes(value.band as PerformanceBand)) return null
+  const answered = normalizeStoryCount(value.answered)
+  const firstTryCorrect = Math.min(answered, normalizeStoryCount(value.firstTryCorrect))
+  return { band: value.band as PerformanceBand, firstTryCorrect, answered }
+}
+
 export const normalizeStorySession = (value: unknown, fallbackId?: string): StorySession | null => {
   if (!isRecord(value)) return null
   if (!isString(value.userId)) return null
@@ -520,6 +545,10 @@ export const normalizeStorySession = (value: unknown, fallbackId?: string): Stor
   // output, not a user free-text field, so no control-char collapsing). Omitted when absent/blank so
   // legacy sessions (no plan) round-trip unchanged — Firestore rejects undefined.
   const storyBible = isString(value.storyBible) ? value.storyBible.slice(0, STORY_BIBLE_MAX_LENGTH).trim() : ''
+  // OPTIONAL/additive: per-chapter performance — the in-progress tally + the last captured band.
+  // Omitted when absent/empty so legacy sessions round-trip unchanged.
+  const chapterScore = normalizeChapterScore(value.chapterScore)
+  const lastChapterPerformance = normalizeChapterPerformance(value.lastChapterPerformance)
 
   // History seeds from `currentQuestion` for legacy/v1 sessions that never tracked it, so resume
   // still has a one-entry review history at the live edge. The index is clamped into range and
@@ -538,6 +567,8 @@ export const normalizeStorySession = (value: unknown, fallbackId?: string): Stor
     status,
     questionsSolvedTotal: normalizeStoryCount(value.questionsSolvedTotal),
     questionsSinceCheckpoint: normalizeStoryCount(value.questionsSinceCheckpoint),
+    ...(chapterScore ? { chapterScore } : {}),
+    ...(lastChapterPerformance ? { lastChapterPerformance } : {}),
     ...(currentQuestion ? { currentQuestion } : {}),
     history,
     historyIndex,
