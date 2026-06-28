@@ -18,7 +18,6 @@ import {
   rethemeNarrative,
   setCurrentQuestion,
   setLatestSegmentChoice,
-  setNarrativeSummary,
 } from '../src/story/storySessionReducer'
 
 // --- Fixtures -------------------------------------------------------------------------------
@@ -213,13 +212,6 @@ test('setCurrentQuestion / clearCurrentQuestion set and remove the on-screen que
   assert.equal(cleared.updatedAt, ISO)
 })
 
-test('setNarrativeSummary replaces the rolling summary', () => {
-  const start = createInitialSession(theme(), 'user-1', ISO)
-  const updated = setNarrativeSummary(start, 'The story so far.', LATER)
-  assert.equal(updated.narrativeSummary, 'The story so far.')
-  assert.equal(updated.updatedAt, LATER)
-})
-
 test('endSession marks the session ended and drops the current question', () => {
   const start = setCurrentQuestion(createInitialSession(theme(), 'user-1', ISO), themedQuestion(), ISO)
   const ended = endSession(start, LATER)
@@ -235,7 +227,7 @@ test('endSession marks the session ended and drops the current question', () => 
 
 test('recentNarrative carries the rolling summary, recent beats, and the exact choice typed', () => {
   let session = createInitialSession(theme(), 'user-1', ISO)
-  session = setNarrativeSummary(session, 'Earlier: the crew left port.')
+  session = { ...session, narrativeSummary: 'Earlier: the crew left port.' }
   session = appendSegment(session, { text: 'You reach a split in the canyon.', now: ISO })
   session = setLatestSegmentChoice(session, 'take the left tunnel', LATER)
   session = appendSegment(session, { text: 'The left tunnel opens into a glowing cavern.', now: LATER })

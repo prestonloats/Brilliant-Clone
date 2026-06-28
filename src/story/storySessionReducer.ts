@@ -215,28 +215,6 @@ export function isAtLiveEdge(session: StorySession): boolean {
   return session.history.length === 0 || session.historyIndex >= session.history.length - 1
 }
 
-// A past question exists before the current pointer.
-export function canReviewBack(session: StorySession): boolean {
-  return session.history.length > 0 && session.historyIndex > 0
-}
-
-// A more-recent question exists after the current pointer (i.e. we are reviewing).
-export function canReviewForward(session: StorySession): boolean {
-  return session.historyIndex < session.history.length - 1
-}
-
-// Step one question back into the reviewed history (no-op at the start).
-export function reviewBack(session: StorySession): StorySession {
-  if (!canReviewBack(session)) return session
-  return { ...session, historyIndex: session.historyIndex - 1 }
-}
-
-// Step one question forward toward the live edge (no-op at the live edge).
-export function reviewForward(session: StorySession): StorySession {
-  if (!canReviewForward(session)) return session
-  return { ...session, historyIndex: session.historyIndex + 1 }
-}
-
 // Snap the view pointer back to the live edge (used on resume so the learner continues playing
 // rather than resuming mid-review).
 export function jumpToLiveEdge(session: StorySession): StorySession {
@@ -289,25 +267,6 @@ export function canReviewBackChapter(session: StorySession): boolean {
 // A later chapter exists to jump forward to (we are reviewing a chapter before the latest).
 export function canReviewForwardChapter(session: StorySession): boolean {
   return displayedChapter(session) < latestChapter(session)
-}
-
-// Jump the view pointer to the START of the previous chapter (read-only review — pointer only,
-// like reviewBack/reviewForward; never touches counters/segments). No-op in the first chapter.
-export function reviewBackChapter(session: StorySession): StorySession {
-  if (!canReviewBackChapter(session)) return session
-  const target = firstIndexOfChapter(displayedChapter(session) - 1)
-  if (target === session.historyIndex) return session
-  return { ...session, historyIndex: target }
-}
-
-// Jump the view pointer to the START of the next chapter, clamped to the live edge. No-op once we
-// are in the latest chapter (use reviewForward / answering to reach the live question itself).
-export function reviewForwardChapter(session: StorySession): StorySession {
-  if (!canReviewForwardChapter(session)) return session
-  const lastIndex = session.history.length - 1
-  const target = Math.min(lastIndex, firstIndexOfChapter(displayedChapter(session) + 1))
-  if (target === session.historyIndex) return session
-  return { ...session, historyIndex: target }
 }
 
 // --- Persisted chapter text + interleaved chapter/question review ----------------------------
@@ -378,11 +337,6 @@ export function hasChapterText(session: StorySession, chapter: number): boolean 
 // A review position is EITHER a chapter's text OR a question at a history index. For chapter-text,
 // `index` is firstIndexOfChapter(chapter) so chapterForIndex(index) recovers the chapter.
 export type StoryReviewPos = { index: number; chapterText: boolean }
-
-// The live edge as a review position: the newest served question (never chapter text).
-export function liveReviewPos(session: StorySession): StoryReviewPos {
-  return { index: Math.max(0, session.history.length - 1), chapterText: false }
-}
 
 // True only AT the live question (the newest question, not any chapter text).
 export function isLiveReviewPos(session: StorySession, pos: StoryReviewPos): boolean {
@@ -461,11 +415,6 @@ export function clearCurrentQuestion(session: StorySession, now: string = nowIso
   const next = { ...session, updatedAt: now }
   delete next.currentQuestion
   return next
-}
-
-// Replace the rolling narrative summary.
-export function setNarrativeSummary(session: StorySession, narrativeSummary: string, now: string = nowIso()): StorySession {
-  return { ...session, narrativeSummary, updatedAt: now }
 }
 
 // Set (or clear) the HIDDEN story bible (plan). The controller calls this with the freshly written

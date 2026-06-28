@@ -12,7 +12,6 @@ import {
   createInitialSession,
   hasChapterText,
   isLiveReviewPos,
-  liveReviewPos,
   recordChapterBeat,
   recordChapterOutcome,
   reviewChapterStart,
@@ -51,6 +50,13 @@ const manyQuestionSession = (count: number): StorySession => {
   for (let i = 0; i < count; i += 1) session = setCurrentQuestion(session, question(`q${i}`), ISO)
   return session
 }
+
+// The live edge as a review position (newest served question, never chapter text). Local test
+// helper for walking Back from the live question.
+const liveReviewPos = (session: StorySession): StoryReviewPos => ({
+  index: Math.max(0, session.history.length - 1),
+  chapterText: false,
+})
 
 // --- recordChapterBeat / chapterBeatFor / hasChapterText ------------------------------------
 
@@ -197,15 +203,6 @@ const walkForward = (session: StorySession, start: StoryReviewPos): StoryReviewP
   }
   return positions
 }
-
-test('liveReviewPos points at the live question (last history index, never chapter text)', () => {
-  assert.deepEqual(liveReviewPos(manyQuestionSession(12)), { index: 11, chapterText: false })
-  // Empty session clamps the index to 0.
-  assert.deepEqual(liveReviewPos(createInitialSession(theme(), 'user-1', ISO, 'story-1')), {
-    index: 0,
-    chapterText: false,
-  })
-})
 
 test('Back interleaves each chapter text with that chapter\'s questions; Forward returns to live', () => {
   const session = interleavedSession()
