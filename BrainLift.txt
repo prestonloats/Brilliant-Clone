@@ -1,0 +1,472 @@
+Owners
+Preston Loats
+
+Purpose
+The purpose of this BrainLift is to explore and internalize the learning science that underpins Alpha's
+learning model so I can design, build, and evaluate learning tools and applications from first principles
+rather than from conventional practices and intuition.
+
+In Scope
+- The core memory mechanisms of learning: retrieval practice (the testing effect),
+  spacing, and interleaving.
+- Cognitive Load Theory and the working-memory limits that constrain all instructional design.
+- The evidence comparing explicit/direct instruction against minimal-guidance approaches
+  (discovery, inquiry, problem-based, experiential learning).
+- Evidence-ranked study strategies and concrete classroom instructional principles.
+- The distinction between short-term performance and long-term learning, and the
+  problem of measuring teaching effectiveness reliably.
+- The relationship between domain knowledge and "generic" skills such as critical thinking.
+
+Out of Scope
+- The specifics of AI / intelligent tutoring systems.
+- Special education and learning-disability interventions.
+- Education policy, funding, and equity debates.
+- Deep motivation/engagement theory beyond what is needed to support cognition
+
+DOK 4:
+Spiky POV 1: Exams and quizzes are vital parts of current and future educational systems, but not for the measure of academic performance but as a way to force students into effortful retrieval.
+
+Elaboration: People everywhere use the exam as a measure of learning but a score is a performance snapshot, and performance is an unreliable, even inverted, index of durable learning: restudy
+beat testing on an immediate test (81% vs 75%) yet trailed it a week later (42% vs 56%) (Roediger & Karpicke 2006; Soderstrom & Bjork 2015). The exam's real power is mechanistic
+retrieval modifies memory: repeated testing hit 61% one-week recall vs 40% for restudy (d=1.26) on just 3.4 readings vs 14.2, and merely adding quizzes turned C+ (79%) work into
+A− (92%) (Make It Stick / McDaniel et al. 2011; practice testing is one of Dunlosky et al.'s two top-utility strategies). Additionally, students misjudge what works
+(~78% learned more from interleaving while ~78% believed the opposite, Bjork & Bjork 2011) and default to rereading.
+
+Spiky POV 2: Schools and teachers should not have easy or completion assignments. In reality, the goal should be to have students pass only ~80% of the questions on every learning opportunity.
+
+Elaboration: 80% success is the achievement‑maximizing set‑point (Rosenshine: best teachers ~82% vs worst ~73%). When students are above it they waste the oppertunity for effortful 
+retrieval. Schools and teachers often try to encourage learning by making content easier so that students are able to achieve full marks on
+asignments by just participating add putting in minimal amounts of effort. Completion-contingent rewards undermined intrinsic motivation the most (d = -0.40 and -0.36; Deci, Koestner
+& Ryan 1999). Trying to make reward students with 100s in these assignments can even ruin student's interests in that subject as shown in (Deci, Koestner & Ryan, 1999) — a grade is
+itself a performance-contingent reward that still undermined intrinsic motivation (d = -0.28), and a normative grade cut students' interest from ~6.5 to ~4.4 on a 7-point scale versus
+task comments (Butler 1988). The goal schools have for students should not be to achieve A's and 90+, but to keep the students where their grades average around an 80-85.
+
+
+Experts:
+### Expert 1
+- Who: Robert A. Bjork - Distinguished Research Professor of Psychology, UCLA; director of the Bjork Learning & Forgetting Lab.
+- Focus: "Desirable difficulties," the new theory of disuse (storage vs retrieval strength), and the learning-versus-performance distinction.
+- Why Follow: His work explains why spacing, interleaving, and testing work and why our intuitions about our own learning are systematically
+wrong.
+- Where: https://bjorklab.psych.ucla.edu/
+
+### Expert 2
+- Who: John Sweller - Emeritus Professor, University of New South Wales; originator of Cognitive Load Theory.
+- Focus: Working-memory limits, the worked-example effect, split-attention, and why minimal-guidance instruction fails.
+- Why Follow: Provides the mechanism of working-memory load. If you understand CLT, the rest of the instructional-design evidence becomes 
+predictable.
+- Where: https://onlinelibrary.wiley.com/doi/10.1207/s15516709cog1202_4 (foundational 1988 paper)
+
+### Expert 3
+- Who: Daniel T. Willingham - Professor of Psychology, University of Virginia; cognitive scientist and author.
+- Focus: How memory underpins understanding, the knowledge-vs-skills debate, and why critical thinking is so hard to teach.
+- Why Follow: The intellectual backbone of the deep knowledge beats generic skills thesis. Translates cognitive science into classroom-usable
+claims better than almost anyone.
+- Where: http://www.danielwillingham.com/
+
+### Expert 4
+- Who: Paul A. Kirschner - Emeritus Professor of Educational Psychology, Open University of the Netherlands.
+- Focus: Direct/guided instruction over discovery learning, cognitive load, and mapping seminal research to classroom practice.
+- Why Follow: Co-author of the field's most-cited case against minimal guidance; his synthesis work gives shared vocabulary across every
+other expert here.
+- Where: https://research.ou.nl/ws/files/1015152/Why%20minimal%20guidance%20during%20instruction%20does%20not%20work.pdf
+
+### Expert 5
+- Who: John Dunlosky - Professor of Psychology, Kent State University.
+- Focus: Metacognition and the comparative effectiveness of common study techniques.
+- Why Follow: His 2013 review ranks study strategies by evidence and crowns practice testing + distributed practice - the empirical justification\
+for what the learning loop should emphasize and what it should drop.
+- Where: https://www.academia.edu/13564364/Improving_Students_Learning_With_Effective_Learning_Techniques
+
+### Expert 6
+- Who: Carl Hendrick - Professor of Evidence-Informed Learning and Teaching, Academica University of Applied Sciences (Amsterdam); PhD in Education, King's College London.
+- Focus: Translating seminal cognitive-science and educational-psychology research into classroom practice; retrieval practice, spacing, and explicit instruction.
+- Why Follow: Co-author (with Kirschner) of How Learning Happens; he bridges the gap between the lab studies that anchor this BrainLift and what they actually look like in the classroom.
+- Where: https://www.carlhendrick.com/
+
+### Expert 7
+- Who: Ruth Butler - Professor (Emerita) of Education, Hebrew University of Jerusalem.
+- Focus: Achievement motivation and the effects of evaluation - the distinction between task-involving feedback (comments) and ego-involving feedback (grades) and how each affects intrinsic motivation and performance.
+- Why Follow: Her controlled classroom experiments are the seminal causal evidence that grades - even when paired with a comment - undermine interest and subsequent performance relative to comments alone.
+- Where: https://doi.org/10.1111/j.2044-8279.1988.tb00874.x
+
+DOK 3: Insights
+Insight 1: Students require questions and instructions to be minimal and straightforward so that working memory is not wasted on understanding what is going on, and is used on understanding the patterns behind the questions.
+
+Insight 2: A method where the learner feels is best to learn is often negatively correlated with how effective that method actually is.
+
+Insight 3: A testing is a powerful method of forcing students to think deeply about questions and thus have effortful recall. Trying to replicate the testing without much stakes likely leads to students not putting their full effort into the recall.
+
+Insight 4: While testing offers benefits to learning from its effortful retrieval, adding high stakes to it leads to both lower performance and lower long term learning.
+
+Insight 5: We know that having facts in our long term memory greatly assists problem solving. The implications of this, especially with regards to the use of Google and LLMs is that people shouldn't stop learning facts since they are easy to look up. We need facts in our long term memory we don't use our working memory on holding those facts, and can thus, better reason about them.
+
+Insight 6: Forgetting is so important because we need to loose easy access to the information in order to have effortful retrieval.
+
+Insight 7: Using testing to evoke effortful retrieval should be kept seperate from ego involving grades. Testing ideally should have only high quality feedback and no grades. Thus, the measure of a students performance needs to be done in some other way.
+
+Insight 8: The use of long, complete stories in teaching math is a highly underused considering its motivational benefits and potential ability for bridging the gaps between algebraic notation and real world word problems. 
+
+Insight 9: Pure mathematical symbols are the destination, not the starting line — and for young children, dressing math up in perceptually rich "concrete" materials usually backfires. Because elementary students cannot yet filter irrelevant detail, decorated representations (countable pictures, realistic play money) hijack attention into familiar-but-wrong routines like counting, hurting both learning and transfer (90% of kindergarteners counted the pictures; realistic money produced more errors than plain paper-and-pencil), whereas a single plain abstract representation transfers best. The resolution is not "symbols only" but concreteness fading: begin with deliberately plain concrete materials and explicitly fade them into the symbol — so the engaging story/context of Insight 8 is a scaffold to be removed, not a fixture to be left in place.
+
+DOK 2: Knowledge Tree
+
+### Category 1: Memory — How Durable Learning Forms
+
+#### Subcategory 1.1: Retrieval Practice (the Testing Effect)
+
+Source: Test-Enhanced Learning (Roediger & Karpicke, 2006)
+- DOK 1 – Facts:
+  - Immediate test (5 min): restudy beat testing, 81% vs 75% of idea units (d=0.52); at a delay the pattern reversed — testing beat restudy 68% vs 54% at 2 days and 56% vs 42% at 1 week.
+  - At 1 week, repeated testing (STTT) reached 61% vs 40% for repeated study (SSSS), d=1.26 — having read the passage only 3.4 times vs 14.2 times.
+  - Proportional forgetting across one week: repeated study lost 52% vs only 14% for repeated testing.
+- DOK 2 – Summary: Retrieving information is a more powerful and more time-efficient way to cement it than re-reading, but the benefit is hidden (even reversed) on immediate tests and only emerges after a delay. Practical upshot: build quizzing in, and judge it on delayed retention.
+- Link to source: https://journals.sagepub.com/doi/pdf/10.1111/j.1467-9280.2006.01693.x
+
+Source: Make It Stick (Brown, Roediger & McDaniel, 2014)
+- DOK 1 – Facts:
+  - 8th-grade science: material reinforced with low-stakes quizzes + feedback averaged A- (92%) on unit exams vs C+ (79%) for reviewed-but-unquizzed material (held across the school year).
+  - Microsurgery training spaced over 4 weeks vs massed in one day: 16% of the massed group (3 of 19) damaged vessels beyond repair and could not finish, vs 0% of the spaced group.
+- DOK 2 – Summary: The trade-book synthesis of the retrieval/spacing literature; its recounted classroom and professional-training studies show that quizzing and spacing produce large, real-world performance differences, not just lab effects.
+- Link to source: Book — no direct URL in reading list (entry #3, "Top 10 Books").
+
+Source: Retrieval (Sometimes) Enhances Learning: Performance Pressure Reduces the Benefits of Retrieval Practice (Hinze & Rapp, 2014)
+- DOK 1 – Facts:
+  - Undergraduates read biology passages, then either did retrieval practice (quizzes) or reread, under a manipulated stakes condition: a $5 bonus given simply for participation (low stakes) vs. the same bonus made contingent on test performance (high stakes).
+  - Initial-quiz performance did not differ between the high- and low-stakes groups, but on the final memory test about one week later the high-stakes group recalled less — i.e., pressure damaged durable learning without changing in-the-moment retrieval success.
+- DOK 2 – Summary: A boundary condition on the testing effect: making the retrieval event itself high-stakes can reduce its long-term benefit. The authors' "retrieval disruption hypothesis" holds that performance pressure spawns task-irrelevant thoughts that disrupt the memory consolidation occurring after a successful retrieval — so the harm happens after recall, not during it. Direct counter-evidence to a naive "more stakes = more retrieval benefit" reading: the active ingredient is effortful retrieval, and stakes are a double-edged way to compel it.
+- Link to source: https://doi.org/10.1002/acp.3032
+
+#### Subcategory 1.2: Spacing, Interleaving & Desirable Difficulties
+
+Source: Making Things Hard on Yourself, But in a Good Way (Bjork & Bjork, 2011)
+- DOK 1 – Facts:
+  - Interleaved vs blocked practice of volume formulas, tested one week later: 63% vs 20% of new problems solved correctly (primary study Rohrer & Taylor 2007, d=1.34).
+  - Inductive learning of artists' painting styles: interleaving improved later identification of new works (.61 vs .35, d=0.99); yet ~78% of learners performed better with interleaving while ~78% judged blocking to be as good or better (a metacognitive illusion).
+- DOK 2 – Summary: Introduces "desirable difficulties" — making learning harder in specific ways (spacing, interleaving, varying conditions) improves long-term retention and transfer, even though it slows things down and *feels* worse to the learner.
+- Link to source: https://bjorklab.psych.ucla.edu/wp-content/uploads/sites/13/2016/04/EBjork_RBjork_2011.pdf
+
+Source: Learning Versus Performance (Soderstrom & Bjork, 2015)
+- DOK 1 – Facts:
+  - Massed vs distributed vocabulary practice: virtually identical on an immediate test, but the distributed group recalled 35% more words four days later.
+  - Blocked vs random practice (Simon & Bjork 2001): blocked gave lower acquisition error (5.68% vs 8.85%) yet worse 24-hr retention (19.68% vs 10.80%) — and learners predicted blocked would be better (8.19% vs 11.87% predicted error).
+- DOK 2 – Summary: Acquisition-phase performance is an unreliable index of durable learning; the two can move in opposite directions. This is the formal warning label for any short-term metric.
+- Link to source: https://bjorklab.psych.ucla.edu/wp-content/uploads/sites/13/2016/11/soderstorm_ra_learningvsperformance.pdf
+
+Source: Organizing Instruction and Study to Improve Student Learning (Pashler et al., IES Practice Guide, 2007)
+- DOK 1 – Facts:
+  - Spacing-effect meta-analysis it cites (Cepeda et al. 2006; 317 experiments, 839 assessments): distributing study across two sessions vs massing (total time equated) reliably improved final recall, sometimes by more than 100% at meaningful retention intervals.
+  - The conditions giving the best final-test performance were often those giving the *worst* initial-session performance.
+- DOK 2 – Summary: A government-backed capstone that converts the spacing/testing literature into evidence-rated recommendations; "space learning over time" is its strongest, most general prescription.
+- Link to source: https://ies.ed.gov/ncee/wwc/practiceguide/1
+
+---
+
+### Category 2: Cognitive Load & Instructional Design
+
+#### Subcategory 2.1: Cognitive Load Theory (the mechanism)
+
+Source: Cognitive Load During Problem Solving (Sweller, 1988)
+- DOK 1 – Facts:
+  - Trigonometry solved conventionally (means-ends) vs with a goal-free goal, time-on-task matched: the conventional group committed 4–6× as many mathematical errors.
+  - Dual-task version: no difference in total solution time (F(1,22)=0.17) but the goal-free group made significantly fewer errors on 4 of 6 error categories.
+- DOK 2 – Summary: Conventional means-ends problem solving consumes working-memory capacity on the *search for an answer* rather than on *learning the structure* — the founding evidence that how a task loads working memory determines whether learning occurs.
+- Link to source: https://onlinelibrary.wiley.com/doi/10.1207/s15516709cog1202_4
+
+Source: Cognitive Load Theory (Sweller, Ayres & Kalyuga, 2011)
+- DOK 1 – Facts:
+  - Worked-example effect (Sweller & Cooper 1985): studying worked examples vs solving equivalent problems made learners ~2× faster on test problems (43.6 vs 78.1 s) with far fewer errors (0.18 vs 1.64 per problem).
+  - Split-attention meta-analysis (Ginns 2006; 50 studies): physically integrating mutually-referring information vs leaving it split produced d=0.85 overall, and far larger effects for high- than low-element-interactivity material (d=0.78 vs 0.28).
+- DOK 2 – Summary: The consolidated catalog of cognitive-load effects and the randomized experiments behind them — the unifying mechanism explaining *why* explicit instruction, worked examples, scaffolding, and careful sequencing work.
+- Link to source: Book — no direct URL in reading list (entry #10, "Top 10 Books").
+
+#### Subcategory 2.2: Explicit Instruction vs Minimal Guidance
+
+Source: Why Minimal Guidance During Instruction Does Not Work (Kirschner, Sweller & Clark, 2006)
+- DOK 1 – Facts:
+  - Central exhibit Klahr & Nigam (2004): direct instruction of the control-of-variables strategy produced "master" performance in 40 of 52 children (77%) vs 12 of 52 (23%) under discovery; main effect F(1,100)=26.4, p<.0001, d=0.711.
+  - On a Day-2 far-transfer task (evaluating science posters), discovery-masters did as well as direct-instruction-masters — reaching mastery mattered, not the route to it.
+- DOK 2 – Summary: Constructivist/discovery/inquiry/PBL approaches ignore working-memory limits and human cognitive architecture; for novices, guided/explicit instruction is both more effective and more efficient.
+- Link to source: https://research.ou.nl/ws/files/1015152/Why%20minimal%20guidance%20during%20instruction%20does%20not%20work.pdf
+
+---
+
+### Category 3: Effective Teaching & Study Strategies
+
+#### Subcategory 3.1: Classroom Instructional Principles
+
+Source: Principles of Instruction (Rosenshine, 2012)
+- DOK 1 – Facts:
+  - Most- vs least-effective teachers (4th-grade math): 82% vs 73% of student answers correct, with the optimal success rate for fostering achievement estimated at ~80%.
+  - Most-effective teachers spent ~23 of a 40-minute period on lecture/demonstration/questioning/worked examples vs ~11 minutes for the least-effective; in one study the least-effective asked only 9 questions in 40 minutes.
+- DOK 2 – Summary: A practitioner synthesis of three research bodies into ten teaching principles (daily review, small steps, questioning, models, guided practice, checking for understanding, ~80% success, scaffolding, independent practice) — the practical how-to layer.
+- Link to source: https://www.aft.org/sites/default/files/Rosenshine.pdf
+
+#### Subcategory 3.2: Ranking Study Strategies by Evidence
+
+Source: Improving Students' Learning With Effective Learning Techniques (Dunlosky et al., 2013)
+- DOK 1 – Facts:
+  - Elaborative interrogation (Pressley et al. 1987): prompting "Why would this be true?" produced ~72% recall vs ~37% for read-only/given-explanation groups; across studies, effect sizes ranged 0.85–2.57 (Seifert 1993).
+  - Self-explanation (Berry 1983): self-explainers substantially outperformed controls on abstract transfer problems, where an explicitly-told control still scored only 28%.
+- DOK 2 – Summary: Systematically ranks ten common study techniques by evidence; practice testing and distributed practice earn the only "high utility" ratings, while popular tactics like highlighting and rereading rate low.
+- Link to source: https://www.academia.edu/13564364/Improving_Students_Learning_With_Effective_Learning_Techniques
+
+#### Subcategory 3.3: Measuring Teaching Quality
+
+Source: What Makes Great Teaching? (Coe, Aloisi, Higgins & Major, 2014 — Sutton Trust)
+- DOK 1 – Facts:
+  - From the MET project: the median correlation between value-added and classroom-observation ratings was only ~0.3 — correctly classifying a teacher as above/below average ~60% of the time vs 50% by coin toss.
+  - Structured observation feedback (Taylor & Tyler 2012) yielded a later math-score gain of effect size ~0.11 at ~$7,500 per teacher.
+- DOK 2 – Summary: A review of 200+ studies separating practices with strong evidence from popular myths, and showing how noisy our common proxies for "good teaching" actually are — argues for grounding judgments in student outcomes.
+- Link to source: https://www.suttontrust.com/wp-content/uploads/2014/10/What-Makes-Great-Teaching-REPORT.pdf
+
+---
+
+### Category 4: Knowledge vs Generic Skills
+
+#### Subcategory 4.1: Critical Thinking, Transfer & the Primacy of Knowledge
+
+Source: Critical Thinking: Why Is It So Hard to Teach? (Willingham, 2007)
+- DOK 1 – Facts:
+  - Spontaneous analogical transfer (Novick & Holyoak 1991): only 19% of subjects spontaneously used an analogous solution to a structurally identical new problem; explicitly telling them the problems were similar raised it only to 35%.
+  - Cross-cultural transfer (Chen, Mo & Honomichl 2004): ~75% of American vs 25% of Chinese students solved a "leave a trail" problem (structurally identical to Hansel and Gretel); the percentages reversed for a problem based on a Chinese folk tale.
+- DOK 2 – Summary: Critical thinking is not a free-standing skill that can be trained and transferred; it is intertwined with domain knowledge and the deep structure of specific problems. Build knowledge to build thinking.
+- Link to source: https://www.aft.org/sites/default/files/media/2014/Crit_Thinking.pdf
+
+---
+
+### Category 5: Grades, Feedback & Motivation
+
+#### Subcategory 5.1: Grades vs Comments (Task- vs Ego-Involvement)
+
+Source: Enhancing and Undermining Intrinsic Motivation (Butler, 1988)
+- DOK 1 – Facts:
+  - Randomized classroom experiment: 132 Israeli 5th/6th graders, assigned by class to one of three feedback conditions on the same interesting tasks — task-focused comments only, normative numerical grades only (scaled 40–99), or grades + comments; Session 3 work was neither graded nor returned, isolating the durable post-feedback effect.
+  - Post-test performance (Session 3): on the convergent task the comments group roughly doubled the grades+comments group (high achievers ~24 vs ~12; low achievers ~14 vs ~6), with comments beating both grade conditions combined, F(1,125)=98.68, p<0.001; on the divergent task comments were again highest, F(1,125)=160.1, p<0.001, while grades vs grades+comments did not differ.
+  - Interest (7-point scale) began at ~6.0–6.4 in every group; by Session 3 it was ~6.5–6.7 after comments vs ~4.4 after grades and ~4.9 after grades+comments (F(1,125)=147.6, p<0.001), and requests for more tasks were ~6.5 after comments vs ~3.3–4.0 after grades (F(1,125)=245.4, p<0.001).
+  - Adding a comment to a grade did not help: grades-alone matched or beat grades+comments on the convergent task (Session 2, F(1,125)=10.85, p<0.001), only ~45% of the grades+comments group could recall even part of their comment vs ~95% of the comments-only group, and improvement tracked the comment's content only in the comments condition (87% told to add short words did so; 92% told to add long words did so) vs a non-differential ~25–35% under grades+comments.
+- DOK 2 – Summary: The seminal controlled experiment on grading. A normative grade — even when paired with a helpful comment — shifts learners from task-involvement to ego-involvement, undermining interest, creativity, and later performance relative to identical work returned with comments only; the grade dominates attention and memory, so the comment is effectively ignored. Low achievers who received comments out-performed high achievers who received grades, and divergent thinking was depressed by grades at both achievement levels.
+- Link to source: https://doi.org/10.1111/j.2044-8279.1988.tb00874.x
+
+Source: Effects of No Feedback, Task-Related Comments, and Grades (Butler & Nisan, 1986)
+- DOK 1 – Facts:
+  - The precursor to Butler (1988) and the cleanest test of grades against getting nothing: 261 sixth-graders randomly assigned by class to task-related comments, normative numerical grades (scaled 30–100), or no feedback, on a quantitative (word-construction) and a qualitative (divergent-thinking) task across three sessions; Session 3 was unevaluated, isolating the durable effect.
+  - Quantitative task (Session 3): comments and grades each beat no feedback (F(2,257)=77.00, p<0.001; contrast p<0.001) and did not differ from each other — the one domain where a grade outperformed getting nothing.
+  - Qualitative/creative task (Session 3): comments significantly outperformed both grades and no feedback, while grades and no feedback did not differ from each other (across all sub-scores) — a grade was no better than nothing for creative work.
+  - Interest: highest after comments (F(2,258)=25.48, p<0.001), with grades not significantly different from no feedback; and repeated no feedback itself undermined interest, so silence was not a neutral baseline.
+- DOK 2 – Summary: What sustains interest and improves work is competence-relevant, task-focused information. Comments did this and lifted both rote and creative performance; numerical grades helped only on the simple quantitative task and were otherwise no better than receiving no feedback at all; and getting nothing was itself demotivating. Net pattern: comments ≫ grades = no feedback for interest and creative performance, while comments = grades > no feedback for rote performance.
+- Link to source: https://doi.org/10.1037/0022-0663.78.3.210
+
+#### Subcategory 5.2: Grades as Extrinsic Rewards
+
+Source: Should Learning Be Its Own Reward? (Willingham, 2007–2008)
+- DOK 1 – Facts:
+  - Overjustification effect (Lepper, Greene & Nisbett 1973, as recounted): children promised a "Good Player" certificate for drawing later used the markers about half as much as no-reward or surprise-reward peers, whereas an unexpected reward produced no such drop.
+  - Expected, contingent extrinsic rewards reduce intrinsic motivation only for tasks the learner already likes; for dull tasks motivation returns to baseline rather than below it, and measured intrinsic and extrinsic motivation correlate only about -0.25 (Lepper, Corpus & Iyengar 2005).
+  - Grades are weak rewards on the desirable/certain/prompt criteria: they are delayed (given well after the studying that earns them) and uncertain for low achievers (effort does not guarantee the grade), and reward value drops steeply with delay (a $20 reward is worth ~$18 at a 1-day and ~$15 at a 1-week delay; Kirby 1997).
+- DOK 2 – Summary: A cognitive-science column treating grades as a form of extrinsic reward. Expected, contingent rewards — grades included — can erode intrinsic interest in tasks students already enjoy, and grades are comparatively weak motivators because they are delayed and uncertain. Recommended practice: build intrinsic interest first, and if rewards are used, use them for a specific reason and a limited time.
+- Link to source: https://www.aft.org/ae/winter2007-2008/willingham
+
+Source: A Meta-Analytic Review of the Effects of Extrinsic Rewards on Intrinsic Motivation (Deci, Koestner & Ryan, 1999)
+- DOK 1 – Facts:
+  - Distinguishes EXPECTING a reward for doing a task from EARNING a reward for performing well. Cognitive Evaluation Theory frames every reward as having a controlling aspect (undermines autonomy) and an informational aspect (affirms competence); the net effect depends on which is more salient.
+  - Meta-analysis of 128 experiments, free-choice intrinsic motivation: engagement-contingent (reward just for doing the task) d = -0.40; completion-contingent (reward for finishing) d = -0.36; performance-contingent (reward for doing well / a trophy for winning, money for first place) d = -0.28 — all significant undermining.
+  - "Earning" is not a loophole: performance-contingent rewards carry the most competence information but are also the most controlling, so they still undermine on average; the undermining is attenuated when the reward signals high-quality performance (maximal reward + positive feedback), yet the subset where some people got LESS than the maximal reward showed a LARGER undermining effect than any other reward category in the analysis — a performance reward that signals falling short is the most damaging.
+  - Pure positive feedback/praise (informational, no tangible control) enhanced intrinsic motivation (free-choice d = +0.33; interest d = +0.31). Unexpected and task-noncontingent rewards did not significantly undermine; tangible rewards were more detrimental for children than for college students.
+- DOK 2 – Summary: The harm from rewards depends on contingency and on the controlling-vs-informational balance, not on rewards as such. Being rewarded merely for doing a task reliably undermines intrinsic motivation; being rewarded for performing well (a trophy, prize money) is genuinely different because it carries competence information that can offset the cost — but it is also the most controlling kind and still undermines on average, most of all when the reward signals you fell short. Informational feedback without tangible control (praise) enhances intrinsic motivation.
+- Link to source: https://doi.org/10.1037/0033-2909.125.6.627
+
+#### Subcategory 5.3: Marking & Written Feedback in Practice
+
+Source: Is Written Feedback a Waste of Time? (Hendrick, 2025)
+- DOK 1 – Facts:
+  - In a 2025 study (Contemporary Educational Psychology) of 937 German secondary students revising English writing, 20% made no revisions at all and 47% of those who did revise showed no improvement — roughly two-thirds ineffective overall — and higher-performing students were less likely to improve.
+  - Disengagement persisted after controlling for ability, motivation, and prior performance: boys ignored feedback more than girls, comprehensive/public-school students implemented it less well than academic-track peers, and Grade 7 students were less successful than Grade 9; more detailed feedback raised successful implementation but not whether students attempted a revision at all.
+  - Base rates cited: Kluger & DeNisi's (1996) meta-analysis found 38% of feedback interventions actually decreased performance; Dylan Wiliam (quoted) estimates England spends ~£2.5 billion a year on feedback "with almost no effect on student achievement."
+- DOK 2 – Summary: A practitioner synthesis (a non-peer-reviewed newsletter essay) arguing that marking and feedback are not the same thing — most written marking is high-cost and largely unused, though it retains diagnostic "formative dividend" value. It proposes moving from rubric-based absolute marking toward comparative judgment plus human-in-the-loop AI (No More Marking's target: accurate grades, personalized feedback, and class summaries from ~15–30 comparative judgements plus audio comments) to cut workload and redirect effort to feedback that is actually used.
+- Link to source: https://carlhendrick.substack.com/p/is-written-feedback-a-waste-of-time
+
+#### Subcategory 5.4: Competition & the Low End
+
+Source: Elements of the Competitive Situation that Affect Intrinsic Motivation (Reeve & Deci, 1996)
+- DOK 1 – Facts:
+  - Experiment separating competition into its competitive outcome (winning vs losing) and its interpersonal context (pressured vs nonpressured); intrinsic motivation measured by free-choice behavior and self-reported interest.
+  - Path analysis: winning (vs losing) RAISED intrinsic motivation by increasing perceived competence, while losing lowered it — the negative competence signal is the mechanism that hits the low end.
+  - A pressured ("you must beat them") context LOWERED intrinsic motivation by reducing perceived self-determination, independent of who won — so even winners pay an autonomy cost under pressure.
+- DOK 2 – Summary: Competition's effect on intrinsic motivation splits into a competence channel (winning helps, losing hurts) and an autonomy channel (pressure hurts everyone). Losers land on the wrong side of both, with no positive-competence boost to offset the loss.
+- Link to source: https://doi.org/10.1177/0146167296221003
+
+Source: Competitively Contingent Rewards and Intrinsic Motivation: Can Losers Remain Motivated? (Vansteenkiste & Deci, 2003)
+- DOK 1 – Facts:
+  - Winners were more intrinsically motivated than losers (the basic asymmetry of competition).
+  - Losers can be partly protected: those given an explicit (absolute) standard plus positive feedback for meeting it were more intrinsically motivated than losers given neither — competence information offsets some of the sting of losing.
+  - A prize is worse than feedback for losers: losers given a performance-contingent reward for reaching the same standard showed LESS free-choice intrinsic motivation than losers given positive feedback (self-reported enjoyment did not differ).
+  - Losers showed MORE ego-involved persistence than winners or non-competitors — they often keep going out of self-worth pressure rather than genuine interest.
+- DOK 2 – Summary: Losing undermines intrinsic motivation, but the damage is buffered when losers receive competence information showing they met a reachable standard; a tangible reward does not buffer it and can worsen behavioral motivation. The low end is best protected by absolute standards plus informational feedback, not prizes.
+- Link to source: https://doi.org/10.1023/A:1026259005264
+
+Source: Quitters Never Win: The (Adverse) Incentive Effects of Competing with Superstars (Brown, 2011)
+- DOK 1 – Facts:
+  - Discouragement effect (tournament theory): when win-probability is low, competitors reduce effort; this is driven by the perceived chance of winning, not by whether standings are public.
+  - Empirical case (PGA golf): the presence of a superstar (Tiger Woods) worsened rivals' scores by ~0.2 strokes in the first round and ~0.8 strokes over a whole tournament; the effect grew when the superstar played well and vanished when he was weaker, and was not due to riskier play.
+  - General principle (Konrad 2009; Drugov & Ryvkin 2022): larger ability gaps reduce the lower-ability contestant's effort, and the stronger contestants then ease off too, lowering total effort.
+- DOK 2 – Summary: Rewarding only the top finishers and hiding the losers does NOT remove the discouragement effect — anyone who concludes they cannot reach the cutoff disengages regardless of whether ranks are shown. Concealing the bottom ranks does reduce the public social-comparison harm (leaderboard studies recommend not displaying the lowest ranks), but it leaves discouragement intact and turns the low end's experience into a "no feedback" condition, which is itself demotivating. The remedy is reachable absolute standards plus private, task-focused feedback rather than rank alone.
+- Link to source: https://doi.org/10.1086/663306
+
+---
+
+### Category 6: Math in Stories — Context, Narrative & Transfer
+
+#### Subcategory 6.1: How Story/Word Problems Are Processed
+
+Source: Understanding and Solving Word Arithmetic Problems (Kintsch & Greeno, 1985)
+- DOK 1 – Facts:
+  - Solving a word/story problem is two tasks at once: comprehending the text (building a propositional "text base," as in any reading) and constructing a "problem model" — the abstract math structure (sets and relations) needed to compute the answer.
+  - Difficulty is driven by how the wording maps onto a problem schema (combine / change / compare), not just by the numbers — so small changes in how a story is worded can make the same arithmetic markedly easier or harder to solve.
+- DOK 2 – Summary: Wrapping arithmetic in a narrative adds a reading-comprehension demand on top of the math; whether a story helps or hurts hinges on how readily learners can extract the mathematical relations from the text. The foundational cognitive model behind "math in stories" work.
+- Link to source: https://doi.org/10.1037/0033-295X.92.1.109
+
+#### Subcategory 6.2: When a Story Context Helps Learning
+
+Source: Use of a Storytelling Context to Improve Geometry Skills in Kindergarten (Casey, Erkut, Ceder & Young, 2008)
+- DOK 1 – Facts:
+  - Two studies taught kindergarten geometry (part-whole spatial puzzles) with vs without an adventure-story context; transfer was tested on new puzzles (near: the same pieces; far: a wider variety of pieces).
+  - In the decisive comparison (Study 2), story+geometry beat geometry-ALONE on both near- and far-transfer, isolating a benefit of the narrative itself; effects were moderate (story context ~9–14% of the variance), and across studies girls benefited more than boys.
+- DOK 2 – Summary: A narrative context can improve young children's math learning and transfer beyond teaching the same content without a story — at least when the transfer target resembles the practiced material (here, more spatial puzzles). Evidence that a well-built story context can help.
+- Link to source: https://doi.org/10.1016/j.appdev.2007.10.005
+
+#### Subcategory 6.3: Stories, Attention & Engagement
+
+Source: Intrinsic Motivation and the Process of Learning: Contextualization, Personalization, and Choice (Cordova & Lepper, 1996)
+- DOK 1 – Facts:
+  - 72 fourth/fifth graders learned arithmetic order-of-operations on the computer; the identical content was presented either abstractly (control) or inside meaningful, appealing fantasy contexts (generic or personalized), with or without choice of incidental context features.
+  - Contextualization, personalization, and choice each produced "dramatic increases" not only in motivation but in depth of engagement, the amount learned in a fixed time period, perceived competence, and level of aspiration.
+- DOK 2 – Summary: Wrapping the same math in an engaging, meaningful (and ideally personalized) context raised engagement and learning together — a story/fantasy context can hold attention on math and improve outcomes, not merely make it "fun."
+- Link to source: https://doi.org/10.1037/0022-0663.88.4.715
+
+Source: Effects of Fantasy Contexts on Children's Learning and Motivation (Parker & Lepper, 1992)
+- DOK 1 – Facts:
+  - Children strongly preferred computer programs with fantasy elements (Study 1); over 5 hours of use (Study 2), identical problems embedded in fantasy contexts produced significantly greater learning and transfer than the abstract version, with gains holding at a 2-week delayed test.
+  - Whether children could choose among fantasies made no difference — the benefit was the fantasy context itself.
+- DOK 2 – Summary: A relevant fantasy/narrative context both attracts children and improves durable learning and transfer — the engagement benefit of narrative is real and lasting, not a momentary novelty.
+- Link to source: https://doi.org/10.1037/0022-3514.62.4.625
+
+Source: Motivating Children to Learn Effectively: Intrinsic Integration in Educational Games (Habgood & Ainsworth, 2011)
+- DOK 1 – Facts:
+  - Tested "intrinsic integration" (the math IS the core game mechanic) against an "extrinsic" version (math as a separate add-on / "sugar coating") using the math game Zombie Division (ages 7–11).
+  - Study 1 (58 children, 2 hr): more learning from the intrinsic version under fixed time. Study 2 (16 children, free choice): ~7× more time-on-task on the intrinsic version (75.7 vs ~10.3 minutes; t = 7.38, p < 0.001). A pre-registered follow-up (Cutting & Iacovides 2022, n = 210) traced the learning gain to an attentional mechanism.
+- DOK 2 – Summary: A story/game holds attention for math productively only when progressing the story requires doing the math (intrinsic integration); when the narrative is a decorative wrapper around separate math, both engagement and learning are far weaker.
+- Link to source: https://doi.org/10.1080/10508406.2010.508029
+
+Source: How Seductive Details Do Their Damage (Harp & Mayer, 1998)
+- DOK 1 – Facts:
+  - Across 4 experiments (357 undergraduates; a science text), adding "seductive details" (interesting but irrelevant adjuncts) made readers recall fewer main ideas and produce fewer problem-solving transfer solutions.
+  - Highlighting, learning objectives, or signaling did not remove the effect; seductive details at the START made it worse, at the END reduced it; the damage came from priming inappropriate schemas, not mere distraction.
+- DOK 2 – Summary: The caution for attention-grabbing stories: interesting-but-irrelevant detail captures "emotional interest" yet harms learning and transfer. Engagement must come from the to-be-learned content itself ("cognitive interest"), or attention is spent on the wrong thing.
+- Link to source: https://doi.org/10.1037/0022-0663.90.3.414
+
+#### Subcategory 6.4: Integrating Reading & Math
+
+Source: Closing the Word-Problem Achievement Gap: Schema-Based Intervention With Embedded Language Comprehension (Fuchs et al., 2021)
+- DOK 1 – Facts:
+  - RCT with 391 at-risk first graders randomly assigned to four conditions — schema-based word-problem intervention WITH embedded language-comprehension instruction, the same WITHOUT it, a structured number-knowledge (arithmetic) intervention, and a control — over 45 sessions of 30 minutes.
+  - Both word-problem conditions beat control, but adding the reading/language component markedly improved word-problem solving (ES = 1.75 vs 1.08) and a word-problem-language outcome (ES = 0.56 vs 0.16) — even though it meant ~5 fewer minutes of direct math per session; the arithmetic-only intervention gave no word-problem advantage over control.
+- DOK 2 – Summary: Teaching the language/reading demands of word problems inside math instruction is the strongest "combine reading and math" result — it works precisely because the comprehension is part of the math, not a separate subject bolted on.
+- Link to source: https://doi.org/10.1037/edu0000467
+
+Source: Reviewing Integrated Science and Mathematics (Hurley, 2001)
+- DOK 1 – Facts:
+  - Meta-analysis of 31 controlled studies (1935–1997): integrating two subjects beat separate instruction modestly overall — math ES = 0.27, science ES = 0.37 — with math gaining less than science.
+  - The effect depended entirely on the model: "sequenced" integration gave a large math effect (ES = 0.85), while "parallel"/same-topic integration was negative for math (ES = -0.11), "total integration" only 0.20, the one elementary math study was -0.13, and recent studies averaged ES = 0.07 for math.
+- DOK 2 – Summary: Combining subjects helps math only in specific, sequenced forms; loose, parallel "same-theme" merging adds little and can reduce math achievement, and math is consistently the subject that benefits least from generic integration.
+- Link to source: https://www.nationalacademies.org/read/18612/chapter/5
+
+Source: Teaching Disciplinary Literacy to Adolescents (Shanahan & Shanahan, 2008)
+- DOK 1 – Facts:
+  - Observational study of how experts and teachers in mathematics, chemistry, and history read: the disciplines read their texts in fundamentally different ways, so generic, all-purpose reading strategies do not transfer across them.
+  - Argues for "disciplinary literacy" — teaching the specialized reading of each field (for math: parsing problems, symbols, notation, proofs) — rather than generic content-area reading ("every teacher a teacher of reading").
+- DOK 2 – Summary: Reading is discipline-specific, so math and reading combine productively only through math's own literacy, not by layering generic reading skills onto math — the reason the word-problem-language approach works while generic merging does not.
+- Link to source: https://doi.org/10.17763/haer.78.1.v62444321p602101
+
+#### Subcategory 6.5: Pure/Abstract Symbols vs Concrete Materials (When Concreteness Backfires)
+
+Source: The Advantage of Abstract Examples in Learning Math (Kaminski, Sloutsky & Heckler, 2008)
+- DOK 1 – Facts:
+  - Undergraduates learned the same commutative mathematical system via either generic symbols or concrete, story-like instantiations (measuring cups, pizzas, tennis balls); all conditions learned equally well, but only the single abstract/generic condition transferred to a novel domain reliably above chance, F(3,68)=11.9, p<0.001 (transfer from the concrete conditions did not beat chance).
+  - Adding more concrete examples did not fix transfer, and a concrete-then-generic sequence still underperformed generic-only.
+- DOK 2 – Summary: The adult bookend of this debate: abstract symbols transfer, while a rich concrete context welds the concept to its surface features. Debated — De Bock et al. (2011) show concrete instantiations aid transfer to new concrete domains, so the lesson is matching representation to the transfer target, not banning concreteness.
+- Link to source: https://doi.org/10.1126/science.1154659
+
+Source: Extraneous Perceptual Information Interferes with Children's Acquisition of Mathematical Knowledge (Kaminski & Sloutsky, 2013)
+- DOK 1 – Facts:
+  - 6–8-year-olds (Exp 1, N=122) learned to read bar graphs with plain monochromatic bars vs bars made of countable pictures; with the picture bars, 90% of kindergarteners and 72% of first graders counted the objects (the wrong strategy) instead of reading the y-axis.
+  - On later plain graphs (Exp 3), only 64% of picture-trained children read them correctly vs 96% of plain-trained children — a 32-point learning deficit; 37% vs 5% failed to learn any correct strategy. The interference shrank with age.
+- DOK 2 – Summary: The child-level companion to Kaminski 2008: "engaging," decorated math materials actively hurt the youngest learners, because immature attentional filtering lets a familiar-but-wrong routine (counting) hijack the to-be-learned relation.
+- Link to source: https://doi.org/10.1037/a0031040
+
+Source: Should You Show Me the Money? Concrete Objects Both Hurt and Help (McNeil, Uttal, Jarvin & Sternberg, 2009)
+- DOK 1 – Facts:
+  - 4th/6th graders (N=229) given realistic toy bills and coins solved fewer of 10 money problems (M=4.26) than peers using only paper and pencil (M=4.85), F(1,225)=4.08, p=.04.
+  - 5th graders (N=79): perceptually rich money produced the fewest correct (M=4.08) vs bland-or-no-objects combined (M=5.50), F(1,76)=6.34, p=.01, while bland tokens (M=5.56) ≈ no objects (M=5.45); yet the rich group's errors were less often conceptual (.37 vs .51), F(1,73)=5.28, p=.02.
+- DOK 2 – Summary: It is perceptual richness, not the presence of objects, that hurts accuracy; concreteness trades fewer conceptual slips for more procedural/arithmetic errors — which is why effective manipulatives (Base-10 blocks, Montessori) are deliberately plain.
+- Link to source: https://doi.org/10.1016/j.learninstruc.2008.03.005
+
+Source: A Meta-Analysis of the Efficacy of Teaching Mathematics with Concrete Manipulatives (Carbonneau, Marley & Selig, 2013)
+- DOK 1 – Facts:
+  - 55 studies (K–college, N=7,237) comparing manipulatives to abstract-symbols-only: overall d≈0.37 favoring manipulatives, but moderate-to-large for retention vs only small effects for problem solving (k=9), transfer (k=13), and justification (k=2).
+  - High instructional guidance d=0.46 vs low guidance d=0.29 (Q=6.3, p=.01); effect largest for fractions (d=0.69) and place value (0.58), smallest for algebra (0.21) and arithmetic (0.27).
+- DOK 2 – Summary: The honest counterweight — plain manipulatives plus explicit guidance do help children, especially for retention, but the edge over pure symbols shrinks precisely where transfer is the goal.
+- Link to source: https://doi.org/10.1037/a0031084
+
+#### Subcategory 6.6: Concreteness Fading — Start Concrete, End in Pure Symbols
+
+Source: Benefits of "Concreteness Fading" for Children's Mathematics Understanding (Fyfe, McNeil & Borjas, 2015)
+- DOK 1 – Facts:
+  - 2nd/3rd graders learned mathematical equivalence in four ways — pure concrete, pure abstract, concreteness fading (concrete→pictorial→symbols), or the reverse — and the fading group transferred best to novel, harder problems: main effect F(3,63)=2.80, p=.048; fading vs the other three F(1,63)=7.68, p=.007 (reported ~d=0.76).
+  - The advantage survived a "warm-up" control (Exp 2) and held even for children with high prior knowledge (Exp 3).
+- DOK 2 – Summary: The resolution of 6.5 — pure symbols are the destination, not the starting line; an explicit concrete→symbol fade beats both pure-concrete and pure-abstract instruction.
+- Link to source: https://doi.org/10.1016/j.learninstruc.2014.10.004
+
+Source: Concreteness Fading in Mathematics and Science Instruction: A Systematic Review (Fyfe, McNeil, Son & Goldstone, 2014)
+- DOK 1 – Facts:
+  - No new quantified findings (a theoretical/synthesis review); recommends a three-step sequence — concrete → pictorial/representational → abstract symbol — that always ends at the symbol.
+- DOK 2 – Summary: The capstone argument: fading combines the grounding benefit of concrete materials with the transfer benefit of abstract symbols, gaining more than the sum of either alone; it is the cognitive-science case for the older concrete-representational-abstract (CRA / Bruner) tradition.
+- Link to source: https://doi.org/10.1007/s10648-014-9249-3
+
+---
+
+Application: Why Story Mode (Design Decisions)
+
+The science above points to a specific build. The active ingredient in learning is effortful retrieval (Spiky POV 1; Roediger & Karpicke 2006), motivated by narrative (Insight 8; Cordova & Lepper 1996, Habgood & Ainsworth 2011) and kept separate from ego-involving grades (Insight 7; Butler 1988). Story Mode is the implementation of exactly that. The AI is deliberately confined to the one layer where its strength — fluent, themed prose — helps, and its weakness — unreliable computation — is harmless.
+
+Why Story Mode over a traditional chatbot tutor.
+A conversational "ask me anything" tutor optimizes the wrong mechanism. It invites the learner to receive explanations — re-reading and minimal-guidance discovery, both low-utility for novices (Dunlosky et al. 2013; Kirschner, Sweller & Clark 2006) — and it offloads the thinking to the model, the opposite of building facts and procedures into the learner's own long-term memory (Insight 5). It also makes the AI the authority on whether the math is correct, which is unsafe because LLMs hallucinate arithmetic. Story Mode inverts this: the learner must PRODUCE the answer (free-response recall, not recognition), every prompt is a spaced and interleaved retrieval, and the narrative supplies the motivation a bare drill loop lacks — while the AI never judges, teaches, or computes the math.
+
+Other AI ideas considered.
+- A Socratic / conversational tutor — rejected (minimal guidance, offloads retrieval, makes the AI the math authority).
+- AI that generates the math problems AND their answer keys — rejected: an answer key the model invents can be wrong. Instead each question is generated in code from a seed with a code-computed key, and the AI only re-skins the surface wording.
+- AI auto-grading and AI-written feedback — rejected: correctness and the hint -> explanation -> reveal feedback must be deterministic and misconception-specific, not improvised by a model.
+
+What was intentionally left out.
+No open-ended chat, no AI grading, no AI answer keys, and no AI that computes, reveals, or hints at the answer (the prompts hard-forbid all of these). No grades or high-stakes scoring inside Story Mode (Insight 7). No AI-chosen difficulty yet. No personal-data collection — the model is instructed never to solicit or store PII, with teen-safety rails applied to every call. Spatial question types (drag-the-scale, plot-the-point, slope sliders) are excluded from re-theming because their meaning is geometric, not textual.
+
+How the deterministic engine guarantees correctness while AI only writes narrative.
+The answer key — the accepted answers, the correct option/tile, the numeric values — lives only in the code-generated question and is never sent to, or read back from, the model. The AI receives display text only (the prompt and the option/tile labels) and must return the same structure with the SAME ids. A pure function deep-clones the original question and overwrites TEXT ONLY; if the returned ids do not match the source exactly, or any validation fails, it discards the rewrite and shows the original question. Grading runs in pure code, and on resume the question is rebuilt from its seed with the key recomputed. So the worst an AI failure can do is cosmetic — a clumsy wrapper, or the plain un-themed question — never mark a wrong answer right. That structural guarantee is what makes it safe to ship a teen-facing app on a free, fallible model: the cognition-critical work (retrieval, correctness, feedback) is deterministic and code-authoritative, and the AI is sandboxed to motivation and theme.
+
+
+BrainLift — AI-First Build Process: Balance (Interactive Algebra)
+
+Owner: Preston Loats
+
+1. Tools & workflow. I built the entire app inside Cursor with Claude as the coding agent (Opus for architecture and hard reasoning, Sonnet for fast iteration). The workflow was strictly phase-gated, matching the brief: a hand-written spec first, then AI implementing against it, then a deterministic quality gate (typecheck → test → lint → build, ~794 passing tests) before anything counted as "done." Phase 1 built the no-AI interactive core, Phase 2 layered a single AI feature on top, and Phase 3 added learning science. Crucially, the PRD and a typed content model — not the chat history — were the source of truth the agent worked from.
+
+2. Prompting strategies. Five patterns carried most of the build:
+Schema-first lessons — "Here is the typed Step content model; author this algebra lesson as data (concept → interactive problem → feedback), not new React components." This is how I got AI to build interactive lessons: a lesson became typed JSON the existing player renders, so one prompt produced a playable, gradable lesson.
+Code-authoritative re-theming (the key one) — "Rewrite only the display text to fit the learner's interests; preserve every id, number, and the answer key exactly; if the returned ids don't match the source, discard the rewrite." This let the LLM make algebra feel like a space/soccer/dragon story while making it structurally impossible for it to change the math.
+Pure-logic + tests, loop to green — "Write this as a pure, deterministic function with unit tests, then iterate until typecheck/test/lint/build all pass."
+PRD-anchored implementation — "Read the PRD; implement requirement R## end-to-end against its acceptance criteria."
+Parallel subagents for assets — fan scenery-image generation out to one-image-per-subagent so bulk art generation never stalled the main agent.
+
+3. Phase decisions. In Phase 2 I chose exactly one AI feature — Story Mode (interest-themed, endless, choose-your-own-adventure review on the free Gemini API) — and deliberately skipped the obvious ones: a Socratic/chatbot tutor, AI-generated problems and answer keys, AI auto-grading/feedback, and AI-chosen difficulty. All were rejected for one reason: never let the model be the authority on whether math is right (LLMs hallucinate arithmetic) or offload the retrieval the learner is supposed to do. AI is confined to the one layer where its strength (fluent themed prose) helps and its weakness (computation) is harmless. In Phase 3 I added the highest-utility, evidence-ranked techniques — retrieval practice (Roediger & Karpicke), spaced repetition (SM-2 / Cepeda), interleaving (Rohrer & Taylor), mastery learning with prerequisite gating (Bloom), and misconception-specific feedback — because they have the strongest evidence and bolt onto the existing deterministic engine without touching the grading path. I deferred desirable difficulty and scaffolding/fading to keep the cut honest rather than cosmetic.
+
+4. Code analysis. Essentially 100% of the ~34k lines (≈239 files, ≈98 commits) were AI-generated; I hand-wrote almost none of it. My contribution was architecture, the spec, the invariants, and review — deciding what got built and what got deleted, not typing it.
