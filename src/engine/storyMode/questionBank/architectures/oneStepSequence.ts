@@ -52,6 +52,15 @@ export const oneStepSequenceArchitecture: QuestionArchitecture = {
         incorrect: 'Undo the operation on both sides first, then name the value of x.',
         incomplete: 'Choose the inverse move first, then the resulting value of x.',
         reveal: `Tap "${undoLabel}", then "x = ${s}".`,
+        // Per-tile misconceptions, so a wrong first tap teaches instead of repeating the generic miss.
+        hintsByTile: {
+          'wrong-move':
+            op === 'add'
+              ? `Adding ${a} repeats the + ${a} instead of undoing it. Subtract ${a} from both sides.`
+              : `Subtracting ${a} repeats the - ${a} instead of undoing it. Add ${a} to both sides.`,
+          'rhs-value': `x = ${b} just copies the right side. Undo the operation first, then x = ${s}.`,
+          'solution-value': `x = ${s} is the result — tap the undo move first, then this tile.`,
+        },
       },
     }
 

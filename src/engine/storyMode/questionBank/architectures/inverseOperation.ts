@@ -14,6 +14,33 @@ type OperationChoiceStep = Extract<LessonStep, { type: 'operation-choice' }>
 
 type InverseId = 'subtract' | 'add' | 'multiply' | 'divide'
 
+type EquationOp = 'add' | 'sub' | 'mul' | 'div'
+
+// The operation x undergoes in the displayed equation, named for the feedback text.
+const OP_NOUN: Record<EquationOp, string> = {
+  add: 'addition',
+  sub: 'subtraction',
+  mul: 'multiplication',
+  div: 'division',
+}
+
+// The choice id that REPEATS the equation's operation (the seductive wrong move) instead of
+// undoing it — always a distractor, never the correct inverse.
+const SAME_OP_CHOICE: Record<EquationOp, InverseId> = {
+  add: 'add',
+  sub: 'subtract',
+  mul: 'multiply',
+  div: 'divide',
+}
+
+// Present-tense verb for each choice, so a wrong-family pick can name what it would do.
+const CHOICE_VERB: Record<InverseId, string> = {
+  subtract: 'subtracting',
+  add: 'adding',
+  multiply: 'multiplying',
+  divide: 'dividing',
+}
+
 export const inverseOperationArchitecture: QuestionArchitecture = {
   id: 'inverse-operation',
   requiredLessonId: 'balancing-equations',
@@ -45,12 +72,27 @@ export const inverseOperationArchitecture: QuestionArchitecture = {
       correctId = 'multiply'
     }
 
+    const opNoun = OP_NOUN[op]
+    const sameOpChoice = SAME_OP_CHOICE[op]
+
+    // Feedback CONTEXTUAL to this equation: the correct move confirms the inverse; the move that
+    // repeats the operation explains it makes x worse; a wrong-family move says why it can't undo
+    // this operation. (Far clearer than the old static "X undoes Y" lines, which were irrelevant —
+    // or misleading — for the equation actually shown.)
+    const choiceFeedback = (id: InverseId): string => {
+      if (id === correctId) return `Correct — the inverse of ${opNoun} isolates x.`
+      if (id === sameOpChoice) {
+        return `That repeats the ${opNoun} on x instead of undoing it, pushing x further from being alone. Use the inverse operation.`
+      }
+      return `x is changed by ${opNoun} here, so ${CHOICE_VERB[id]} can't undo it. Pair each operation with its inverse: addition with subtraction, multiplication with division.`
+    }
+
     // A fixed set of four moves; exactly one is the inverse for this equation.
     const choices = [
-      { id: 'subtract', label: `Subtract ${a} from both sides`, feedback: 'Subtraction undoes addition.' },
-      { id: 'add', label: `Add ${a} to both sides`, feedback: 'Addition undoes subtraction.' },
-      { id: 'multiply', label: `Multiply both sides by ${a}`, feedback: 'Multiplication undoes division.' },
-      { id: 'divide', label: `Divide both sides by ${a}`, feedback: 'Division undoes multiplication.' },
+      { id: 'subtract', label: `Subtract ${a} from both sides`, feedback: choiceFeedback('subtract') },
+      { id: 'add', label: `Add ${a} to both sides`, feedback: choiceFeedback('add') },
+      { id: 'multiply', label: `Multiply both sides by ${a}`, feedback: choiceFeedback('multiply') },
+      { id: 'divide', label: `Divide both sides by ${a}`, feedback: choiceFeedback('divide') },
     ]
     const correctMove =
       correctId === 'subtract'
@@ -60,6 +102,7 @@ export const inverseOperationArchitecture: QuestionArchitecture = {
           : correctId === 'divide'
             ? `divide both sides by ${a}`
             : `multiply both sides by ${a}`
+    const correctMoveCap = correctMove.charAt(0).toUpperCase() + correctMove.slice(1)
 
     const step: OperationChoiceStep = {
       id: 'inverse-operation',
@@ -69,10 +112,9 @@ export const inverseOperationArchitecture: QuestionArchitecture = {
       choices,
       correctId,
       feedback: {
-        correct: 'Correct. You applied the inverse operation to both sides.',
-        incorrect:
-          'Use the inverse: addition and subtraction undo each other, and multiplication and division undo each other.',
-        reveal: `Apply the inverse of the operation on x — ${correctMove}.`,
+        correct: `Correct. ${correctMoveCap} undoes the ${opNoun} on x.`,
+        incorrect: `The operation on x is ${opNoun}. Undo it with its inverse — addition with subtraction, multiplication with division.`,
+        reveal: `Undo the ${opNoun} on x with its inverse: ${correctMove}.`,
       },
     }
 

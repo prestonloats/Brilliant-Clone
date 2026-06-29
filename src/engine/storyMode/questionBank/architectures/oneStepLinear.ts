@@ -13,11 +13,13 @@ import type { Rng } from '../../randomizeQuestionNumbers'
 
 type InputStep = Extract<LessonStep, { type: 'input' }>
 
+type Op = 'add' | 'sub' | 'mul' | 'div'
+
 // Builds the displayed equation and its code-computed solution for the chosen operation. For
 // division the drawn `s` is the displayed quotient and the solution is `a · s`, which keeps the
 // arithmetic integer (the other three operations solve directly to `s`).
 const buildOneStep = (
-  op: 'add' | 'sub' | 'mul' | 'div',
+  op: Op,
   a: number,
   s: number,
 ): { equation: string; solution: number } => {
@@ -25,6 +27,59 @@ const buildOneStep = (
   if (op === 'sub') return { equation: `x - ${a} = ${s - a}`, solution: s }
   if (op === 'mul') return { equation: `${a}x = ${a * s}`, solution: s }
   return { equation: `x / ${a} = ${s}`, solution: a * s }
+}
+
+// Op-specific explanatory feedback: a method-only `incorrect` (no answer, so attempt 2 still
+// teaches rather than gives it away), a fully WORKED `reveal`, and `hintsByAnswer` keyed to the
+// predictable slips (typing the right-hand side, repeating the operation instead of undoing it).
+// All keys are derived from the drawn numbers and can never equal the accepted solution, so they
+// only ever fire on a genuine miss. Pure in `op`/`a`/`s` — draws no rng — so resume stays exact.
+const buildFeedback = (op: Op, a: number, s: number, solution: number): InputStep['feedback'] => {
+  const correct = `Correct. x = ${solution}.`
+  if (op === 'add') {
+    const rhs = s + a
+    return {
+      correct,
+      incorrect: `Subtract ${a} from both sides to undo the + ${a}, leaving x by itself.`,
+      reveal: `Subtract ${a} from both sides: x = ${rhs} - ${a} = ${solution}.`,
+      hintsByAnswer: {
+        [String(rhs)]: `${rhs} is the whole right side. Undo the + ${a} first: x = ${rhs} - ${a} = ${solution}.`,
+        [String(rhs + a)]: `That adds ${a} again instead of undoing it. Subtract: x = ${rhs} - ${a} = ${solution}.`,
+      },
+    }
+  }
+  if (op === 'sub') {
+    const rhs = s - a
+    return {
+      correct,
+      incorrect: `Add ${a} to both sides to undo the - ${a}, leaving x by itself.`,
+      reveal: `Add ${a} to both sides: x = ${rhs} + ${a} = ${solution}.`,
+      hintsByAnswer: {
+        [String(rhs)]: `${rhs} is the whole right side. Undo the - ${a} first: x = ${rhs} + ${a} = ${solution}.`,
+        [String(rhs - a)]: `That subtracts ${a} again instead of undoing it. Add: x = ${rhs} + ${a} = ${solution}.`,
+      },
+    }
+  }
+  if (op === 'mul') {
+    const rhs = a * s
+    return {
+      correct,
+      incorrect: `Divide both sides by ${a} to undo multiplying x by ${a}.`,
+      reveal: `Divide both sides by ${a}: x = ${rhs} / ${a} = ${solution}.`,
+      hintsByAnswer: {
+        [String(rhs)]: `${rhs} is the whole right side. ${a}x means ${a} times x, so divide by ${a}: x = ${rhs} / ${a} = ${solution}.`,
+      },
+    }
+  }
+  const q = s // the displayed quotient; the solution is a · q
+  return {
+    correct,
+    incorrect: `Multiply both sides by ${a} to undo dividing x by ${a}.`,
+    reveal: `Multiply both sides by ${a}: x = ${q} \u00d7 ${a} = ${solution}.`,
+    hintsByAnswer: {
+      [String(q)]: `${q} is the value after dividing by ${a}. Undo it by multiplying: x = ${q} \u00d7 ${a} = ${solution}.`,
+    },
+  }
 }
 
 export const oneStepLinearArchitecture: QuestionArchitecture = {
@@ -48,11 +103,7 @@ export const oneStepLinearArchitecture: QuestionArchitecture = {
       prompt: `Solve for x: ${equation}`,
       equation,
       accept: numericAccept(solution),
-      feedback: {
-        correct: `Correct. x = ${solution}.`,
-        incorrect: 'Undo the single operation on both sides to leave x by itself.',
-        reveal: `x = ${solution}.`,
-      },
+      feedback: buildFeedback(op, a, s, solution),
     }
 
     return { step, answer: String(solution) }

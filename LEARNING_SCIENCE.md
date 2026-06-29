@@ -180,8 +180,13 @@ equations in Story Mode until you've actually mastered one-step.
 ### 4.5 Immediate, explanatory feedback (from Phase 1, retained)
 
 Wrong answers escalate **hint → explanation → reveal** by attempt number in `src/engine/checkers.ts`,
-and each generated question carries code-authored `feedback.correct/incorrect/reveal`. Story Mode
-surfaces this unchanged. (Sharpening these explanations further is future work — §10.)
+and each generated question carries code-authored feedback. Every Story Mode architecture now emits a
+**fully worked `reveal`** (the actual solving steps, not just the answer) and **misconception-specific
+first-attempt hints** — `hintsByAnswer` for the predictable wrong typings on `input` steps,
+`hintsByTile` for the distractor taps on the `one-step-sequence` step, and per-choice, equation-aware
+rationales on the `inverse-operation` step — so the three escalation rungs are genuinely distinct
+instead of repeating one generic line. All of this is computed in code from the drawn numbers and is
+never re-themed, so it can never corrupt the answer key.
 
 ---
 
@@ -294,9 +299,11 @@ Full pipeline is green: `npm run typecheck`, `npm test` (794 tests), `npm run li
   `QuestionArchitecture.generate(rng, difficulty)`, drive difficulty from proficiency toward a
   ~80–85% success band, and fade upfront hints as proficiency rises. The `paramSeed` mechanism is
   already in place to keep this deterministic/resume-safe.
-- **Sharper explanatory feedback (not yet built).** Enrich the code-built `feedback` per architecture
-  with the worked next step and misconception-specific messages (kept out of the re-theme path so it
-  can never corrupt the key).
+- **Sharper explanatory feedback (done — §4.5).** Each architecture's code-built `feedback` now
+  carries a worked-step `reveal` plus misconception-specific first-attempt hints
+  (`hintsByAnswer` / `hintsByTile` / equation-aware per-choice rationales), kept out of the re-theme
+  path so they can never corrupt the key. Remaining polish: a few input architectures
+  (`combine-like-terms`, `variables-both-sides`) could cover even more wrong-answer cases.
 - **Real-day spacing.** Intervals are honored by wall-clock time; the offline metric measures
   re-exposures within available data. A multi-day cohort study would strengthen the retention claim.
 

@@ -33,6 +33,19 @@ export const twoStepLinearArchitecture: QuestionArchitecture = {
 
     const equation = op === 'add' ? `${a}x + ${k} = ${c}` : `${a}x - ${k} = ${c}`
     const firstMove = op === 'add' ? `subtracting ${k}` : `adding ${k}`
+    // The value of `a·x` once the constant is cleared (the intermediate the worked reveal shows).
+    const cleared = a * s
+    const clearStep = op === 'add' ? `${c} - ${k}` : `${c} + ${k}`
+    const clearVerb = op === 'add' ? `Subtract ${k}` : `Add ${k}`
+
+    // Common slips: typing the right-hand side `c`, or stopping at `a·x` without the final divide.
+    const hintsByAnswer: Record<string, string> = {
+      [String(cleared)]: `${cleared} is the value of ${a}x after clearing the constant. Divide by ${a}: x = ${s}.`,
+    }
+    if (c !== s) {
+      hintsByAnswer[String(c)] =
+        `${c} is the whole right side. First clear the constant by ${firstMove} to get ${a}x = ${cleared}, then divide by ${a}: x = ${s}.`
+    }
 
     const step: InputStep = {
       id: 'two-step-linear',
@@ -43,7 +56,8 @@ export const twoStepLinearArchitecture: QuestionArchitecture = {
       feedback: {
         correct: `Correct. x = ${s}.`,
         incorrect: `Clear the constant by ${firstMove} from both sides, then divide by ${a}.`,
-        reveal: `x = ${s}.`,
+        reveal: `${clearVerb} from both sides: ${a}x = ${clearStep} = ${cleared}. Divide by ${a}: x = ${s}.`,
+        hintsByAnswer,
       },
     }
 

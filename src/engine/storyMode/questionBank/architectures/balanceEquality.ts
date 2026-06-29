@@ -37,6 +37,10 @@ export const balanceEqualityArchitecture: QuestionArchitecture = {
         correct: `Correct. Both pans weigh the same, so m = ${total} - ${known} = ${mystery}.`,
         incorrect: 'Both pans must weigh the same. Subtract the known weight from the total to find m.',
         reveal: `m = ${total} - ${known} = ${mystery}.`,
+        hintsByAnswer: {
+          [String(total)]: `${total} is the left pan's full weight. The right pan already holds ${known}, so m = ${total} - ${known} = ${mystery}.`,
+          [String(total + known)]: `The pans are EQUAL, so add nothing — subtract the known weight instead: m = ${total} - ${known} = ${mystery}.`,
+        },
       },
     }
 

@@ -31,7 +31,9 @@ export const variablesBothSidesArchitecture: QuestionArchitecture = {
     const rx = randInt(rng, 2, lx - 2)
     const lk = randInt(rng, 1, 12)
     const s = randInt(rng, 2, 10)
-    const rk = lk + (lx - rx) * s
+    const netCoef = lx - rx // the x-coefficient left after gathering terms (always >= 2)
+    const rk = lk + netCoef * s
+    const gathered = netCoef * s // the value of `netCoef·x` after both constants are cleared
 
     const equation = `${lx}x + ${lk} = ${rx}x + ${rk}`
 
@@ -44,7 +46,10 @@ export const variablesBothSidesArchitecture: QuestionArchitecture = {
       feedback: {
         correct: `Correct. x = ${s}.`,
         incorrect: `Subtract ${rx}x from both sides to gather the x-terms, then isolate x.`,
-        reveal: `x = ${s}.`,
+        reveal: `Subtract ${rx}x: ${netCoef}x + ${lk} = ${rk}. Subtract ${lk}: ${netCoef}x = ${gathered}. Divide by ${netCoef}: x = ${s}.`,
+        hintsByAnswer: {
+          [String(gathered)]: `${gathered} is the value of ${netCoef}x after gathering the x-terms and clearing the constants. Divide by ${netCoef}: x = ${s}.`,
+        },
       },
     }
 

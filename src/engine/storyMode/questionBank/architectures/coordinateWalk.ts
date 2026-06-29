@@ -28,6 +28,17 @@ const DELTA: Record<Direction, { dx: number; dy: number }> = {
 const coordinateAccept = (x: number, y: number): string[] =>
   Array.from(new Set([`(${x}, ${y})`, `(${x},${y})`, `${x},${y}`, `x=${x},y=${y}`]))
 
+// Render a signed running sum like `7 - 9` (first term keeps its own sign, later terms show the
+// operator). Empty -> "0"; a single term -> just that term. Used to spell out each axis total.
+const joinSigned = (parts: number[]): string => {
+  if (parts.length === 0) return '0'
+  return parts.map((part, index) => (index === 0 ? String(part) : part < 0 ? ` - ${-part}` : ` + ${part}`)).join('')
+}
+
+// "x = 7 - 9 = -2" when the axis has multiple moves, or just "x = -2" when it has zero or one.
+const axisReveal = (label: string, parts: number[], total: number): string =>
+  parts.length > 1 ? `${label} = ${joinSigned(parts)} = ${total}` : `${label} = ${total}`
+
 export const coordinateWalkArchitecture: QuestionArchitecture = {
   id: 'coordinate-walk',
   requiredLessonId: 'coordinate-plane',
@@ -52,6 +63,19 @@ export const coordinateWalkArchitecture: QuestionArchitecture = {
 
     const walk = moves.map((move) => `${move.magnitude} ${move.direction}`).join(', ')
 
+    // Signed per-axis contributions (right/up positive), so the reveal can spell out each total.
+    const xParts = moves.filter((m) => m.direction === 'right' || m.direction === 'left').map((m) => DELTA[m.direction].dx * m.magnitude)
+    const yParts = moves.filter((m) => m.direction === 'up' || m.direction === 'down').map((m) => DELTA[m.direction].dy * m.magnitude)
+
+    // The classic slip is reversing the pair to (y, x); catch the two un-spaced normalized forms a
+    // learner might type. Only meaningful when x !== y (otherwise the "swap" equals the answer).
+    const swappedHint = `Keep the order (x, y): combine the left/right moves for x first, then up/down for y. The point is (${x}, ${y}).`
+    const hintsByAnswer: Record<string, string> = {}
+    if (x !== y) {
+      hintsByAnswer[`(${y},${x})`] = swappedHint
+      hintsByAnswer[`${y},${x}`] = swappedHint
+    }
+
     const step: InputStep = {
       id: 'coordinate-walk',
       type: 'input',
@@ -60,7 +84,8 @@ export const coordinateWalkArchitecture: QuestionArchitecture = {
       feedback: {
         correct: `Correct. The final coordinate is (${x}, ${y}).`,
         incorrect: 'Combine the left/right moves for x and the up/down moves for y, keeping right and up positive.',
-        reveal: `The final coordinate is (${x}, ${y}).`,
+        reveal: `Combine each direction: ${axisReveal('x', xParts, x)}; ${axisReveal('y', yParts, y)}. The point is (${x}, ${y}).`,
+        ...(Object.keys(hintsByAnswer).length > 0 ? { hintsByAnswer } : {}),
       },
     }
 

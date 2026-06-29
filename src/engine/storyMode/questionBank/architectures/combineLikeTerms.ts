@@ -27,7 +27,10 @@ export const combineLikeTermsArchitecture: QuestionArchitecture = {
     // Subtraction keeps the result positive (b < a) and within the b-slot bound.
     const b = op === 'sub' ? randInt(rng, 1, Math.min(a - 1, 9)) : randInt(rng, 1, 9)
     const coefficient = op === 'add' ? a + b : a - b
+    const sign = op === 'add' ? '+' : '-'
     const equation = op === 'add' ? `${a}x + ${b}x` : `${a}x - ${b}x`
+    // The slip is using the OTHER operation on the coefficients (e.g. subtracting when adding).
+    const wrongCoefficient = op === 'add' ? a - b : a + b
 
     const step: InputStep = {
       id: 'combine-like-terms',
@@ -38,7 +41,13 @@ export const combineLikeTermsArchitecture: QuestionArchitecture = {
       feedback: {
         correct: `Correct. ${equation} = ${coefficient}x.`,
         incorrect: 'Only the coefficients of like x-terms combine — add or subtract just those numbers.',
-        reveal: `${equation} = ${coefficient}x, so the coefficient is ${coefficient}.`,
+        reveal: `${equation} = (${a} ${sign} ${b})x = ${coefficient}x, so the coefficient is ${coefficient}.`,
+        hintsByAnswer: {
+          [String(wrongCoefficient)]:
+            op === 'add'
+              ? `These x-terms are added, not subtracted: ${a} + ${b} = ${coefficient}.`
+              : `These x-terms are subtracted, not added: ${a} - ${b} = ${coefficient}.`,
+        },
       },
     }
 

@@ -37,7 +37,19 @@ export const lineValueArchitecture: QuestionArchitecture = {
     const b = randInt(rng, -6, 6)
     const x0 = randInt(rng, -5, 5)
     const line = formatLine(m, b)
-    const y = m * x0 + b
+    const product = m * x0 // the slope term m·x0
+    const y = product + b
+    // The intercept term as it reads after the slope term, e.g. " + 4", " - 6", or "" when b = 0.
+    const bTerm = b === 0 ? '' : b > 0 ? ` + ${b}` : ` - ${-b}`
+
+    // Predictable slips: dropping the intercept (answering m·x0), or using only the intercept b.
+    const hintsByAnswer: Record<string, string> = {}
+    if (b !== 0) {
+      hintsByAnswer[String(product)] = `${product} is ${m}(${x0}). Don't forget the intercept: ${product}${bTerm} = ${y}.`
+    }
+    if (x0 !== 0 && b !== product) {
+      hintsByAnswer[String(b)] = `${b} is only the intercept. Add the slope term ${m}(${x0}) = ${product}: ${product}${bTerm} = ${y}.`
+    }
 
     const step: InputStep = {
       id: 'line-value',
@@ -48,7 +60,11 @@ export const lineValueArchitecture: QuestionArchitecture = {
       feedback: {
         correct: `Correct. When x = ${x0}, y = ${y}.`,
         incorrect: 'Substitute the x-value into y = mx + b and simplify.',
-        reveal: `Substitute x = ${x0}: y = ${y}.`,
+        reveal:
+          b === 0
+            ? `Substitute x = ${x0}: y = ${m}(${x0}) = ${y}.`
+            : `Substitute x = ${x0}: y = ${m}(${x0})${bTerm} = ${product}${bTerm} = ${y}.`,
+        ...(Object.keys(hintsByAnswer).length > 0 ? { hintsByAnswer } : {}),
       },
     }
 
