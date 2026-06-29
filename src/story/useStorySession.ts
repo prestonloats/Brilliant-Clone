@@ -166,6 +166,11 @@ export type UseStorySession = {
   providerConfigured: boolean
   hasActiveSession: boolean
   questionNumberInChapter: number
+  // The chapter number to celebrate (set only when a checkpoint is reached by PROGRESSION — i.e. the
+  // learner just cleared a chapter's questions — and never on resume). The checkpoint screen plays a
+  // one-shot burst when it matches the chapter on screen, then calls clearChapterCelebration.
+  chapterCelebration: number | null
+  clearChapterCelebration: () => void
   openStory: () => Promise<void>
   openLibrary: () => Promise<void>
   startNewStory: () => Promise<void>
@@ -225,6 +230,11 @@ export function useStorySession({
   const [reviewActive, setReviewActive] = useState(false)
   // Which chapter's recap the overlay currently shows (meaningful only while reviewActive).
   const [recapChapter, setRecapChapter] = useState(1)
+  // Transient: the chapter to celebrate after clearing a chapter's questions (null = nothing to
+  // celebrate). Set only by submitQuestionResult on a real checkpoint advance; consumed once by the
+  // checkpoint screen. Cleared on resume so reopening a story mid-chapter never re-celebrates.
+  const [chapterCelebration, setChapterCelebration] = useState<number | null>(null)
+  const clearChapterCelebration = useCallback(() => setChapterCelebration(null), [])
 
   // Synchronous guard against double-generation (state updates lag a render behind).
   const busyRef = useRef(false)
@@ -469,6 +479,8 @@ export function useStorySession({
   const routeToActive = useCallback(
     (loaded: StorySession) => {
       resetReview()
+      // Resuming/switching into a story must never replay a chapter-clear celebration.
+      setChapterCelebration(null)
       const atEdge = jumpToLiveEdge(loaded)
       commitSession(atEdge)
       if (atEdge.currentQuestion && rehydrateQuestion(atEdge.currentQuestion)) {
@@ -843,6 +855,9 @@ export function useStorySession({
         next = await maybeCompact(next)
         await persist(next)
         commitSession(next)
+        // Mark the chapter the learner just opened as worth celebrating (matches the checkpoint
+        // screen's chapter number). Only fires here — the progression path — never on resume.
+        setChapterCelebration(Math.floor(next.questionsSolvedTotal / CHECKPOINT_INTERVAL) + 1)
         navigate('story-checkpoint')
         return
       }
@@ -1115,6 +1130,8 @@ export function useStorySession({
     providerConfigured,
     hasActiveSession: session?.status === 'active',
     questionNumberInChapter: (session?.questionsSinceCheckpoint ?? 0) + 1,
+    chapterCelebration,
+    clearChapterCelebration,
     openStory,
     openLibrary,
     startNewStory,

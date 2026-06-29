@@ -165,7 +165,21 @@
   .connector-line,
   .feedback,
   .feedback.good,
-  .feedback.bad {
+  .feedback.bad,
+  /* Story Mode immersive entrances (see styles/story.css). The scene image + chapter underline rest
+     hidden (opacity:0 / scaleX(0)) and are only revealed by their animation/transition, so they MUST
+     be forced visible here; the rest fall back to their natural opacity but are listed for clarity. */
+  .story-segment-card,
+  .story-library-card,
+  .story-interests-card,
+  .story-gate-card,
+  .story-banner,
+  .story-question-shell,
+  .story-segment p,
+  .story-choice-echo,
+  .story-scene-image,
+  .story-chapter-head::after,
+  .story-chapter-title {
     opacity: 1 !important;
     transform: none !important;
   }

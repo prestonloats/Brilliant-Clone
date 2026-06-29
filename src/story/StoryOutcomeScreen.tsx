@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { StorySession } from '../domain'
 import { performanceCopy } from './performanceCopy'
 import { capitalizeFirst } from './storyLibrary'
@@ -83,7 +84,11 @@ export function StoryOutcomeScreen({
 
         <div className="story-segment">
           {paragraphs.length > 0 ? (
-            paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)
+            paragraphs.map((paragraph, index) => (
+              <p key={index} style={{ '--p-index': index } as CSSProperties}>
+                {paragraph}
+              </p>
+            ))
           ) : (
             <p>The story moves on.</p>
           )}

@@ -53,6 +53,15 @@ input:focus-visible {
   transform: translateY(-1px);
 }
 
+/* Tactile press: the button dips back down and compresses slightly when held, so taps feel
+   physical. Pairs with the hover lift above and shares its transition. */
+.primary-action:active,
+.secondary-action:active,
+.operation-grid button:active,
+.option-grid button:active {
+  transform: translateY(0) scale(0.97);
+}
+
 .primary-action {
   background: var(--accent);
   color: white;

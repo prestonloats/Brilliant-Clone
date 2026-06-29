@@ -970,6 +970,18 @@
   height: auto;
   object-fit: cover;
   width: 100%;
+  /* The art starts a touch zoomed + transparent and settles in once decoded (toggled by the
+     `is-loaded` class StorySceneImage adds onLoad), so a beat's scene fades in rather than popping. */
+  opacity: 0;
+  transform: scale(1.02);
+  transition:
+    opacity 700ms ease,
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.story-scene-image.is-loaded {
+  opacity: 1;
+  transform: none;
 }
 
 .story-segment {
@@ -1665,6 +1677,150 @@
 @media (prefers-reduced-motion: reduce) {
   .practice-meter-fill {
     transition: none;
+  }
+}
+
+/* --- Immersive chapter transitions & visual feedback ----------------------- */
+/* Each Story surface eases in on navigation (the per-screen transition), the chapter prose
+   unfolds line-by-line, scene art fades in (above), committed choices slide in, and the wait while
+   the next beat is written gets a shimmer skeleton. All effects are transform/opacity only and are
+   fully disabled under prefers-reduced-motion (see styles/responsive.css), where the global rule
+   forces every entrance element to its visible resting state. card-enter (lesson.css) and rise-in
+   (complete.css) are reused — @keyframes are global. */
+
+/* Screen entrance. Single-card screens (intro / checkpoint / outcome / recap) + the library /
+   interest / gate cards rise in as one card; the question shell only fades (its inner .lesson-card
+   and .story-banner carry their own rise, so a second translate would double the motion). */
+.story-segment-card,
+.story-library-card,
+.story-interests-card,
+.story-gate-card,
+.story-banner {
+  animation: card-enter 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.story-question-shell {
+  animation: story-fade-in 420ms ease both;
+}
+
+@keyframes story-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The chapter prose unfolds paragraph-by-paragraph: each <p> carries an inline --p-index so the
+   reveal staggers in reading order, just after the card has settled. */
+.story-segment p {
+  animation: rise-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--p-index, 0) * 75ms + 140ms);
+}
+
+/* A small accent segment draws itself along the chapter header's divider, marking each chapter
+   opening as a deliberate beat. Sits on the existing 1px bottom border, so it adds no layout shift. */
+.story-chapter-head {
+  position: relative;
+}
+
+.story-chapter-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  width: 72px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #22c55e);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: chapter-underline 640ms cubic-bezier(0.22, 1, 0.36, 1) 240ms both;
+}
+
+@keyframes chapter-underline {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* The committed "You chose" echo slides in from the left, nodding to its accent left-border, so the
+   learner's action is visibly acknowledged the moment it is recorded. */
+.story-choice-echo {
+  animation: story-echo-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes story-echo-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* "Writing the next beat" shimmer: a few placeholder lines that pulse while the LLM generates the
+   outcome prose, so the multi-second wait reads as the story being written rather than a dead pause. */
+.story-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.story-skeleton-line {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-strong) 0%,
+    rgba(37, 99, 235, 0.12) 20%,
+    var(--surface-strong) 40%
+  );
+  background-size: 200% 100%;
+  animation: story-shimmer 1.4s ease-in-out infinite;
+}
+
+.story-skeleton-line:nth-child(2) {
+  width: 92%;
+}
+
+.story-skeleton-line:nth-child(3) {
+  width: 76%;
+}
+
+@keyframes story-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* --- Chapter-complete celebration ------------------------------------------ */
+/* When the learner clears a chapter's questions and a NEW chapter opens, the title gives a single
+   springy pop and a seeded sparkle burst plays over the header (reusing the course-path
+   .mastery-sparkles layer). Both are one-shot and decorative; the pop has no opacity:0 resting state
+   so the title stays visible under reduced motion, and the sparkles rest at opacity:0 so they simply
+   never appear when motion is disabled. */
+.story-chapter-title.is-celebrating {
+  animation: chapter-pop 760ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: left center;
+}
+
+@keyframes chapter-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  45% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

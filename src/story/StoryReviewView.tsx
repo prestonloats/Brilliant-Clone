@@ -5,6 +5,7 @@
 // checkpoint/outcome screens' "look back at the story" overlay (`StoryReviewScreen`). Keeping them
 // here is the single source of truth, so e.g. the chapter recap renders identically everywhere.
 
+import type { CSSProperties } from 'react'
 import type { ChapterBeat, LessonStep } from '../domain'
 import { MathText } from '../MathText'
 import { FeedbackPanel } from '../components/FeedbackPanel'
@@ -130,7 +131,11 @@ export function ChapterTextReview({ chapter, beat }: { chapter: number; beat: Ch
       <StorySceneImage sceneId={beat.sceneId} />
       <div className="story-segment">
         {setupParagraphs.length > 0 ? (
-          setupParagraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)
+          setupParagraphs.map((paragraph, index) => (
+            <p key={index} style={{ '--p-index': index } as CSSProperties}>
+              {paragraph}
+            </p>
+          ))
         ) : (
           <p>The story pauses for a breath.</p>
         )}
@@ -149,7 +154,9 @@ export function ChapterTextReview({ chapter, beat }: { chapter: number; beat: Ch
           <StorySceneImage sceneId={beat.outcomeSceneId} />
           <div className="story-segment">
             {outcomeParagraphs.map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
+              <p key={index} style={{ '--p-index': index } as CSSProperties}>
+                {paragraph}
+              </p>
             ))}
           </div>
         </>

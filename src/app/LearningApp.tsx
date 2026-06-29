@@ -517,6 +517,8 @@ export function LearningApp({ backend }: { backend: Backend }) {
             busy={story.storyBusy}
             error={story.storyError}
             canReview={story.canReview}
+            celebrateChapter={story.chapterCelebration}
+            onCelebrated={story.clearChapterCelebration}
             onLookBack={() => story.openReview()}
             onContinue={(choice) => void story.submitCheckpointChoice(choice)}
             onOpenLibrary={() => void story.openLibrary()}

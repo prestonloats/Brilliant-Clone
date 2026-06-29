@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { StorySession } from '../domain'
+import { MasterySparkles } from '../course/MasterySparkles'
 import { MAX_USER_INPUT_LENGTH } from './safety'
 import { performanceCopy } from './performanceCopy'
 import { capitalizeFirst } from './storyLibrary'
@@ -13,6 +14,11 @@ type StoryCheckpointScreenProps = {
   error: string
   // Whether there is earlier story to look back at, and the handler that opens the read-only review.
   canReview: boolean
+  // When this equals the chapter on screen the learner just CLEARED a chapter and reached a new one
+  // (set by the controller only on progression, never on resume): play the one-shot celebration, then
+  // call onCelebrated to consume the flag so it fires exactly once.
+  celebrateChapter: number | null
+  onCelebrated: () => void
   onLookBack: () => void
   onContinue: (choice: string) => void
   onOpenLibrary: () => void
@@ -25,6 +31,8 @@ export function StoryCheckpointScreen({
   busy,
   error,
   canReview,
+  celebrateChapter,
+  onCelebrated,
   onLookBack,
   onContinue,
   onOpenLibrary,
@@ -47,6 +55,17 @@ export function StoryCheckpointScreen({
   // happens next in the story (the consequence beat above is generated from this same band).
   const performance = session.lastChapterPerformance ? performanceCopy(session.lastChapterPerformance) : null
 
+  // One-shot "you cleared a chapter" celebration. The controller raises `celebrateChapter` only when
+  // this checkpoint was reached by progression (never on resume), so derive the burst directly from
+  // it, then consume the flag after the burst (in the timer callback) so it fires exactly once and
+  // the sparkle layer unmounts cleanly.
+  const celebrating = celebrateChapter !== null && celebrateChapter === chapterNumber
+  useEffect(() => {
+    if (!celebrating) return
+    const timer = setTimeout(onCelebrated, 1800)
+    return () => clearTimeout(timer)
+  }, [celebrating, onCelebrated])
+
   const handleContinue = () => {
     if (!hasChoice || busy) return
     onContinue(choice)
@@ -63,8 +82,9 @@ export function StoryCheckpointScreen({
           </button>
         )}
         <header className="story-chapter-head">
+          {celebrating && <MasterySparkles seed={chapterNumber} count={16} />}
           <p className="eyebrow">{capitalizeFirst(session.theme.protagonist)}</p>
-          <h1 className="story-chapter-title">Chapter {chapterNumber}</h1>
+          <h1 className={`story-chapter-title${celebrating ? ' is-celebrating' : ''}`}>Chapter {chapterNumber}</h1>
         </header>
 
         {performance && (
@@ -79,7 +99,11 @@ export function StoryCheckpointScreen({
 
         <div className="story-segment">
           {paragraphs.length > 0 ? (
-            paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)
+            paragraphs.map((paragraph, index) => (
+              <p key={index} style={{ '--p-index': index } as CSSProperties}>
+                {paragraph}
+              </p>
+            ))
           ) : (
             <p>The story pauses for a breath.</p>
           )}
@@ -115,9 +139,16 @@ export function StoryCheckpointScreen({
           </p>
         )}
         {busy && (
-          <p className="story-inline-status" aria-live="polite">
-            <span className="story-spinner" aria-hidden="true" /> Continuing your story…
-          </p>
+          <>
+            <p className="story-inline-status" aria-live="polite">
+              <span className="story-spinner" aria-hidden="true" /> Continuing your story…
+            </p>
+            <div className="story-skeleton" aria-hidden="true">
+              <span className="story-skeleton-line" />
+              <span className="story-skeleton-line" />
+              <span className="story-skeleton-line" />
+            </div>
+          </>
         )}
 
         <button className="primary-action" type="button" disabled={!hasChoice || busy} onClick={handleContinue}>
