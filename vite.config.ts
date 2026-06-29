@@ -27,13 +27,30 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          // Split the rarely-changing third-party runtime (React, etc.) into its own
-          // chunk so returning visitors can reuse it from cache across app deploys
-          // instead of re-downloading the whole bundle on every release.
+          // PERF: split vendor code per-package instead of one catch-all `vendor` chunk.
+          // index.html `modulepreload`s every static (eager) chunk, so a single `vendor`
+          // chunk forces the browser to download ALL of node_modules on first paint —
+          // including the heavy AI/Firebase SDKs that are only ever reached through a
+          // dynamic `import()` (firebase via src/app/startup.ts + createStoryAI.ts, openai
+          // via openAiDeveloperStoryAi.ts, @google/genai via geminiDeveloperStoryAi.ts).
+          // Giving each SDK its own chunk keeps it lazy (loaded only when Story Mode runs),
+          // while react/react-dom/scheduler + katex stay as their own cacheable eager chunks
+          // (they ARE imported statically). Everything else falls back to Rollup's default
+          // splitting. Returning `undefined` defers to that default.
           manualChunks(id) {
-            if (id.includes('node_modules')) {
-              return 'vendor'
+            if (!id.includes('node_modules')) return undefined
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/scheduler/')
+            ) {
+              return 'react'
             }
+            if (id.includes('/katex/')) return 'katex'
+            if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase'
+            if (id.includes('/openai/')) return 'openai'
+            if (id.includes('/@google/genai/')) return 'genai'
+            return undefined
           },
         },
       },
